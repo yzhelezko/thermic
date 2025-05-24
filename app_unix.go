@@ -5,6 +5,8 @@ package main
 import (
 	"os"
 	"os/exec"
+	"runtime"
+	"syscall"
 
 	"github.com/aymanbagabas/go-pty"
 )
@@ -57,9 +59,19 @@ func (a *App) getAvailableShells() []string {
 	return shells
 }
 
-// configurePtyProcess is a no-op on Unix platforms
+// configurePtyProcess configures PTY process attributes for Unix platforms
 func configurePtyProcess(cmd *pty.Cmd) {
-	// No-op on Unix
+	// Configure process attributes to prevent visible terminal windows on macOS
+	if runtime.GOOS == "darwin" {
+		if cmd.SysProcAttr == nil {
+			cmd.SysProcAttr = &syscall.SysProcAttr{}
+		}
+		// On macOS, create a new process group and detach from controlling terminal
+		cmd.SysProcAttr.Setpgid = true
+		cmd.SysProcAttr.Pgid = 0
+		// Prevent the process from creating a visible terminal window
+		cmd.SysProcAttr.Noctty = true
+	}
 }
 
 // findWSLExecutable returns error on non-Windows platforms

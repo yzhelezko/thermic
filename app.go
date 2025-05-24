@@ -222,6 +222,8 @@ func (a *App) StartShell(shell string, sessionId string) error {
 		default:
 			// On Unix-like systems, use interactive shell
 			cmd = ptty.Command(shellPath, "-i")
+			// Configure Unix-specific process attributes (prevents additional windows on macOS)
+			configurePtyProcess(cmd)
 		}
 	}
 
