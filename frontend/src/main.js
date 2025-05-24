@@ -37,14 +37,18 @@ class ThermicTerminal {
 
             // Automatically start the default shell
             const defaultShell = await GetDefaultShell();
+            console.log('Default shell detected:', defaultShell);
+            
             if (defaultShell) {
                 // Set the shell selector to the default shell
                 const shellSelector = document.getElementById('shell-selector');
                 shellSelector.value = defaultShell;
                 
                 // Start the default shell automatically
+                console.log('Starting default shell:', defaultShell);
                 await this.startShell(defaultShell);
             } else {
+                console.error('No default shell detected');
                 this.updateStatus('No default shell found - Please select a shell manually');
             }
         } catch (error) {

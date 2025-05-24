@@ -221,8 +221,13 @@ func (a *App) StartShell(shell string, sessionId string) error {
 			cmd = ptty.Command(shellPath)
 			// Configure Windows-specific process attributes
 			configurePtyProcess(cmd)
+		case "darwin":
+			// On macOS, don't use -i flag as it can cause issues with zsh
+			cmd = ptty.Command(shellPath)
+			// Configure Unix-specific process attributes (prevents additional windows on macOS)
+			configurePtyProcess(cmd)
 		default:
-			// On Unix-like systems, use interactive shell
+			// On other Unix-like systems, use interactive shell
 			cmd = ptty.Command(shellPath, "-i")
 			// Configure Unix-specific process attributes (prevents additional windows on macOS)
 			configurePtyProcess(cmd)
