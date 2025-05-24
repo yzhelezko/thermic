@@ -58,6 +58,12 @@ jobs:
         run: |
           # No additional dependencies needed for macOS
 
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm install
+          cd ..
+
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
@@ -67,17 +73,43 @@ jobs:
       - name: Build application
         run: wails build -platform ${{ matrix.platform.target }} -clean
 
+      - name: Debug build output
+        run: |
+          echo "Build directory contents:"
+          ls -la build/
+          echo "Build bin directory contents:"
+          ls -la build/bin/ || echo "No build/bin directory"
+
       - name: Prepare artifacts (Windows)
         if: matrix.platform.os == 'windows-latest'
+        shell: bash
         run: |
           mkdir -p artifacts
-          cp build/bin/thermic.exe artifacts/${{ matrix.platform.name }}
+          # Find the executable file
+          if [ -f "build/bin/thermic.exe" ]; then
+            cp build/bin/thermic.exe artifacts/${{ matrix.platform.name }}
+          elif [ -f "build/bin/Thermic Terminal.exe" ]; then
+            cp "build/bin/Thermic Terminal.exe" artifacts/${{ matrix.platform.name }}
+          else
+            echo "Windows executable not found"
+            ls -la build/bin/
+            exit 1
+          fi
 
       - name: Prepare artifacts (Linux/macOS)
         if: matrix.platform.os != 'windows-latest'
         run: |
           mkdir -p artifacts
-          cp build/bin/thermic artifacts/${{ matrix.platform.name }}
+          # Find the executable file
+          if [ -f "build/bin/thermic" ]; then
+            cp build/bin/thermic artifacts/${{ matrix.platform.name }}
+          elif [ -f "build/bin/Thermic Terminal" ]; then
+            cp "build/bin/Thermic Terminal" artifacts/${{ matrix.platform.name }}
+          else
+            echo "Executable not found"
+            ls -la build/bin/
+            exit 1
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

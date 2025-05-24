@@ -2,7 +2,7 @@
 
 [![Build Status](https://github.com/yzhelezko/thermic/workflows/CI/badge.svg)](https://github.com/yzhelezko/thermic/actions)
 [![Release](https://github.com/yzhelezko/thermic/workflows/Build%20and%20Release/badge.svg)](https://github.com/yzhelezko/thermic/releases)
-[![Go Version](https://img.shields.io/badge/Go-1.21+-blue.svg)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/Go-1.24+-blue.svg)](https://golang.org)
 [![Wails](https://img.shields.io/badge/Wails-v2-red.svg)](https://wails.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -59,7 +59,7 @@ A modern, cross-platform terminal emulator built with **Wails** and **xterm.js**
 ### Option 2: Build from Source
 
 1. **Prerequisites**:
-   - Go 1.21+
+   - Go 1.24+
    - Node.js 18+
    - Wails CLI v2
 
@@ -205,7 +205,7 @@ htop
 ## 🛠️ Technology Stack
 
 ### **Backend**
-- **Language**: Go 1.21+
+- **Language**: Go 1.24+
 - **Framework**: Wails v2
 - **Terminal**: Custom PTY implementation with raw byte streaming
 - **Shells**: Native process execution with stdin/stdout pipes
