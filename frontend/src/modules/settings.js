@@ -88,6 +88,80 @@ export class SettingsManager {
         }
 
         this.settingsTabsInitialized = true;
+
+        // --- Shell Selector Logic ---
+        const shellSelector = document.getElementById('shell-selector');
+        if (!shellSelector) {
+            console.error("Shell selector dropdown ('shell-selector') not found in the DOM.");
+        } else {
+            // Load and populate shell options
+            this.loadAndPopulateShellSelector();
+
+            // Add event listener for changes
+            shellSelector.addEventListener('change', async (event) => {
+                const newShell = event.target.value;
+                const displayValue = newShell || "<System Default>";
+                try {
+                    await window.go.main.App.SetDefaultShell(newShell);
+                    // Adjusted notification:
+                    showNotification(`Default shell preference updated to: ${displayValue}. Settings will be saved shortly.`, 'info'); // Changed to 'info' and updated text
+                    console.log("Default shell preference updated to:", newShell); // Log updated preference
+                } catch (error) {
+                    console.error("Error updating default shell preference:", error); // Adjusted error log
+                    showNotification(`Failed to update default shell preference.`, 'error'); // Adjusted error notification
+                    // Re-fetch to show actual stored state on error
+                    this.loadAndPopulateShellSelector(); 
+                }
+            });
+        }
+    }
+
+    async loadAndPopulateShellSelector() {
+        const shellSelector = document.getElementById('shell-selector');
+        if (!shellSelector) {
+            // This check is redundant if called only from initializeSettingsTabs after its own check,
+            // but good for a standalone callable method.
+            console.error("Shell selector dropdown not found for loading.");
+            return;
+        }
+
+        try {
+            // Fetch available shells and current configured shell
+            const availableShells = await window.go.main.App.GetAvailableShells();
+            const currentConfiguredShell = await window.go.main.App.GetCurrentDefaultShellSetting();
+
+            // Clear existing options
+            shellSelector.innerHTML = '';
+
+            // Add a "System Default" option
+            const defaultOption = document.createElement('option');
+            defaultOption.value = ""; // Empty value represents system default
+            defaultOption.textContent = "<System Default>";
+            shellSelector.appendChild(defaultOption);
+
+            // Populate with available shells
+            if (availableShells && availableShells.length > 0) {
+                availableShells.forEach(shell => {
+                    const option = document.createElement('option');
+                    option.value = shell;
+                    // Basic prettification: display only the executable name if it's a path
+                    const shellName = shell.includes('/') ? shell.substring(shell.lastIndexOf('/') + 1) : shell;
+                    option.textContent = shellName; 
+                    shellSelector.appendChild(option);
+                });
+            }
+
+            // Set selected value
+            shellSelector.value = currentConfiguredShell;
+            
+            console.log("Shell selector populated. Current configured:", currentConfiguredShell, "Available:", availableShells);
+
+        } catch (error) {
+            console.error("Error loading shell information:", error);
+            showNotification("Error loading shell settings.", "error");
+            // Add a placeholder error option
+            shellSelector.innerHTML = '<option value="">Error loading shells</option>';
+        }
     }
 
     closeSettingsPanel() {
