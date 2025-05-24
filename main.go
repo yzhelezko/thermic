@@ -6,7 +6,9 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/linux"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"github.com/wailsapp/wails/v2/pkg/options/windows"
 )
 
 //go:embed all:frontend/dist
@@ -18,9 +20,12 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:  "Thermic",
-		Width:  1024,
-		Height: 768,
+		Title:     "Thermic",
+		Width:     1024,
+		Height:    768,
+		MinWidth:  800,
+		MinHeight: 600,
+		Frameless: true,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
@@ -32,10 +37,26 @@ func main() {
 		Mac: &mac.Options{
 			WebviewIsTransparent: false,
 			WindowIsTranslucent:  false,
+			TitleBar: &mac.TitleBar{
+				TitlebarAppearsTransparent: true,
+				HideTitle:                  true,
+				HideTitleBar:               false,
+				FullSizeContent:            true,
+				UseToolbar:                 false,
+				HideToolbarSeparator:       true,
+			},
 			About: &mac.AboutInfo{
-				Title:   "Thermic Terminal",
+				Title:   "Thermic",
 				Message: "Cross-platform terminal emulator built with Wails",
 			},
+		},
+		Windows: &windows.Options{
+			WebviewIsTransparent: false,
+			WindowIsTranslucent:  false,
+			DisableWindowIcon:    false,
+		},
+		Linux: &linux.Options{
+			Icon: nil,
 		},
 	})
 

@@ -1,4 +1,4 @@
-# Thermic Terminal
+# Thermic
 
 [![Build Status](https://github.com/yzhelezko/thermic/workflows/CI/badge.svg)](https://github.com/yzhelezko/thermic/actions)
 [![Release](https://github.com/yzhelezko/thermic/workflows/Build%20and%20Release/badge.svg)](https://github.com/yzhelezko/thermic/releases)
@@ -8,7 +8,7 @@
 
 A modern, cross-platform terminal emulator built with **Wails** and **xterm.js**, delivering a **VS Code-like terminal experience** with native performance and comprehensive **WSL support**.
 
-![Thermic Terminal Screenshot](https://via.placeholder.com/800x500/0c0c0c/ffffff?text=Thermic+Terminal+Screenshot)
+![Thermic Screenshot](https://via.placeholder.com/800x500/0c0c0c/ffffff?text=Thermic+Terminal+Screenshot)
 
 ## ✨ Features
 
@@ -74,7 +74,7 @@ A modern, cross-platform terminal emulator built with **Wails** and **xterm.js**
 
 ## 🎯 Architecture: VS Code Comparison
 
-| Component | **VS Code** | **Thermic Terminal** |
+| Component | **VS Code** | **Thermic** |
 |-----------|------------|---------------------|
 | **Backend** | Node.js + node-pty | Go + custom PTY |
 | **Frontend** | xterm.js | xterm.js (same!) |

@@ -1,0 +1,20 @@
+/* Thermic - Main Stylesheet */
+
+/* Import all modular CSS files in logical order */
+
+/* 1. Base styles first */
+@import 'variables.css';
+@import 'reset.css';
+
+/* 2. Layout components */
+@import 'window-controls.css';
+@import 'layout.css';
+@import 'header.css';
+@import 'tabs.css';
+@import 'sidebar.css';
+@import 'status-bar.css';
+
+/* 3. UI components */
+@import 'settings.css';
+@import 'forms.css';
+@import 'context-menu.css'; 

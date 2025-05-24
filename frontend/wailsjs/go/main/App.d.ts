@@ -6,6 +6,8 @@ export function CheckWSLAvailable():Promise<boolean>;
 
 export function CloseShell(arg1:string):Promise<void>;
 
+export function CloseWindow():Promise<void>;
+
 export function GetAvailableShells():Promise<Array<string>>;
 
 export function GetDefaultShell():Promise<string>;
@@ -19,6 +21,12 @@ export function GetWSLInfo():Promise<Record<string, any>>;
 export function Greet(arg1:string):Promise<string>;
 
 export function IsSessionClosed(arg1:string):Promise<boolean>;
+
+export function IsWindowMaximized():Promise<boolean>;
+
+export function MaximizeWindow():Promise<void>;
+
+export function MinimizeWindow():Promise<void>;
 
 export function ResizeShell(arg1:string,arg2:number,arg3:number):Promise<void>;
 

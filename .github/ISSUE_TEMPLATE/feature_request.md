@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest an idea for Thermic Terminal
+about: Suggest an idea for Thermic
 title: '[FEATURE] '
 labels: enhancement
 assignees: ''

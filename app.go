@@ -54,6 +54,23 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 }
 
+// Window management methods for custom window controls
+func (a *App) MinimizeWindow() {
+	wailsRuntime.WindowMinimise(a.ctx)
+}
+
+func (a *App) MaximizeWindow() {
+	wailsRuntime.WindowToggleMaximise(a.ctx)
+}
+
+func (a *App) CloseWindow() {
+	wailsRuntime.Quit(a.ctx)
+}
+
+func (a *App) IsWindowMaximized() bool {
+	return wailsRuntime.WindowIsMaximised(a.ctx)
+}
+
 // CheckWSLAvailable checks if WSL is available on the system
 func (a *App) CheckWSLAvailable() bool {
 	return a.checkWSLAvailable()
@@ -446,5 +463,5 @@ func (a *App) ShowMessageDialog(title, message string) {
 
 // Greet returns a greeting for the given name (keeping for compatibility)
 func (a *App) Greet(name string) string {
-	return fmt.Sprintf("Hello %s, Welcome to Thermic Terminal!", name)
+	return fmt.Sprintf("Hello %s, Welcome to Thermic!", name)
 }

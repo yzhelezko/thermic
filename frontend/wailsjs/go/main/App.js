@@ -10,6 +10,10 @@ export function CloseShell(arg1) {
   return window['go']['main']['App']['CloseShell'](arg1);
 }
 
+export function CloseWindow() {
+  return window['go']['main']['App']['CloseWindow']();
+}
+
 export function GetAvailableShells() {
   return window['go']['main']['App']['GetAvailableShells']();
 }
@@ -36,6 +40,18 @@ export function Greet(arg1) {
 
 export function IsSessionClosed(arg1) {
   return window['go']['main']['App']['IsSessionClosed'](arg1);
+}
+
+export function IsWindowMaximized() {
+  return window['go']['main']['App']['IsWindowMaximized']();
+}
+
+export function MaximizeWindow() {
+  return window['go']['main']['App']['MaximizeWindow']();
+}
+
+export function MinimizeWindow() {
+  return window['go']['main']['App']['MinimizeWindow']();
 }
 
 export function ResizeShell(arg1, arg2, arg3) {

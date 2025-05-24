@@ -1,0 +1,88 @@
+/* Tabs Component Styles */
+
+.tabs-container {
+    display: flex;
+    align-items: center;
+    background-color: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    height: 35px;
+    padding: 0 8px;
+}
+
+.tab {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-bottom: none;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-secondary);
+    border-radius: 4px 4px 0 0;
+    margin-right: 2px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 200px;
+    min-width: 100px;
+}
+
+.tab.active {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--bg-primary);
+    margin-bottom: -1px;
+}
+
+.tab:hover:not(.active) {
+    background: var(--bg-quaternary);
+}
+
+.tab-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+
+.tab-close {
+    background: none;
+    border: none;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 2px;
+    border-radius: 2px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.tab:hover .tab-close {
+    opacity: 1;
+}
+
+.tab-close:hover {
+    background: var(--error-color);
+    color: white;
+}
+
+.tab-add {
+    background: none;
+    border: 1px solid var(--border-color);
+    color: var(--text-tertiary);
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 16px;
+    border-radius: 4px;
+    margin-left: 4px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tab-add:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+} 

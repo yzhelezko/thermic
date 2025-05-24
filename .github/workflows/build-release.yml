@@ -171,9 +171,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.ref_name }}
-          release_name: Thermic Terminal ${{ github.ref_name }}
+          release_name: Thermic ${{ github.ref_name }}
           body: |
-            ## Thermic Terminal ${{ github.ref_name }}
+            ## Thermic ${{ github.ref_name }}
             
             Cross-platform terminal emulator with WSL support.
             

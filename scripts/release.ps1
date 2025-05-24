@@ -1,4 +1,4 @@
-# Thermic Terminal Release Script (PowerShell)
+# Thermic Release Script (PowerShell)
 # This script helps create a new release by creating and pushing a git tag
 
 param(
@@ -35,7 +35,7 @@ if ($Version -notmatch '^\d+\.\d+\.\d+$') {
 
 $Tag = "v$Version"
 
-Write-Info "Preparing release for Thermic Terminal $Tag"
+Write-Info "Preparing release for Thermic $Tag"
 
 # Check if we're on main branch
 $CurrentBranch = git branch --show-current
@@ -82,7 +82,7 @@ Write-Info "Creating tag $Tag..."
 $TagMessage = @"
 Release $Tag
 
-## Thermic Terminal $Tag
+## Thermic $Tag
 
 Cross-platform terminal emulator with WSL support.
 

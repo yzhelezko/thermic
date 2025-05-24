@@ -9,5 +9,16 @@
   "author": {
     "name": "Yurii Zheliezko",
     "email": "yzhelezko@gmail.com"
+  },
+  "wails": {
+    "id": "com.thermic.terminal",
+    "name": "Thermic",
+    "description": "Modern cross-platform terminal application",
+    "homepage": "https://github.com/yzhelezko/thermic",
+    "version": "1.0.0",
+    "mingw": true,
+    "flags": [
+      "-ldflags=-H windowsgui"
+    ]
   }
 }

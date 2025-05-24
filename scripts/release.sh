@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Thermic Terminal Release Script
+# Thermic Release Script
 # This script helps create a new release by creating and pushing a git tag
 
 set -e
@@ -47,7 +47,7 @@ fi
 
 TAG="v$VERSION"
 
-print_info "Preparing release for Thermic Terminal $TAG"
+print_info "Preparing release for Thermic $TAG"
 
 # Check if we're on main branch
 CURRENT_BRANCH=$(git branch --show-current)
@@ -91,7 +91,7 @@ fi
 print_info "Creating tag $TAG..."
 git tag -a "$TAG" -m "Release $TAG
 
-## Thermic Terminal $TAG
+## Thermic $TAG
 
 Cross-platform terminal emulator with WSL support.
 
