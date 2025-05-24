@@ -6,17 +6,13 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
-	"unsafe"
 
 	"github.com/aymanbagabas/go-pty"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
-	"golang.org/x/sys/windows/registry"
 )
 
 // App struct
@@ -45,80 +41,6 @@ type WSLDistribution struct {
 	Default bool   `json:"default"`
 }
 
-// Windows API declarations for native shell detection
-var (
-	kernel32              = syscall.NewLazyDLL("kernel32.dll")
-	procGetFileAttributes = kernel32.NewProc("GetFileAttributesW")
-)
-
-// fileExists checks if a file exists using Windows API (faster than os.Stat)
-func fileExists(path string) bool {
-	if runtime.GOOS != "windows" {
-		// Fallback for non-Windows
-		_, err := os.Stat(path)
-		return err == nil
-	}
-
-	pathPtr, _ := syscall.UTF16PtrFromString(path)
-	attr, _, _ := procGetFileAttributes.Call(uintptr(unsafe.Pointer(pathPtr)))
-	return attr != 0xFFFFFFFF
-}
-
-// getWindowsShellPaths returns shell paths using environment variables
-func getWindowsShellPaths() map[string][]string {
-	systemRoot := os.Getenv("SystemRoot")
-	if systemRoot == "" {
-		systemRoot = "C:\\Windows" // fallback
-	}
-
-	programFiles := os.Getenv("ProgramFiles")
-	if programFiles == "" {
-		programFiles = "C:\\Program Files" // fallback
-	}
-
-	programFilesX86 := os.Getenv("ProgramFiles(x86)")
-	if programFilesX86 == "" {
-		programFilesX86 = "C:\\Program Files (x86)" // fallback
-	}
-
-	userProfile := os.Getenv("USERPROFILE")
-
-	paths := map[string][]string{
-		"cmd.exe": {
-			filepath.Join(systemRoot, "System32", "cmd.exe"),
-			filepath.Join(systemRoot, "SysWOW64", "cmd.exe"),
-		},
-		"powershell.exe": {
-			filepath.Join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
-			filepath.Join(systemRoot, "SysWOW64", "WindowsPowerShell", "v1.0", "powershell.exe"),
-		},
-		"pwsh.exe": {
-			filepath.Join(programFiles, "PowerShell", "7", "pwsh.exe"),
-			filepath.Join(programFilesX86, "PowerShell", "7", "pwsh.exe"),
-		},
-	}
-
-	// Add user-specific and additional PowerShell Core paths
-	if userProfile != "" {
-		paths["pwsh.exe"] = append(paths["pwsh.exe"],
-			filepath.Join(userProfile, "AppData", "Local", "Microsoft", "WindowsApps", "pwsh.exe"))
-	}
-
-	// Check for newer PowerShell versions
-	for i := 6; i <= 10; i++ {
-		paths["pwsh.exe"] = append(paths["pwsh.exe"],
-			filepath.Join(programFiles, "PowerShell", fmt.Sprintf("%d", i), "pwsh.exe"),
-			filepath.Join(programFilesX86, "PowerShell", fmt.Sprintf("%d", i), "pwsh.exe"))
-	}
-
-	// Check common installation locations
-	paths["pwsh.exe"] = append(paths["pwsh.exe"],
-		filepath.Join(programFiles, "pwsh", "pwsh.exe"),
-		filepath.Join(programFilesX86, "pwsh", "pwsh.exe"))
-
-	return paths
-}
-
 // NewApp creates a new App application struct
 func NewApp() *App {
 	return &App{
@@ -132,217 +54,14 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 }
 
-// CheckWSLAvailable checks if WSL is available on the system using native methods
+// CheckWSLAvailable checks if WSL is available on the system
 func (a *App) CheckWSLAvailable() bool {
-	if runtime.GOOS != "windows" {
-		return false
-	}
-
-	// Method 1: Check for WSL executable using system paths
-	systemRoot := os.Getenv("SystemRoot")
-	if systemRoot == "" {
-		systemRoot = "C:\\Windows"
-	}
-
-	wslPaths := []string{
-		filepath.Join(systemRoot, "System32", "wsl.exe"),
-		filepath.Join(systemRoot, "SysWOW64", "wsl.exe"),
-	}
-
-	wslExists := false
-	for _, path := range wslPaths {
-		if fileExists(path) {
-			wslExists = true
-			break
-		}
-	}
-
-	// If wsl.exe not found, try PATH
-	if !wslExists {
-		if _, err := exec.LookPath("wsl.exe"); err == nil {
-			wslExists = true
-		}
-	}
-
-	if !wslExists {
-		return false
-	}
-
-	// Method 2: Check registry for WSL feature
-	key, err := registry.OpenKey(registry.LOCAL_MACHINE,
-		`SOFTWARE\Microsoft\Windows\CurrentVersion\Lxss`, registry.QUERY_VALUE)
-	if err != nil {
-		// Fallback: try a quick hidden WSL command to verify it's working
-		return a.testWSLWithHiddenCommand()
-	}
-	defer key.Close()
-
-	// If we can open the Lxss registry key, WSL is installed
-	return true
+	return a.checkWSLAvailable()
 }
 
-// testWSLWithHiddenCommand tests WSL availability with a hidden command
-func (a *App) testWSLWithHiddenCommand() bool {
-	cmd := exec.Command("wsl.exe", "--status")
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-
-	// Set a short timeout
-	done := make(chan error, 1)
-	go func() {
-		done <- cmd.Run()
-	}()
-
-	select {
-	case err := <-done:
-		return err == nil
-	case <-time.After(2 * time.Second):
-		cmd.Process.Kill()
-		return false
-	}
-}
-
-// GetWSLDistributions returns a list of available WSL distributions using registry
+// GetWSLDistributions returns a list of available WSL distributions
 func (a *App) GetWSLDistributions() []WSLDistribution {
-	var distributions []WSLDistribution
-
-	if !a.CheckWSLAvailable() {
-		return distributions
-	}
-
-	// Try registry approach first
-	distributions = a.getWSLFromRegistry()
-
-	// If registry approach failed, try command fallback
-	if len(distributions) == 0 {
-		distributions = a.getWSLFromCommand()
-	}
-
-	return distributions
-}
-
-// getWSLFromRegistry gets WSL distributions from Windows registry
-func (a *App) getWSLFromRegistry() []WSLDistribution {
-	var distributions []WSLDistribution
-
-	// Read WSL distributions from registry
-	key, err := registry.OpenKey(registry.LOCAL_MACHINE,
-		`SOFTWARE\Microsoft\Windows\CurrentVersion\Lxss`, registry.ENUMERATE_SUB_KEYS|registry.QUERY_VALUE)
-	if err != nil {
-		return distributions
-	}
-	defer key.Close()
-
-	// Get default distribution UUID
-	defaultDistGUID, _, _ := key.GetStringValue("DefaultDistribution")
-
-	// Enumerate distribution subkeys
-	subkeys, err := key.ReadSubKeyNames(-1)
-	if err != nil {
-		return distributions
-	}
-
-	for _, subkey := range subkeys {
-		distKey, err := registry.OpenKey(key, subkey, registry.QUERY_VALUE)
-		if err != nil {
-			continue
-		}
-
-		// Get distribution name
-		distName, _, err := distKey.GetStringValue("DistributionName")
-		if err != nil {
-			distKey.Close()
-			continue
-		}
-
-		// Get WSL version (1 or 2)
-		version, _, err := distKey.GetIntegerValue("Version")
-		if err != nil {
-			version = 2 // Default to WSL2
-		}
-
-		// Get state (1 = Running, others = Stopped)
-		state, _, err := distKey.GetIntegerValue("State")
-		stateStr := "Stopped"
-		if err == nil && state == 1 {
-			stateStr = "Running"
-		}
-
-		// Check if this is the default distribution
-		isDefault := (subkey == defaultDistGUID)
-
-		dist := WSLDistribution{
-			Name:    distName,
-			Version: fmt.Sprintf("%d", version),
-			State:   stateStr,
-			Default: isDefault,
-		}
-
-		distributions = append(distributions, dist)
-		distKey.Close()
-	}
-
-	return distributions
-}
-
-// getWSLFromCommand gets WSL distributions using hidden command as fallback
-func (a *App) getWSLFromCommand() []WSLDistribution {
-	var distributions []WSLDistribution
-
-	cmd := exec.Command("wsl.exe", "--list", "--verbose")
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-
-	output, err := cmd.Output()
-	if err != nil {
-		return distributions
-	}
-
-	// Convert to string and clean up Unicode issues
-	text := string(output)
-	text = strings.Replace(text, "\ufeff", "", -1) // UTF-8 BOM
-	text = strings.Replace(text, "\u0000", "", -1) // Null characters
-	text = strings.Replace(text, "\x00", "", -1)   // More null characters
-
-	lines := strings.Split(text, "\n")
-
-	for i, line := range lines {
-		// Skip the header line
-		if i == 0 {
-			continue
-		}
-
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-
-		// Check if this is the default distribution
-		isDefault := strings.HasPrefix(line, "*")
-		if isDefault {
-			line = strings.TrimPrefix(line, "*")
-			line = strings.TrimSpace(line)
-		}
-
-		parts := strings.Fields(line)
-		if len(parts) >= 1 && parts[0] != "" && parts[0] != "NAME" {
-			dist := WSLDistribution{
-				Name:    parts[0],
-				Version: "2",
-				State:   "Stopped",
-				Default: isDefault,
-			}
-
-			if len(parts) >= 2 {
-				dist.State = parts[1]
-			}
-			if len(parts) >= 3 {
-				dist.Version = parts[2]
-			}
-
-			distributions = append(distributions, dist)
-		}
-	}
-
-	return distributions
+	return a.getWSLDistributions()
 }
 
 // GetDefaultShell returns the default shell for the current platform
@@ -385,60 +104,9 @@ func (a *App) GetDefaultShell() string {
 	}
 }
 
-// GetAvailableShells returns a list of available shells on the system using native detection
+// GetAvailableShells returns a list of available shells on the system
 func (a *App) GetAvailableShells() []string {
-	var shells []string
-
-	switch runtime.GOOS {
-	case "windows":
-		// Check for Windows shells using known paths (no exec.LookPath)
-		windowsShellPaths := getWindowsShellPaths()
-		for shellName, paths := range windowsShellPaths {
-			for _, path := range paths {
-				if fileExists(path) {
-					shells = append(shells, shellName)
-					break // Found one instance, no need to check other paths
-				}
-			}
-		}
-
-		// Add WSL distributions
-		if a.CheckWSLAvailable() {
-			distributions := a.GetWSLDistributions()
-			for _, dist := range distributions {
-				shellName := fmt.Sprintf("wsl::%s", dist.Name)
-				shells = append(shells, shellName)
-			}
-		}
-
-	case "darwin", "linux":
-		// For non-Windows, keep the current approach but check common paths first
-		commonPaths := map[string][]string{
-			"bash": {"/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash"},
-			"zsh":  {"/bin/zsh", "/usr/bin/zsh", "/usr/local/bin/zsh"},
-			"fish": {"/bin/fish", "/usr/bin/fish", "/usr/local/bin/fish"},
-			"sh":   {"/bin/sh", "/usr/bin/sh"},
-		}
-
-		for shellName, paths := range commonPaths {
-			for _, path := range paths {
-				if fileExists(path) {
-					shells = append(shells, shellName)
-					break
-				}
-			}
-		}
-
-		// Fallback to exec.LookPath for shells not found in common paths
-		fallbackCandidates := []string{"csh", "tcsh", "ksh"}
-		for _, shell := range fallbackCandidates {
-			if _, err := exec.LookPath(shell); err == nil {
-				shells = append(shells, shell)
-			}
-		}
-	}
-
-	return shells
+	return a.getAvailableShells()
 }
 
 // GetPlatformInfo returns information about the current platform
@@ -526,68 +194,22 @@ func (a *App) StartShell(shell string, sessionId string) error {
 		}
 
 		// Find WSL executable using universal detection
-		var wslPath string
-
-		// Try system paths first
-		systemRoot := os.Getenv("SystemRoot")
-		if systemRoot == "" {
-			systemRoot = "C:\\Windows"
-		}
-
-		wslPaths := []string{
-			filepath.Join(systemRoot, "System32", "wsl.exe"),
-			filepath.Join(systemRoot, "SysWOW64", "wsl.exe"),
-		}
-
-		for _, path := range wslPaths {
-			if fileExists(path) {
-				wslPath = path
-				break
-			}
-		}
-
-		// Fallback to PATH lookup
-		if wslPath == "" {
-			var err error
-			wslPath, err = exec.LookPath("wsl.exe")
-			if err != nil {
-				ptty.Close()
-				return fmt.Errorf("wsl.exe not found: %v", err)
-			}
+		wslPath, err := findWSLExecutable()
+		if err != nil {
+			ptty.Close()
+			return fmt.Errorf("wsl.exe not found: %v", err)
 		}
 
 		// VS Code approach: always specify the distribution explicitly
 		cmd = ptty.Command(wslPath, "-d", distName)
-		// Hide console window for WSL process
-		if cmd.SysProcAttr == nil {
-			cmd.SysProcAttr = &syscall.SysProcAttr{}
-		}
-		cmd.SysProcAttr.HideWindow = true
+		// Configure Windows-specific process attributes
+		configurePtyProcess(cmd)
 	} else {
 		// Get the full path to the shell executable using native detection
-		var shellPath string
-
-		// On Windows, check our known paths first
-		if runtime.GOOS == "windows" {
-			windowsShellPaths := getWindowsShellPaths()
-			if paths, exists := windowsShellPaths[shell]; exists {
-				for _, path := range paths {
-					if fileExists(path) {
-						shellPath = path
-						break
-					}
-				}
-			}
-		}
-
-		// Fallback to exec.LookPath if not found in known paths
-		if shellPath == "" {
-			var err error
-			shellPath, err = exec.LookPath(shell)
-			if err != nil {
-				ptty.Close()
-				return fmt.Errorf("shell not found: %v", err)
-			}
+		shellPath, err := findShellExecutable(shell)
+		if err != nil {
+			ptty.Close()
+			return fmt.Errorf("shell not found: %v", err)
 		}
 
 		// Create command with PTY using full path (exactly like VS Code does)
@@ -595,11 +217,8 @@ func (a *App) StartShell(shell string, sessionId string) error {
 		case "windows":
 			// On Windows, use the shell directly with PTY
 			cmd = ptty.Command(shellPath)
-			// Hide console window for the shell process
-			if cmd.SysProcAttr == nil {
-				cmd.SysProcAttr = &syscall.SysProcAttr{}
-			}
-			cmd.SysProcAttr.HideWindow = true
+			// Configure Windows-specific process attributes
+			configurePtyProcess(cmd)
 		default:
 			// On Unix-like systems, use interactive shell
 			cmd = ptty.Command(shellPath, "-i")
