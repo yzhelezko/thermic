@@ -105,19 +105,15 @@ jobs:
           ls -la build/bin/ || echo "No build/bin directory"
           
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            ls -la build/bin/thermic.exe
+            ls -la build/bin/Thermic.exe
           elif [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-            ls -la build/bin/thermic
+            ls -la build/bin/Thermic
           else
             # macOS - check for .app bundle
-            if [ -d "build/bin/thermic.app" ]; then
-              echo "Found thermic.app bundle"
-              ls -la build/bin/thermic.app
-              ls -la build/bin/thermic.app/Contents/MacOS/thermic
-            elif [ -d "build/bin/Thermic Terminal.app" ]; then
-              echo "Found 'Thermic Terminal.app' bundle"
-              ls -la "build/bin/Thermic Terminal.app"
-              ls -la "build/bin/Thermic Terminal.app/Contents/MacOS/"
+            if [ -d "build/bin/Thermic.app" ]; then
+              echo "Found Thermic.app bundle"
+              ls -la build/bin/Thermic.app
+              ls -la build/bin/Thermic.app/Contents/MacOS/Thermic
             elif [ -f "build/bin/thermic" ]; then
               echo "Found regular thermic binary"
               ls -la build/bin/thermic
