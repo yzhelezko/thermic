@@ -96,8 +96,8 @@ jobs:
             exit 1
           fi
 
-      - name: Prepare artifacts (Linux/macOS)
-        if: matrix.platform.os != 'windows-latest'
+      - name: Prepare artifacts (Linux)
+        if: matrix.platform.os == 'ubuntu-latest'
         run: |
           mkdir -p artifacts
           # Find the executable file
@@ -106,8 +106,32 @@ jobs:
           elif [ -f "build/bin/Thermic Terminal" ]; then
             cp "build/bin/Thermic Terminal" artifacts/${{ matrix.platform.name }}
           else
-            echo "Executable not found"
+            echo "Linux executable not found"
             ls -la build/bin/
+            exit 1
+          fi
+
+      - name: Prepare artifacts (macOS)
+        if: matrix.platform.os == 'macos-latest'
+        run: |
+          mkdir -p artifacts
+          # On macOS, Wails creates a .app bundle
+          if [ -d "build/bin/thermic.app" ]; then
+            # Extract the executable from the .app bundle
+            cp "build/bin/thermic.app/Contents/MacOS/thermic" artifacts/${{ matrix.platform.name }}
+          elif [ -d "build/bin/Thermic Terminal.app" ]; then
+            cp "build/bin/Thermic Terminal.app/Contents/MacOS/Thermic Terminal" artifacts/${{ matrix.platform.name }}
+          elif [ -f "build/bin/thermic" ]; then
+            # Fallback for non-app builds
+            cp build/bin/thermic artifacts/${{ matrix.platform.name }}
+          else
+            echo "macOS executable not found"
+            echo "Contents of build/bin/:"
+            ls -la build/bin/
+            if [ -d "build/bin/thermic.app" ]; then
+              echo "Contents of thermic.app/Contents/MacOS/:"
+              ls -la "build/bin/thermic.app/Contents/MacOS/" || true
+            fi
             exit 1
           fi
 
