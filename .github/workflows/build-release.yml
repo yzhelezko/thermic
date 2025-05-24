@@ -79,6 +79,7 @@ jobs:
         run: wails build -platform ${{ matrix.platform.target }} -clean
 
       - name: Debug build output
+        shell: bash
         run: |
           echo "Build directory contents:"
           ls -la build/
