@@ -88,14 +88,27 @@ jobs:
       - name: Verify Wails installation
         run: wails doctor
 
-      - name: Build application
-        run: wails build -clean
+      - name: Build application (Linux)
+        if: matrix.platform.os == 'ubuntu-latest'
+        run: wails build -platform ${{ matrix.platform.target }} -clean -tags webkit2_41
+
+      - name: Build application (Windows/macOS)
+        if: matrix.platform.os != 'ubuntu-latest'
+        run: wails build -platform ${{ matrix.platform.target }} -clean
 
       - name: Test build artifacts
         shell: bash
         run: |
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
             ls -la build/bin/thermic.exe
-          else
+          elif [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
             ls -la build/bin/thermic
-          fi 
+          else
+            # macOS - check for .app bundle
+            if [ -d "build/bin/thermic.app" ]; then
+              ls -la build/bin/thermic.app
+              ls -la build/bin/thermic.app/Contents/MacOS/thermic
+            else
+              ls -la build/bin/thermic
+            fi
+          fi
