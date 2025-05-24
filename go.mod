@@ -5,6 +5,7 @@ go 1.24.2
 require (
 	github.com/aymanbagabas/go-pty v0.2.2
 	github.com/wailsapp/wails/v2 v2.10.1
+	golang.org/x/sys v0.33.0
 )
 
 require (
@@ -34,7 +35,6 @@ require (
 	github.com/wailsapp/mimetype v1.4.1 // indirect
 	golang.org/x/crypto v0.38.0 // indirect
 	golang.org/x/net v0.40.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/text v0.25.0 // indirect
 )
 
