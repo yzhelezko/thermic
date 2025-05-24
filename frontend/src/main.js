@@ -72,6 +72,18 @@ class ThermicTerminal {
         // Set up terminal resize and cleanup handlers
         this.terminalManager.setupResizeObserver();
         this.terminalManager.setupBeforeUnloadHandler();
+
+        // Debounced window resize event emitter
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                // console.log('Frontend: Window resize finished, emitting event to Go.'); // For debugging
+                if (window.runtime) { // Ensure Wails runtime is available
+                    window.runtime.EventsEmit("frontend:window:resized");
+                }
+            }, 250); // 250ms debounce period
+        });
     }
 
     setPlatformStyling() {
