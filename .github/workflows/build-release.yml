@@ -94,8 +94,8 @@ jobs:
           # Find the executable file
           if [ -f "build/bin/thermic.exe" ]; then
             cp build/bin/thermic.exe artifacts/${{ matrix.platform.name }}
-          elif [ -f "build/bin/Thermic Terminal.exe" ]; then
-            cp "build/bin/Thermic Terminal.exe" artifacts/${{ matrix.platform.name }}
+          elif [ -f "build/bin/Thermic.exe" ]; then
+            cp "build/bin/Thermic.exe" artifacts/${{ matrix.platform.name }}
           else
             echo "Windows executable not found"
             ls -la build/bin/
@@ -109,8 +109,8 @@ jobs:
           # Find the executable file
           if [ -f "build/bin/thermic" ]; then
             cp build/bin/thermic artifacts/${{ matrix.platform.name }}
-          elif [ -f "build/bin/Thermic Terminal" ]; then
-            cp "build/bin/Thermic Terminal" artifacts/${{ matrix.platform.name }}
+          elif [ -f "build/bin/Thermic" ]; then
+            cp "build/bin/Thermic" artifacts/${{ matrix.platform.name }}
           else
             echo "Linux executable not found"
             ls -la build/bin/
@@ -125,8 +125,8 @@ jobs:
           if [ -d "build/bin/thermic.app" ]; then
             # Extract the executable from the .app bundle
             cp "build/bin/thermic.app/Contents/MacOS/thermic" artifacts/${{ matrix.platform.name }}
-          elif [ -d "build/bin/Thermic Terminal.app" ]; then
-            cp "build/bin/Thermic Terminal.app/Contents/MacOS/Thermic Terminal" artifacts/${{ matrix.platform.name }}
+          elif [ -d "build/bin/Thermic.app" ]; then
+            cp "build/bin/Thermic.app/Contents/MacOS/Thermic" artifacts/${{ matrix.platform.name }}
           elif [ -f "build/bin/thermic" ]; then
             # Fallback for non-app builds
             cp build/bin/thermic artifacts/${{ matrix.platform.name }}
