@@ -223,7 +223,7 @@ func (a *App) getAvailableShells() []string {
 		for _, path := range paths {
 			if fileExists(path) {
 				shells = append(shells, shellName)
-				break
+				break // Break after finding first valid path to avoid duplicates
 			}
 		}
 	}

@@ -6,6 +6,7 @@ require (
 	github.com/aymanbagabas/go-pty v0.2.2
 	github.com/wailsapp/wails/v2 v2.10.1
 	golang.org/x/sys v0.33.0
+	gopkg.in/yaml.v2 v2.2.8
 )
 
 require (
