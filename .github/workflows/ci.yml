@@ -89,12 +89,12 @@ jobs:
         run: wails doctor
 
       - name: Build application (Linux)
-        if: matrix.platform.os == 'ubuntu-latest'
-        run: wails build -platform ${{ matrix.platform.target }} -clean -tags webkit2_41
+        if: matrix.os == 'ubuntu-latest'
+        run: wails build -clean -tags webkit2_41
 
       - name: Build application (Windows/macOS)
-        if: matrix.platform.os != 'ubuntu-latest'
-        run: wails build -platform ${{ matrix.platform.target }} -clean
+        if: matrix.os != 'ubuntu-latest'
+        run: wails build -clean
 
       - name: Test build artifacts
         shell: bash
