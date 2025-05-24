@@ -10,11 +10,17 @@ export function CloseWindow():Promise<void>;
 
 export function GetAvailableShells():Promise<Array<string>>;
 
+export function GetAvailableShellsFormatted():Promise<Array<Record<string, string>>>;
+
 export function GetCurrentDefaultShellSetting():Promise<string>;
 
 export function GetDefaultShell():Promise<string>;
 
+export function GetOSInfo():Promise<Record<string, any>>;
+
 export function GetPlatformInfo():Promise<Record<string, any>>;
+
+export function GetShellsForUI():Promise<Array<Record<string, any>>>;
 
 export function GetWSLDistributions():Promise<Array<main.WSLDistribution>>;
 

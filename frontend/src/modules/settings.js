@@ -126,8 +126,8 @@ export class SettingsManager {
         }
 
         try {
-            // Fetch available shells and current configured shell
-            const availableShells = await window.go.main.App.GetAvailableShells();
+            // Fetch available shells (formatted for UI) and current configured shell
+            const availableShells = await window.go.main.App.GetAvailableShellsFormatted();
             const currentConfiguredShell = await window.go.main.App.GetCurrentDefaultShellSetting();
 
             // Clear existing options
@@ -139,14 +139,12 @@ export class SettingsManager {
             defaultOption.textContent = "<System Default>";
             shellSelector.appendChild(defaultOption);
 
-            // Populate with available shells
+            // Populate with available shells using formatted names
             if (availableShells && availableShells.length > 0) {
                 availableShells.forEach(shell => {
                     const option = document.createElement('option');
-                    option.value = shell;
-                    // Basic prettification: display only the executable name if it's a path
-                    const shellName = shell.includes('/') ? shell.substring(shell.lastIndexOf('/') + 1) : shell;
-                    option.textContent = shellName; 
+                    option.value = shell.value;  // Raw value for saving to config
+                    option.textContent = shell.name;  // Formatted name for display
                     shellSelector.appendChild(option);
                 });
             }

@@ -18,6 +18,10 @@ export function GetAvailableShells() {
   return window['go']['main']['App']['GetAvailableShells']();
 }
 
+export function GetAvailableShellsFormatted() {
+  return window['go']['main']['App']['GetAvailableShellsFormatted']();
+}
+
 export function GetCurrentDefaultShellSetting() {
   return window['go']['main']['App']['GetCurrentDefaultShellSetting']();
 }
@@ -26,8 +30,16 @@ export function GetDefaultShell() {
   return window['go']['main']['App']['GetDefaultShell']();
 }
 
+export function GetOSInfo() {
+  return window['go']['main']['App']['GetOSInfo']();
+}
+
 export function GetPlatformInfo() {
   return window['go']['main']['App']['GetPlatformInfo']();
+}
+
+export function GetShellsForUI() {
+  return window['go']['main']['App']['GetShellsForUI']();
 }
 
 export function GetWSLDistributions() {
