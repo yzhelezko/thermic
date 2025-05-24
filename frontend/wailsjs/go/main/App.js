@@ -18,6 +18,10 @@ export function GetAvailableShells() {
   return window['go']['main']['App']['GetAvailableShells']();
 }
 
+export function GetCurrentDefaultShellSetting() {
+  return window['go']['main']['App']['GetCurrentDefaultShellSetting']();
+}
+
 export function GetDefaultShell() {
   return window['go']['main']['App']['GetDefaultShell']();
 }
@@ -32,6 +36,10 @@ export function GetWSLDistributions() {
 
 export function GetWSLInfo() {
   return window['go']['main']['App']['GetWSLInfo']();
+}
+
+export function GetWindowMaximizedState() {
+  return window['go']['main']['App']['GetWindowMaximizedState']();
 }
 
 export function Greet(arg1) {
@@ -56,6 +64,10 @@ export function MinimizeWindow() {
 
 export function ResizeShell(arg1, arg2, arg3) {
   return window['go']['main']['App']['ResizeShell'](arg1, arg2, arg3);
+}
+
+export function SetDefaultShell(arg1) {
+  return window['go']['main']['App']['SetDefaultShell'](arg1);
 }
 
 export function ShowMessageDialog(arg1, arg2) {

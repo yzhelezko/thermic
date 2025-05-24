@@ -19,14 +19,12 @@ import (
 
 // App struct
 type App struct {
-	ctx      context.Context
-	sessions map[string]*TerminalSession
-	mutex    sync.RWMutex
-	config   *AppConfig // New field
-	// ticker   *time.Ticker // Removed: Replaced by debouncer
-
-	configDirty   bool          // New field for debounced saving
-	debounceTimer *time.Timer   // New field for debounced saving
+	ctx           context.Context
+	sessions      map[string]*TerminalSession
+	mutex         sync.RWMutex
+	config        *AppConfig
+	configDirty   bool
+	debounceTimer *time.Timer
 }
 
 // TerminalSession represents a PTY session (exactly like VS Code)
@@ -48,14 +46,108 @@ type WSLDistribution struct {
 	Default bool   `json:"default"`
 }
 
+// Config constants
+const (
+	ConfigFileName = "config.yaml"
+	ConfigDirName  = "Thermic"
+	DebounceDelay  = 1 * time.Second
+	ConfigFileMode = 0600
+	ConfigDirMode  = 0750
+)
+
 // NewApp creates a new App application struct
 func NewApp() *App {
 	return &App{
 		sessions: make(map[string]*TerminalSession),
-		config:   DefaultConfig(), // Initialize with defaults
-		// configDirty is false by default
-		// debounceTimer is nil by default
+		config:   DefaultConfig(),
 	}
+}
+
+// getConfigPath returns the full path to the config file
+func (a *App) getConfigPath() (string, error) {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get user config directory: %w", err)
+	}
+	return filepath.Join(configDir, ConfigDirName, ConfigFileName), nil
+}
+
+// ensureConfigDir creates the config directory if it doesn't exist
+func (a *App) ensureConfigDir() error {
+	configPath, err := a.getConfigPath()
+	if err != nil {
+		return err
+	}
+
+	configDir := filepath.Dir(configPath)
+	if err := os.MkdirAll(configDir, ConfigDirMode); err != nil {
+		return fmt.Errorf("failed to create config directory %s: %w", configDir, err)
+	}
+	return nil
+}
+
+// loadConfig loads configuration from file or creates default
+func (a *App) loadConfig() error {
+	configPath, err := a.getConfigPath()
+	if err != nil {
+		fmt.Printf("Warning: %v. Using default config.\n", err)
+		return nil // Continue with default config
+	}
+
+	// Ensure config directory exists
+	if err := a.ensureConfigDir(); err != nil {
+		fmt.Printf("Warning: %v. Using default config.\n", err)
+		return nil
+	}
+
+	// Check if config file exists
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		fmt.Printf("Config file not found at %s - creating with default values.\n", configPath)
+		return a.saveConfig() // Create default config file
+	}
+
+	// Load existing config
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		fmt.Printf("Warning: Failed to read config file %s: %v. Using default config.\n", configPath, err)
+		return nil
+	}
+
+	if err := yaml.Unmarshal(data, a.config); err != nil {
+		fmt.Printf("Warning: Failed to parse config file %s: %v. Using default config.\n", configPath, err)
+		a.config = DefaultConfig() // Reset to default on parse error
+		return nil
+	}
+
+	fmt.Printf("Config loaded successfully from %s\n", configPath)
+	return nil
+}
+
+// updateWindowState updates the config with current window state and marks dirty if changed
+func (a *App) updateWindowState() bool {
+	if a.ctx == nil || a.config == nil {
+		return false
+	}
+
+	width, height := wailsRuntime.WindowGetSize(a.ctx)
+	isMaximized := wailsRuntime.WindowIsMaximised(a.ctx)
+
+	configChanged := false
+
+	if a.config.WindowWidth != width || a.config.WindowHeight != height {
+		a.config.WindowWidth = width
+		a.config.WindowHeight = height
+		fmt.Printf("Window dimensions updated to %dx%d\n", width, height)
+		configChanged = true
+	}
+
+	if a.config.WindowMaximized != isMaximized {
+		a.config.WindowMaximized = isMaximized
+		fmt.Printf("Window maximized state updated to %t\n", isMaximized)
+		configChanged = true
+	}
+
+	return configChanged
 }
 
 // startup is called when the app starts. The context is saved
@@ -64,128 +156,80 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 
 	// Config loading logic
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		fmt.Println("Error getting user config dir:", err)
+	if err := a.loadConfig(); err != nil {
+		fmt.Println("Error loading config:", err)
 		// Fallback or handle error appropriately
 	}
 
-	configPath := filepath.Join(configDir, "Thermic", "config.yaml")
-
-	// Create Thermic directory if it doesn't exist
-	if err := os.MkdirAll(filepath.Dir(configPath), 0750); err != nil {
-		fmt.Println("Error creating config directory:", err)
-		// Proceed with defaults if directory creation fails
-	}
-
-	if _, err := os.Stat(configPath); err == nil {
-		// Config file exists, try to load it
-		data, readErr := os.ReadFile(configPath)
-		if readErr != nil {
-			fmt.Println("Error reading config file:", readErr)
-			// Proceed with defaults if read fails
-		} else {
-			unmarshalErr := yaml.Unmarshal(data, a.config)
-			if unmarshalErr != nil {
-				fmt.Println("Error unmarshalling config:", unmarshalErr)
-				// Reset to default config to be safe if unmarshal fails
-				a.config = DefaultConfig()
-			} else {
-				fmt.Println("Config loaded successfully from", configPath)
-			}
-		}
-	} else {
-		// Config file does not exist, or error stating it
-		fmt.Println("Config file not found at", configPath, "- creating with default values.")
-		// Save default config if not found
-		if saveErr := a.saveConfig(); saveErr != nil {
-			fmt.Println("Error creating default config file:", saveErr)
-		}
-	}
-
-	// Set initial window size using loaded/default config
+	// Set initial window size and state using loaded/default config
 	if a.config != nil { // Ensure config is not nil
 		wailsRuntime.WindowSetSize(a.ctx, a.config.WindowWidth, a.config.WindowHeight)
 		fmt.Printf("Initial window size set to: %d x %d\n", a.config.WindowWidth, a.config.WindowHeight)
+
+		// Restore window maximized state if it was saved as maximized
+		if a.config.WindowMaximized {
+			wailsRuntime.WindowMaximise(a.ctx)
+			fmt.Println("Window restored to maximized state")
+		}
 	} else {
 		// This case should ideally not be reached if NewApp initializes config correctly
 		fmt.Println("Config is nil, cannot set initial window size.")
 	}
 
-	// --- Periodic saving removed, replaced by debouncer ---
-	// fmt.Println("Periodic config saving (ticker) has been removed.")
-
 	// Listen for frontend resize events
 	wailsRuntime.EventsOn(a.ctx, "frontend:window:resized", a.handleFrontendResizeEvent)
-	fmt.Println("Go: Registered listener for 'frontend:window:resized'.") // Debug
+	fmt.Println("Registered listener for window resize events.")
 }
 
 // handleFrontendResizeEvent is called when the frontend signals that window resizing has finished.
 func (a *App) handleFrontendResizeEvent(optionalData ...interface{}) {
 	if a.ctx == nil || a.config == nil {
-		fmt.Println("Resize event: Context or config not ready.") // Debug
+		fmt.Println("Resize event: Context or config not ready.")
 		return
 	}
 
-	width, height := wailsRuntime.WindowGetSize(a.ctx)
-	fmt.Printf("Go: Received frontend:window:resized event. Current size: %dx%d\n", width, height) // Debug
-
-	// Lock config if other parts might read it while we're potentially writing
-	// For now, assuming direct update is fine before marking dirty.
-	// a.mutex.Lock() // Consider if needed around config read/write here
-	// defer a.mutex.Unlock()
-
-	if a.config.WindowWidth != width || a.config.WindowHeight != height {
-		a.config.WindowWidth = width
-		a.config.WindowHeight = height
-		fmt.Printf("Go: Window dimensions changed to %dx%d. Marking dirty.\n", width, height) // Debug
-		a.markConfigDirty() // This will handle its own locking for debounceTimer and configDirty flag
-	} else {
-		fmt.Println("Go: Window dimensions unchanged, no action.") // Debug
+	if a.updateWindowState() {
+		fmt.Println("Window state changed, marking config dirty.")
+		a.markConfigDirty()
 	}
 }
 
 // markConfigDirty flags the configuration as needing a save and resets the debounce timer.
 func (a *App) markConfigDirty() {
-	a.mutex.Lock() // Lock to protect configDirty and debounceTimer
+	a.mutex.Lock()
 	defer a.mutex.Unlock()
 
 	a.configDirty = true
 	if a.debounceTimer != nil {
-		a.debounceTimer.Stop() // Stop any existing timer
+		a.debounceTimer.Stop()
 	}
-	// Start a new timer
-	a.debounceTimer = time.AfterFunc(1*time.Second, func() {
-		// This function will run after 1 second.
+
+	a.debounceTimer = time.AfterFunc(DebounceDelay, func() {
 		if a.ctx != nil { // Check if app is still running
-			 fmt.Println("Debounce timer fired. Attempting to save config if dirty.")
-			 // Need to ensure saveConfigIfDirty is goroutine-safe or called on main thread if it interacts with UI.
-			 // For file I/O and internal state, it's generally okay.
-			 a.saveConfigIfDirty()
+			fmt.Println("Debounce timer fired. Attempting to save config.")
+			a.saveConfigIfDirty()
 		}
 	})
-	// fmt.Println("Config marked dirty, debounce timer started/reset.") // Debug
 }
 
 // saveConfigIfDirty checks the dirty flag and saves the configuration if it's set.
 func (a *App) saveConfigIfDirty() {
-	a.mutex.Lock() // Lock to protect configDirty and the save operation
+	a.mutex.Lock()
 	defer a.mutex.Unlock()
 
-	if a.configDirty {
-		fmt.Println("Config is dirty, proceeding with save.")
-		if err := a.saveConfig(); err != nil { // saveConfig itself should be goroutine-safe if called from here
-			fmt.Println("Error saving config via saveConfigIfDirty:", err)
-			// If save fails, config is still dirty. Consider behavior here.
-		} else {
-			fmt.Println("Config saved successfully via saveConfigIfDirty. Marking clean.")
-			a.configDirty = false // Reset dirty flag only on successful save
-		}
-	} else {
-		// fmt.Println("Config is not dirty, no save needed.") // Debug
+	if !a.configDirty {
+		return // Nothing to save
 	}
-}
 
+	if err := a.saveConfig(); err != nil {
+		fmt.Printf("Error saving config: %v\n", err)
+		// Keep config dirty so it will be retried later
+		return
+	}
+
+	fmt.Println("Config saved successfully.")
+	a.configDirty = false
+}
 
 // Window management methods for custom window controls
 func (a *App) MinimizeWindow() {
@@ -194,6 +238,11 @@ func (a *App) MinimizeWindow() {
 
 func (a *App) MaximizeWindow() {
 	wailsRuntime.WindowToggleMaximise(a.ctx)
+
+	// Update config with new window state after toggle
+	if a.updateWindowState() {
+		a.markConfigDirty()
+	}
 }
 
 func (a *App) CloseWindow() {
@@ -202,6 +251,14 @@ func (a *App) CloseWindow() {
 
 func (a *App) IsWindowMaximized() bool {
 	return wailsRuntime.WindowIsMaximised(a.ctx)
+}
+
+// GetWindowMaximizedState returns the saved maximized state from config
+func (a *App) GetWindowMaximizedState() bool {
+	if a.config == nil {
+		return false
+	}
+	return a.config.WindowMaximized
 }
 
 // CheckWSLAvailable checks if WSL is available on the system
@@ -622,66 +679,58 @@ func (a *App) saveConfig() error {
 		return fmt.Errorf("config is nil, cannot save")
 	}
 
-	configDir, err := os.UserConfigDir()
+	configPath, err := a.getConfigPath()
 	if err != nil {
-		fmt.Println("Error getting user config dir for saving:", err)
-		return err // Or handle by trying to save to a fallback path
+		return fmt.Errorf("failed to get config path: %w", err)
 	}
 
-	configPath := filepath.Join(configDir, "Thermic", "config.yaml")
-
-	if err := os.MkdirAll(filepath.Dir(configPath), 0750); err != nil {
-		fmt.Println("Error creating config directory for saving:", err)
-		return err
+	if err := a.ensureConfigDir(); err != nil {
+		return fmt.Errorf("failed to ensure config directory: %w", err)
 	}
 
 	data, err := yaml.Marshal(a.config)
 	if err != nil {
-		fmt.Println("Error marshalling config for saving:", err)
-		return err
+		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	err = os.WriteFile(configPath, data, 0600) // Changed permission to 0600 for config file
-	if err != nil {
-		fmt.Println("Error writing config file for saving:", err)
-		return err
+	if err := os.WriteFile(configPath, data, ConfigFileMode); err != nil {
+		return fmt.Errorf("failed to write config file %s: %w", configPath, err)
 	}
 
-	fmt.Println("Config successfully saved to", configPath)
 	return nil
 }
 
 // shutdown is called when the app is shutting down.
-// It saves the current window size to the config file.
+// It saves the current window state to the config file.
 func (a *App) shutdown(ctx context.Context) {
 	fmt.Println("Starting application shutdown...")
-	// Stop any active debounce timer to prevent it from firing during/after shutdown
+
+	// Stop any active debounce timer
 	a.mutex.Lock()
 	if a.debounceTimer != nil {
 		a.debounceTimer.Stop()
 		fmt.Println("Debounce timer stopped.")
 	}
-	a.mutex.Unlock() // Unlock before potentially lengthy save operation
+	a.mutex.Unlock()
 
-	// Perform a final save if config is dirty
-	// Get latest window size directly, as OnWindowResize might not have fired for the very last change.
-	// Note: Using a.ctx for WindowGetSize as the passed ctx to shutdown might be a different one specific to shutdown lifecycle.
-	if a.ctx != nil { // Ensure app context is still valid for runtime calls
-		width, height := wailsRuntime.WindowGetSize(a.ctx)
-		if a.config != nil {
-			if a.config.WindowWidth != width || a.config.WindowHeight != height {
-				a.config.WindowWidth = width
-				a.config.WindowHeight = height
-				a.configDirty = true // Mark dirty if size changed since last save/check
-				fmt.Printf("Window size updated to %dx%d for final save.\n", width, height)
+	// Try to capture final window state before saving
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("Warning: Could not get window state during shutdown: %v\n", r)
 			}
-		}
-	}
-	
-	fmt.Println("Attempting final config save on shutdown if dirty...")
-	a.saveConfigIfDirty() // This is now mutex-protected internally
+		}()
 
-	// ... any other shutdown tasks ...
+		if a.updateWindowState() {
+			fmt.Println("Final window state captured for shutdown save.")
+			a.configDirty = true
+		}
+	}()
+
+	// Perform final save
+	fmt.Println("Attempting final config save...")
+	a.saveConfigIfDirty()
+
 	fmt.Println("Application shutdown complete.")
 }
 
@@ -694,12 +743,10 @@ func (a *App) SetDefaultShell(shellPath string) error {
 	// Only mark dirty if value actually changes
 	if a.config.DefaultShell != shellPath {
 		a.config.DefaultShell = shellPath
-		fmt.Printf("Default shell value set to: %s. Config marked dirty.\n", shellPath)
+		fmt.Printf("Default shell set to: %s\n", shellPath)
 		a.markConfigDirty()
-	} else {
-		// fmt.Printf("Default shell already set to: %s. No change made.\n", shellPath) // Debug
 	}
-	return nil // Saving is now handled by debouncer
+	return nil
 }
 
 // GetCurrentDefaultShellSetting returns the raw default shell string from the configuration.

@@ -10,6 +10,8 @@ export function CloseWindow():Promise<void>;
 
 export function GetAvailableShells():Promise<Array<string>>;
 
+export function GetCurrentDefaultShellSetting():Promise<string>;
+
 export function GetDefaultShell():Promise<string>;
 
 export function GetPlatformInfo():Promise<Record<string, any>>;
@@ -17,6 +19,8 @@ export function GetPlatformInfo():Promise<Record<string, any>>;
 export function GetWSLDistributions():Promise<Array<main.WSLDistribution>>;
 
 export function GetWSLInfo():Promise<Record<string, any>>;
+
+export function GetWindowMaximizedState():Promise<boolean>;
 
 export function Greet(arg1:string):Promise<string>;
 
@@ -29,6 +33,8 @@ export function MaximizeWindow():Promise<void>;
 export function MinimizeWindow():Promise<void>;
 
 export function ResizeShell(arg1:string,arg2:number,arg3:number):Promise<void>;
+
+export function SetDefaultShell(arg1:string):Promise<void>;
 
 export function ShowMessageDialog(arg1:string,arg2:string):Promise<void>;
 
