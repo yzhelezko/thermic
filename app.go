@@ -114,6 +114,35 @@ func (a *App) startup(ctx context.Context) {
 
 	// --- Periodic saving removed, replaced by debouncer ---
 	// fmt.Println("Periodic config saving (ticker) has been removed.")
+
+	// Listen for frontend resize events
+	wailsRuntime.EventsOn(a.ctx, "frontend:window:resized", a.handleFrontendResizeEvent)
+	fmt.Println("Go: Registered listener for 'frontend:window:resized'.") // Debug
+}
+
+// handleFrontendResizeEvent is called when the frontend signals that window resizing has finished.
+func (a *App) handleFrontendResizeEvent(optionalData ...interface{}) {
+	if a.ctx == nil || a.config == nil {
+		fmt.Println("Resize event: Context or config not ready.") // Debug
+		return
+	}
+
+	width, height := wailsRuntime.WindowGetSize(a.ctx)
+	fmt.Printf("Go: Received frontend:window:resized event. Current size: %dx%d\n", width, height) // Debug
+
+	// Lock config if other parts might read it while we're potentially writing
+	// For now, assuming direct update is fine before marking dirty.
+	// a.mutex.Lock() // Consider if needed around config read/write here
+	// defer a.mutex.Unlock()
+
+	if a.config.WindowWidth != width || a.config.WindowHeight != height {
+		a.config.WindowWidth = width
+		a.config.WindowHeight = height
+		fmt.Printf("Go: Window dimensions changed to %dx%d. Marking dirty.\n", width, height) // Debug
+		a.markConfigDirty() // This will handle its own locking for debounceTimer and configDirty flag
+	} else {
+		fmt.Println("Go: Window dimensions unchanged, no action.") // Debug
+	}
 }
 
 // markConfigDirty flags the configuration as needing a save and resets the debounce timer.
@@ -671,22 +700,6 @@ func (a *App) SetDefaultShell(shellPath string) error {
 		// fmt.Printf("Default shell already set to: %s. No change made.\n", shellPath) // Debug
 	}
 	return nil // Saving is now handled by debouncer
-}
-
-// OnWindowResize is called by Wails when the window is resized.
-// It updates the config and marks it dirty.
-func (a *App) OnWindowResize(width int, height int) {
-	// This method will be called by Wails, potentially frequently.
-	// fmt.Printf("Window resize event: %dx%d\n", width, height) // Debug
-	if a.config != nil {
-		// Check if dimensions actually changed to avoid unnecessary dirtying
-		if a.config.WindowWidth != width || a.config.WindowHeight != height {
-			a.config.WindowWidth = width
-			a.config.WindowHeight = height
-			// fmt.Println("Window dimensions updated in config. Marking dirty.") // Debug
-			a.markConfigDirty()
-		}
-	}
 }
 
 // GetCurrentDefaultShellSetting returns the raw default shell string from the configuration.
