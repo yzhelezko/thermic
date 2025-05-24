@@ -4,7 +4,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 
 // Import Wails runtime functions
-import { GetPlatformInfo, GetAvailableShells, GetDefaultShell, StartShell, WriteToShell, ResizeShell, CloseShell, ShowMessageDialog, GetWSLInfo, CheckWSLAvailable } from '../wailsjs/go/main/App';
+import { GetPlatformInfo, GetAvailableShells, GetDefaultShell, StartShell, WriteToShell, ResizeShell, CloseShell, ShowMessageDialog, GetWSLInfo, CheckWSLAvailable, WaitForSessionClose } from '../wailsjs/go/main/App';
 import { EventsOn } from '../wailsjs/runtime/runtime';
 
 class ThermicTerminal {
@@ -15,6 +15,7 @@ class ThermicTerminal {
         this.platformInfo = null;
         this.sessionId = null;
         this.isConnected = false;
+        this.eventUnsubscribe = null;
         
         this.init();
     }
@@ -192,10 +193,43 @@ class ThermicTerminal {
     setupEventListeners() {
         const shellSelector = document.getElementById('shell-selector');
         
+        // Debounce shell switching to prevent rapid switches
+        let switchTimeout = null;
         shellSelector.addEventListener('change', async (event) => {
             const selectedShell = event.target.value;
             if (selectedShell) {
-                await this.startShell(selectedShell);
+                // Clear any pending switch
+                if (switchTimeout) {
+                    clearTimeout(switchTimeout);
+                }
+                
+                // Disable the selector during switch
+                shellSelector.disabled = true;
+                this.updateStatus('Switching shell...');
+                
+                try {
+                    await this.startShell(selectedShell);
+                } catch (error) {
+                    console.error('Shell switch failed:', error);
+                    this.updateStatus('Shell switch failed');
+                    
+                    // Reset selector to previous value
+                    const currentShell = this.currentShell;
+                    if (currentShell) {
+                        // Find and select the current shell option
+                        for (let option of shellSelector.options) {
+                            if (option.value === currentShell) {
+                                shellSelector.value = currentShell;
+                                break;
+                            }
+                        }
+                    } else {
+                        shellSelector.value = '';
+                    }
+                } finally {
+                    // Always re-enable the selector
+                    shellSelector.disabled = false;
+                }
             }
         });
 
@@ -221,6 +255,10 @@ class ThermicTerminal {
         // Handle application close
         window.addEventListener('beforeunload', () => {
             if (this.sessionId) {
+                // Use synchronous cleanup for beforeunload
+                if (this.eventUnsubscribe) {
+                    this.eventUnsubscribe();
+                }
                 CloseShell(this.sessionId);
             }
         });
@@ -228,10 +266,14 @@ class ThermicTerminal {
 
     async startShell(shell) {
         try {
-            // Close existing session if any
+            // Clean up existing session properly
             if (this.sessionId) {
-                await CloseShell(this.sessionId);
-                this.isConnected = false;
+                this.updateStatus('Closing previous session...');
+                await this.cleanupSession();
+                
+                // Ensure we're ready for the new session
+                this.updateStatus('Previous session closed. Preparing new session...');
+                await new Promise(resolve => setTimeout(resolve, 100));
             }
 
             this.updateStatus(`Starting ${shell}...`);
@@ -242,9 +284,10 @@ class ThermicTerminal {
             // Clear terminal
             this.terminal.clear();
             
-            // Set up event listener for this specific session
-            EventsOn('terminal-output', (data) => {
-                if (data.sessionId === this.sessionId) {
+            // Set up event listener for this specific session ONLY
+            this.eventUnsubscribe = EventsOn('terminal-output', (data) => {
+                // Only process data for the current session
+                if (data.sessionId === this.sessionId && this.isConnected) {
                     this.terminal.write(data.data);
                 }
             });
@@ -256,12 +299,14 @@ class ThermicTerminal {
             this.currentShell = shell;
             this.updateStatus(`Running ${shell} - Terminal active`);
 
-            // Set terminal size
+            // Set terminal size after a brief delay
             setTimeout(async () => {
-                const cols = this.terminal.cols;
-                const rows = this.terminal.rows;
-                await ResizeShell(this.sessionId, cols, rows);
-            }, 100);
+                if (this.isConnected && this.sessionId) {
+                    const cols = this.terminal.cols;
+                    const rows = this.terminal.rows;
+                    await ResizeShell(this.sessionId, cols, rows);
+                }
+            }, 300);
 
         } catch (error) {
             console.error('Failed to start shell:', error);
@@ -270,6 +315,12 @@ class ThermicTerminal {
             
             // Show error dialog
             await ShowMessageDialog('Shell Error', `Failed to start ${shell}: ${error.message}`);
+            
+            // Clean up on error
+            if (this.eventUnsubscribe) {
+                this.eventUnsubscribe();
+                this.eventUnsubscribe = null;
+            }
             
             this.isConnected = false;
             this.sessionId = null;
@@ -288,6 +339,37 @@ class ThermicTerminal {
         if (platformInfo && this.platformInfo) {
             const hostname = this.platformInfo.hostname || 'Unknown';
             platformInfo.textContent = `${this.platformInfo.os}/${this.platformInfo.arch} @ ${hostname}`;
+        }
+    }
+
+    async cleanupSession() {
+        if (this.sessionId) {
+            const sessionToClose = this.sessionId;
+            
+            // Remove event listener first
+            if (this.eventUnsubscribe) {
+                this.eventUnsubscribe();
+                this.eventUnsubscribe = null;
+            }
+            
+            // Reset state immediately to prevent new operations
+            this.isConnected = false;
+            
+            // Close the shell session
+            try {
+                await CloseShell(sessionToClose);
+                
+                // Wait for the session to be completely closed
+                await WaitForSessionClose(sessionToClose);
+                
+            } catch (error) {
+                console.warn('Error during session cleanup:', error);
+                // Continue with cleanup even if there's an error
+            }
+            
+            // Final state reset
+            this.sessionId = null;
+            this.currentShell = null;
         }
     }
 }

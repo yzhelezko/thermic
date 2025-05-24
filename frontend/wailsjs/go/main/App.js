@@ -34,6 +34,10 @@ export function Greet(arg1) {
   return window['go']['main']['App']['Greet'](arg1);
 }
 
+export function IsSessionClosed(arg1) {
+  return window['go']['main']['App']['IsSessionClosed'](arg1);
+}
+
 export function ResizeShell(arg1, arg2, arg3) {
   return window['go']['main']['App']['ResizeShell'](arg1, arg2, arg3);
 }
@@ -44,6 +48,10 @@ export function ShowMessageDialog(arg1, arg2) {
 
 export function StartShell(arg1, arg2) {
   return window['go']['main']['App']['StartShell'](arg1, arg2);
+}
+
+export function WaitForSessionClose(arg1) {
+  return window['go']['main']['App']['WaitForSessionClose'](arg1);
 }
 
 export function WriteToShell(arg1, arg2) {

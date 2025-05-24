@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/aymanbagabas/go-pty"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -23,11 +24,13 @@ type App struct {
 
 // TerminalSession represents a PTY session (exactly like VS Code)
 type TerminalSession struct {
-	pty  pty.Pty
-	cmd  *pty.Cmd
-	done chan bool
-	cols int
-	rows int
+	pty      pty.Pty
+	cmd      *pty.Cmd
+	done     chan bool
+	closed   chan bool
+	cols     int
+	rows     int
+	cleaning bool
 }
 
 // WSLDistribution represents a WSL distribution
@@ -271,9 +274,13 @@ func (a *App) StartShell(shell string, sessionId string) error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 
-	// Check if session already exists
-	if _, exists := a.sessions[sessionId]; exists {
-		return fmt.Errorf("session %s already exists", sessionId)
+	// Check if session already exists and clean it up if needed
+	if existingSession, exists := a.sessions[sessionId]; exists {
+		existingSession.cleaning = true
+		if existingSession.pty != nil {
+			existingSession.pty.Close()
+		}
+		delete(a.sessions, sessionId)
 	}
 
 	// Create a new PTY (this is what VS Code does with node-pty)
@@ -341,11 +348,13 @@ func (a *App) StartShell(shell string, sessionId string) error {
 
 	// Create session
 	session := &TerminalSession{
-		pty:  ptty,
-		cmd:  cmd,
-		done: make(chan bool, 1),
-		cols: cols,
-		rows: rows,
+		pty:      ptty,
+		cmd:      cmd,
+		done:     make(chan bool, 1),
+		closed:   make(chan bool, 1),
+		cols:     cols,
+		rows:     rows,
+		cleaning: false,
 	}
 
 	// Store session
@@ -362,8 +371,26 @@ func (a *App) StartShell(shell string, sessionId string) error {
 
 // streamPtyOutput streams PTY output exactly like VS Code does
 func (a *App) streamPtyOutput(sessionId string, ptty pty.Pty) {
+	defer func() {
+		// Signal that streaming has ended
+		a.mutex.RLock()
+		if session, exists := a.sessions[sessionId]; exists && !session.cleaning {
+			session.closed <- true
+		}
+		a.mutex.RUnlock()
+	}()
+
 	buffer := make([]byte, 1024)
 	for {
+		// Check if session is being cleaned up
+		a.mutex.RLock()
+		session, exists := a.sessions[sessionId]
+		if !exists || session.cleaning {
+			a.mutex.RUnlock()
+			break
+		}
+		a.mutex.RUnlock()
+
 		n, err := ptty.Read(buffer)
 		if err != nil {
 			if err == io.EOF {
@@ -429,27 +456,84 @@ func (a *App) ResizeShell(sessionId string, cols, rows int) error {
 // CloseShell closes a PTY session (exactly like VS Code)
 func (a *App) CloseShell(sessionId string) error {
 	a.mutex.Lock()
-	defer a.mutex.Unlock()
-
 	session, exists := a.sessions[sessionId]
 	if !exists {
+		a.mutex.Unlock()
 		return fmt.Errorf("session %s not found", sessionId)
 	}
+
+	// Mark session as being cleaned up to stop goroutines
+	session.cleaning = true
+	a.mutex.Unlock()
 
 	// Close PTY (will terminate the shell process)
 	if session.pty != nil {
 		session.pty.Close()
 	}
 
-	// Wait for process to finish
+	// Wait for process to finish with timeout
 	if session.cmd != nil {
-		session.cmd.Wait()
+		done := make(chan error, 1)
+		go func() {
+			done <- session.cmd.Wait()
+		}()
+
+		// Wait for either process completion or timeout (max 3 seconds)
+		select {
+		case <-done:
+			// Process finished normally
+		case <-session.closed:
+			// Stream goroutine finished
+		case <-time.After(3 * time.Second):
+			// Timeout - force kill the process
+			if session.cmd.Process != nil {
+				session.cmd.Process.Kill()
+			}
+		}
 	}
 
 	// Remove from sessions map
+	a.mutex.Lock()
 	delete(a.sessions, sessionId)
+	a.mutex.Unlock()
 
 	return nil
+}
+
+// IsSessionClosed checks if a session is completely closed and cleaned up
+func (a *App) IsSessionClosed(sessionId string) bool {
+	a.mutex.RLock()
+	defer a.mutex.RUnlock()
+
+	session, exists := a.sessions[sessionId]
+	if !exists {
+		return true // Session doesn't exist, so it's "closed"
+	}
+
+	return session.cleaning
+}
+
+// WaitForSessionClose waits for a session to be completely closed
+func (a *App) WaitForSessionClose(sessionId string) error {
+	// Wait up to 5 seconds for session to close
+	timeout := time.After(5 * time.Second)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-timeout:
+			return fmt.Errorf("timeout waiting for session %s to close", sessionId)
+		case <-ticker.C:
+			a.mutex.RLock()
+			_, exists := a.sessions[sessionId]
+			a.mutex.RUnlock()
+
+			if !exists {
+				return nil // Session is fully closed
+			}
+		}
+	}
 }
 
 // ShowMessageDialog shows a message dialog to the user

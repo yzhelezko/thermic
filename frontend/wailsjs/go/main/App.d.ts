@@ -18,10 +18,14 @@ export function GetWSLInfo():Promise<Record<string, any>>;
 
 export function Greet(arg1:string):Promise<string>;
 
+export function IsSessionClosed(arg1:string):Promise<boolean>;
+
 export function ResizeShell(arg1:string,arg2:number,arg3:number):Promise<void>;
 
 export function ShowMessageDialog(arg1:string,arg2:string):Promise<void>;
 
 export function StartShell(arg1:string,arg2:string):Promise<void>;
+
+export function WaitForSessionClose(arg1:string):Promise<void>;
 
 export function WriteToShell(arg1:string,arg2:string):Promise<void>;
