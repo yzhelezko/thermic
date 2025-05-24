@@ -84,17 +84,19 @@ func (a *App) GetDefaultShell() string {
 		}
 		return "cmd.exe"
 	case "darwin":
-		// Use zsh as default on macOS (default since macOS Catalina)
-		if _, err := exec.LookPath("zsh"); err == nil {
-			return "zsh"
+		// Use file-based detection for macOS to prevent terminal windows
+		macosShells := []string{"zsh", "bash", "sh"}
+		for _, shell := range macosShells {
+			if shellPath, err := findShellExecutable(shell); err == nil && shellPath != "" {
+				return shell
+			}
 		}
-		// Fallback to bash
-		return "bash"
+		return "sh" // Ultimate fallback
 	case "linux":
-		// Check for common shells in order of preference
-		shells := []string{"bash", "zsh", "sh"}
-		for _, shell := range shells {
-			if _, err := exec.LookPath(shell); err == nil {
+		// Use file-based detection for Linux to prevent terminal windows
+		linuxShells := []string{"bash", "zsh", "sh"}
+		for _, shell := range linuxShells {
+			if shellPath, err := findShellExecutable(shell); err == nil && shellPath != "" {
 				return shell
 			}
 		}

@@ -31,12 +31,25 @@ func (a *App) getWSLDistributions() []WSLDistribution {
 func (a *App) getAvailableShells() []string {
 	var shells []string
 
-	// For non-Windows, check common paths first
-	commonPaths := map[string][]string{
-		"bash": {"/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash"},
-		"zsh":  {"/bin/zsh", "/usr/bin/zsh", "/usr/local/bin/zsh"},
-		"fish": {"/bin/fish", "/usr/bin/fish", "/usr/local/bin/fish"},
-		"sh":   {"/bin/sh", "/usr/bin/sh"},
+	// Platform-specific shell paths
+	var commonPaths map[string][]string
+
+	if runtime.GOOS == "darwin" {
+		// macOS specific paths
+		commonPaths = map[string][]string{
+			"zsh":  {"/bin/zsh", "/usr/bin/zsh", "/usr/local/bin/zsh", "/opt/homebrew/bin/zsh"},
+			"bash": {"/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash", "/opt/homebrew/bin/bash"},
+			"fish": {"/usr/local/bin/fish", "/opt/homebrew/bin/fish", "/usr/bin/fish"},
+			"sh":   {"/bin/sh", "/usr/bin/sh"},
+		}
+	} else {
+		// Linux and other Unix systems
+		commonPaths = map[string][]string{
+			"bash": {"/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash"},
+			"zsh":  {"/bin/zsh", "/usr/bin/zsh", "/usr/local/bin/zsh"},
+			"fish": {"/bin/fish", "/usr/bin/fish", "/usr/local/bin/fish"},
+			"sh":   {"/bin/sh", "/usr/bin/sh"},
+		}
 	}
 
 	for shellName, paths := range commonPaths {
@@ -45,14 +58,6 @@ func (a *App) getAvailableShells() []string {
 				shells = append(shells, shellName)
 				break
 			}
-		}
-	}
-
-	// Fallback to exec.LookPath for shells not found in common paths
-	fallbackCandidates := []string{"csh", "tcsh", "ksh"}
-	for _, shell := range fallbackCandidates {
-		if _, err := exec.LookPath(shell); err == nil {
-			shells = append(shells, shell)
 		}
 	}
 
@@ -79,7 +84,41 @@ func findWSLExecutable() (string, error) {
 	return "", exec.ErrNotFound
 }
 
-// findShellExecutable finds shell executable using standard PATH lookup
+// findShellExecutable finds shell executable using file-based detection
 func findShellExecutable(shell string) (string, error) {
+	// Platform-specific shell paths
+	var shellPaths map[string][]string
+
+	if runtime.GOOS == "darwin" {
+		// macOS specific paths
+		shellPaths = map[string][]string{
+			"zsh":  {"/bin/zsh", "/usr/bin/zsh", "/usr/local/bin/zsh", "/opt/homebrew/bin/zsh"},
+			"bash": {"/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash", "/opt/homebrew/bin/bash"},
+			"fish": {"/usr/local/bin/fish", "/opt/homebrew/bin/fish", "/usr/bin/fish"},
+			"sh":   {"/bin/sh", "/usr/bin/sh"},
+		}
+	} else {
+		// Linux and other Unix systems
+		shellPaths = map[string][]string{
+			"bash": {"/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash"},
+			"zsh":  {"/bin/zsh", "/usr/bin/zsh", "/usr/local/bin/zsh"},
+			"fish": {"/bin/fish", "/usr/bin/fish", "/usr/local/bin/fish"},
+			"sh":   {"/bin/sh", "/usr/bin/sh"},
+			"csh":  {"/bin/csh", "/usr/bin/csh"},
+			"tcsh": {"/bin/tcsh", "/usr/bin/tcsh"},
+			"ksh":  {"/bin/ksh", "/usr/bin/ksh"},
+		}
+	}
+
+	// Check known paths first
+	if paths, exists := shellPaths[shell]; exists {
+		for _, path := range paths {
+			if fileExists(path) {
+				return path, nil
+			}
+		}
+	}
+
+	// Fallback to PATH lookup only if no file-based paths work
 	return exec.LookPath(shell)
 }

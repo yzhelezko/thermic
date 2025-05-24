@@ -35,8 +35,18 @@ class ThermicTerminal {
             // Set up event listeners
             this.setupEventListeners();
 
-            // Show ready status
-            this.updateStatus('Terminal ready - Select a shell to start');
+            // Automatically start the default shell
+            const defaultShell = await GetDefaultShell();
+            if (defaultShell) {
+                // Set the shell selector to the default shell
+                const shellSelector = document.getElementById('shell-selector');
+                shellSelector.value = defaultShell;
+                
+                // Start the default shell automatically
+                await this.startShell(defaultShell);
+            } else {
+                this.updateStatus('No default shell found - Please select a shell manually');
+            }
         } catch (error) {
             console.error('Failed to initialize terminal:', error);
             this.updateStatus('Initialization failed');
@@ -100,35 +110,6 @@ class ThermicTerminal {
             }
         });
 
-        // Terminal welcome message
-        this.terminal.writeln('\x1b[1;32m╔══════════════════════════════════════════════════════════════════╗\x1b[0m');
-        this.terminal.writeln('\x1b[1;32m║                     Welcome to Thermic Terminal                 ║\x1b[0m');
-        this.terminal.writeln('\x1b[1;32m║                  Cross-platform terminal emulator               ║\x1b[0m');
-        this.terminal.writeln('\x1b[1;32m╚══════════════════════════════════════════════════════════════════╝\x1b[0m');
-        this.terminal.writeln('');
-        this.terminal.writeln(`Platform: ${this.platformInfo?.os || 'Unknown'} ${this.platformInfo?.arch || ''}`);
-        this.terminal.writeln(`Default Shell: ${this.platformInfo?.defaultShell || 'Unknown'}`);
-        
-        // Show WSL info if available
-        if (this.platformInfo?.wslAvailable) {
-            this.terminal.writeln(`\x1b[1;36mWSL Status: Available\x1b[0m`);
-            const distributions = this.platformInfo?.wslDistributions || [];
-            if (distributions.length > 0) {
-                this.terminal.writeln(`\x1b[36mWSL Distributions: ${distributions.length} found\x1b[0m`);
-                distributions.forEach(dist => {
-                    const defaultMark = dist.default ? ' (default)' : '';
-                    const stateMark = dist.state === 'Running' ? '\x1b[32m●\x1b[0m' : '\x1b[33m○\x1b[0m';
-                    this.terminal.writeln(`  ${stateMark} ${dist.name}${defaultMark} - ${dist.state}`);
-                });
-            }
-        } else if (this.platformInfo?.os === 'windows') {
-            this.terminal.writeln(`\x1b[90mWSL Status: Not available\x1b[0m`);
-        }
-        
-        this.terminal.writeln('');
-        this.terminal.writeln('Select a shell from the dropdown above to start a terminal session.');
-        this.terminal.writeln('');
-
         // Handle terminal input - send to shell
         this.terminal.onData((data) => {
             if (this.isConnected && this.sessionId) {
@@ -152,13 +133,7 @@ class ThermicTerminal {
                 return;
             }
 
-            // Add default option
-            const defaultOption = document.createElement('option');
-            defaultOption.value = '';
-            defaultOption.textContent = 'Select a shell...';
-            shellSelector.appendChild(defaultOption);
-
-            // Add shells to dropdown
+            // Add shells to dropdown (no placeholder option since we auto-start)
             shells.forEach(shell => {
                 const option = document.createElement('option');
                 option.value = shell;
