@@ -69,4 +69,16 @@
     font-size: 10px;
     color: var(--text-tertiary);
     opacity: 0.8;
+}
+
+/* Tab Context Menu */
+.tab-context-menu {
+    position: fixed;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px var(--shadow);
+    z-index: 10000;
+    min-width: 160px;
+    padding: 4px 0;
 } 

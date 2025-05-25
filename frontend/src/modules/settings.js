@@ -17,100 +17,186 @@ export class SettingsManager {
 
     setupSettingsPanel() {
         // Settings panel toggle
-        document.getElementById('settings-btn').addEventListener('click', () => {
-            this.toggleSettingsPanel();
-        });
+        const settingsBtn = document.getElementById('settings-btn');
+        if (settingsBtn) {
+            settingsBtn.addEventListener('click', async (e) => {
+                try {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    await this.toggleSettingsPanel();
+                } catch (error) {
+                    console.error('Error in settings button click handler:', error);
+                }
+            });
+        } else {
+            console.warn('Settings button not found');
+        }
 
         // Close settings when clicking overlay
-        document.getElementById('settings-overlay').addEventListener('click', (e) => {
-            if (e.target.id === 'settings-overlay') {
-                this.closeSettingsPanel();
-            }
-        });
+        const settingsOverlay = document.getElementById('settings-overlay');
+        if (settingsOverlay) {
+            settingsOverlay.addEventListener('click', (e) => {
+                // Only close if clicking directly on the overlay background, not its children
+                if (e.target.id === 'settings-overlay' && e.target === e.currentTarget) {
+                    this.closeSettingsPanel();
+                }
+            });
+        } else {
+            console.warn('Settings overlay not found');
+        }
 
         // Close settings with Escape key
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 const overlay = document.getElementById('settings-overlay');
-                if (overlay.classList.contains('active')) {
+                if (overlay && overlay.classList.contains('active')) {
                     this.closeSettingsPanel();
                 }
             }
         });
     }
 
-    toggleSettingsPanel() {
-        const overlay = document.getElementById('settings-overlay');
-        const settingsBtn = document.getElementById('settings-btn');
-        
-        if (overlay.classList.contains('active')) {
-            this.closeSettingsPanel();
-        } else {
-            overlay.classList.add('active');
-            settingsBtn.classList.add('active');
+    async toggleSettingsPanel() {
+        try {
+            const overlay = document.getElementById('settings-overlay');
+            const settingsBtn = document.getElementById('settings-btn');
             
-            // Initialize settings tabs if not already done
-            this.initializeSettingsTabs();
+            if (!overlay || !settingsBtn) {
+                console.warn('Settings panel elements not found');
+                return;
+            }
+            
+            if (overlay.classList.contains('active')) {
+                this.closeSettingsPanel();
+            } else {
+                overlay.classList.add('active');
+                settingsBtn.classList.add('active');
+                
+                // Force display to ensure it's visible (CSS fallback)
+                overlay.style.display = 'block';
+                
+                // Initialize settings tabs if not already done
+                try {
+                    await this.initializeSettingsTabs();
+                } catch (tabsError) {
+                    console.error('Error initializing settings tabs:', tabsError);
+                    // Still show the panel even if tabs initialization fails
+                }
+            }
+        } catch (error) {
+            console.error('Error toggling settings panel:', error);
         }
     }
 
-    initializeSettingsTabs() {
+    async initializeSettingsTabs() {
         // Avoid multiple initializations
-        if (this.settingsTabsInitialized) return;
+        if (this.settingsTabsInitialized) {
+            return;
+        }
         
-        const settingsTabs = document.querySelectorAll('.settings-tab');
-        const settingsTabPanes = document.querySelectorAll('.settings-tab-pane');
+        try {
+            const settingsTabs = document.querySelectorAll('.settings-tab');
+            const settingsTabPanes = document.querySelectorAll('.settings-tab-pane');
 
-        if (settingsTabs.length === 0) return; // Elements not ready yet
+            if (settingsTabs.length === 0) {
+                console.warn("No settings tabs found - elements may not be ready yet");
+                return; // Elements not ready yet
+            }
 
-        settingsTabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                // Deactivate all tabs and panes
-                settingsTabs.forEach(t => t.classList.remove('active'));
-                settingsTabPanes.forEach(p => p.classList.remove('active'));
+            settingsTabs.forEach((tab, index) => {
+                try {
+                    tab.addEventListener('click', () => {
+                        try {
+                            // Deactivate all tabs and panes
+                            settingsTabs.forEach(t => t.classList.remove('active'));
+                            settingsTabPanes.forEach(p => p.classList.remove('active'));
 
-                // Activate clicked tab and corresponding pane
-                tab.classList.add('active');
-                const targetPaneId = tab.dataset.tabTarget;
-                const targetPane = document.querySelector(targetPaneId);
-                if (targetPane) {
-                    targetPane.classList.add('active');
+                            // Activate clicked tab and corresponding pane
+                            tab.classList.add('active');
+                            const targetPaneId = tab.dataset.tabTarget;
+                            const targetPane = document.querySelector(targetPaneId);
+                            if (targetPane) {
+                                targetPane.classList.add('active');
+                            } else {
+                                console.warn(`Target pane not found: ${targetPaneId}`);
+                            }
+                        } catch (error) {
+                            console.error('Error in tab click handler:', error);
+                        }
+                    });
+                } catch (error) {
+                    console.error(`Error setting up tab ${index}:`, error);
                 }
             });
-        });
 
-        // Dark mode toggle in settings panel
-        const darkModeToggle = document.getElementById('dark-mode-toggle');
-        if (darkModeToggle) {
-            darkModeToggle.addEventListener('change', () => {
-                this.onThemeChange?.();
-            });
+            // Dark mode toggle in settings panel
+            try {
+                const darkModeToggle = document.getElementById('dark-mode-toggle');
+                if (darkModeToggle) {
+                    darkModeToggle.addEventListener('change', () => {
+                        try {
+                            this.onThemeChange?.();
+                        } catch (error) {
+                            console.error('Error in theme change handler:', error);
+                        }
+                    });
+                } else {
+                    console.warn('Dark mode toggle not found');
+                }
+            } catch (error) {
+                console.error('Error setting up dark mode toggle:', error);
+            }
+
+            this.settingsTabsInitialized = true;
+        } catch (error) {
+            console.error('Error initializing settings tabs:', error);
         }
-
-        this.settingsTabsInitialized = true;
 
         // --- Shell Selector Logic ---
         const shellSelector = document.getElementById('shell-selector');
         if (!shellSelector) {
-            console.error("Shell selector dropdown ('shell-selector') not found in the DOM.");
+            console.error("Shell selector dropdown not found in the DOM.");
         } else {
-            // Load and populate shell options
-            this.loadAndPopulateShellSelector();
+            // Load shell options
+            this.loadAndPopulateShellSelector().catch(error => {
+                console.error('Error loading shell selector:', error);
+            });
+            
+            // Add delayed retry to ensure it works
+            setTimeout(async () => {
+                try {
+                    const currentOptions = document.getElementById('shell-selector')?.options.length || 0;
+                    if (currentOptions <= 1) { // Only default option
+                        await this.loadAndPopulateShellSelector();
+                    }
+                } catch (error) {
+                    console.error('Error in delayed shell selector check:', error);
+                }
+            }, 500);
 
             // Add event listener for changes
             shellSelector.addEventListener('change', async (event) => {
                 const newShell = event.target.value;
-                const displayValue = newShell || "<System Default>";
+                
                 try {
+                    // Get OS info for more specific messaging
+                    const osInfo = await window.go.main.App.GetOSInfo();
+                    const osName = this.getOSDisplayName(osInfo.os);
+                    
                     await window.go.main.App.SetDefaultShell(newShell);
-                    // Adjusted notification:
-                    showNotification(`Default shell preference updated to: ${displayValue}. Settings will be saved shortly.`, 'info'); // Changed to 'info' and updated text
-                    console.log("Default shell preference updated to:", newShell); // Log updated preference
+                    
+                    const displayValue = newShell ? this.formatShellName(newShell) : `System Default (${this.formatShellName(osInfo.defaultShell || 'auto')})`;
+                    showNotification(`Default shell for ${osName} updated to: ${displayValue}. New tabs will use this shell.`, 'info');
                 } catch (error) {
-                    console.error("Error updating default shell preference:", error); // Adjusted error log
-                    showNotification(`Failed to update default shell preference.`, 'error'); // Adjusted error notification
+                    console.error("Error updating default shell preference:", error);
+                    showNotification(`Failed to update default shell preference: ${error.message}`, 'error');
+                    
                     // Re-fetch to show actual stored state on error
-                    this.loadAndPopulateShellSelector(); 
+                    try {
+                        await this.loadAndPopulateShellSelector();
+                    } catch (reloadError) {
+                        console.error("Error reloading shell selector after failure:", reloadError);
+                    }
                 }
             });
         }
@@ -119,24 +205,32 @@ export class SettingsManager {
     async loadAndPopulateShellSelector() {
         const shellSelector = document.getElementById('shell-selector');
         if (!shellSelector) {
-            // This check is redundant if called only from initializeSettingsTabs after its own check,
-            // but good for a standalone callable method.
             console.error("Shell selector dropdown not found for loading.");
+            console.log("Current DOM state - available elements:", document.querySelectorAll('select, .shell-selector, #shell-selector').length);
             return;
         }
 
         try {
-            // Fetch available shells (formatted for UI) and current configured shell
+            // Fetch OS info, available shells, and current configured shell
+            const osInfo = await window.go.main.App.GetOSInfo();
             const availableShells = await window.go.main.App.GetAvailableShellsFormatted();
             const currentConfiguredShell = await window.go.main.App.GetCurrentDefaultShellSetting();
+            
+            // Update the shell selector label to show which platform we're configuring
+            const shellSelectorLabel = document.querySelector('label[for="shell-selector"]');
+            if (shellSelectorLabel) {
+                const osName = this.getOSDisplayName(osInfo.os);
+                shellSelectorLabel.textContent = `Default Shell (${osName}):`;
+            }
 
             // Clear existing options
             shellSelector.innerHTML = '';
 
-            // Add a "System Default" option
+            // Add a "System Default" option with platform info
             const defaultOption = document.createElement('option');
             defaultOption.value = ""; // Empty value represents system default
-            defaultOption.textContent = "<System Default>";
+            const systemDefault = osInfo.defaultShell || 'auto';
+            defaultOption.textContent = `<System Default: ${this.formatShellName(systemDefault)}>`;
             shellSelector.appendChild(defaultOption);
 
             // Populate with available shells using formatted names
@@ -147,27 +241,84 @@ export class SettingsManager {
                     option.textContent = shell.name;  // Formatted name for display
                     shellSelector.appendChild(option);
                 });
+            } else {
+                console.warn("No shells available or shells array is empty");
             }
 
             // Set selected value
             shellSelector.value = currentConfiguredShell;
-            
-            console.log("Shell selector populated. Current configured:", currentConfiguredShell, "Available:", availableShells);
 
         } catch (error) {
             console.error("Error loading shell information:", error);
-            showNotification("Error loading shell settings.", "error");
+            showNotification("Error loading shell settings: " + error.message, "error");
+            
             // Add a placeholder error option
             shellSelector.innerHTML = '<option value="">Error loading shells</option>';
         }
     }
 
-    closeSettingsPanel() {
-        const overlay = document.getElementById('settings-overlay');
-        const settingsBtn = document.getElementById('settings-btn');
+    getOSDisplayName(osCode) {
+        switch (osCode) {
+            case 'windows':
+                return 'Windows';
+            case 'darwin':
+                return 'macOS';
+            case 'linux':
+                return 'Linux';
+            default:
+                return osCode || 'Unknown';
+        }
+    }
+
+    formatShellName(shellName) {
+        if (!shellName) return 'Unknown';
         
-        overlay.classList.remove('active');
-        settingsBtn.classList.remove('active');
+        switch (shellName.toLowerCase()) {
+            case 'bash':
+                return 'Bash';
+            case 'zsh':
+                return 'Zsh';
+            case 'fish':
+                return 'Fish';
+            case 'powershell':
+            case 'powershell.exe':
+                return 'PowerShell';
+            case 'pwsh':
+            case 'pwsh.exe':
+                return 'PowerShell 7+';
+            case 'cmd':
+            case 'cmd.exe':
+                return 'Command Prompt';
+            default:
+                if (shellName.startsWith('wsl::')) {
+                    const distro = shellName.replace('wsl::', '');
+                    return `WSL: ${distro.charAt(0).toUpperCase() + distro.slice(1)}`;
+                }
+                return shellName;
+        }
+    }
+
+    closeSettingsPanel() {
+        try {
+            const overlay = document.getElementById('settings-overlay');
+            const settingsBtn = document.getElementById('settings-btn');
+            
+            if (overlay) {
+                overlay.classList.remove('active');
+                // Reset inline style to let CSS take over
+                overlay.style.display = '';
+            } else {
+                console.warn('Settings overlay not found when trying to close');
+            }
+            
+            if (settingsBtn) {
+                settingsBtn.classList.remove('active');
+            } else {
+                console.warn('Settings button not found when trying to deactivate');
+            }
+        } catch (error) {
+            console.error('Error closing settings panel:', error);
+        }
     }
 
     // Sync the dark mode toggle with current theme
@@ -177,4 +328,6 @@ export class SettingsManager {
             darkModeToggle.checked = isDarkTheme;
         }
     }
+
+
 } 

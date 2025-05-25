@@ -14,7 +14,9 @@ func (a *App) GetDefaultShell() string {
 		return getSystemDefaultShell()
 	}
 
-	configShell := a.config.DefaultShell
+	// Get platform-specific shell configuration
+	configShell := a.getPlatformDefaultShell()
+
 	if configShell == "" || configShell == "auto" {
 		return getSystemDefaultShell()
 	}
@@ -28,6 +30,21 @@ func (a *App) GetDefaultShell() string {
 	}
 
 	return configShell
+}
+
+// getPlatformDefaultShell returns the platform-specific default shell configuration
+func (a *App) getPlatformDefaultShell() string {
+	switch runtime.GOOS {
+	case "windows":
+		return a.config.DefaultShellWindows
+	case "darwin":
+		return a.config.DefaultShellDarwin
+	case "linux":
+		return a.config.DefaultShellLinux
+	default:
+		// For other Unix-like systems, use Linux configuration
+		return a.config.DefaultShellLinux
+	}
 }
 
 // getSystemDefaultShell returns the platform-appropriate default shell

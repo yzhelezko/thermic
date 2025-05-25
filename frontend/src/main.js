@@ -4,6 +4,7 @@ import { GetDefaultShell } from '../wailsjs/go/main/App';
 // Import all modules
 import { DOMManager } from './modules/dom.js';
 import { TerminalManager } from './modules/terminal.js';
+import { TabsManager } from './modules/tabs.js';
 import { ContextMenuManager } from './modules/context-menu.js';
 import { WindowControlsManager } from './modules/window-controls.js';
 import { UIManager } from './modules/ui.js';
@@ -17,11 +18,12 @@ class ThermicTerminal {
         // Initialize all managers
         this.domManager = new DOMManager();
         this.terminalManager = new TerminalManager();
+        this.tabsManager = new TabsManager(this.terminalManager);
         this.contextMenuManager = new ContextMenuManager(this.terminalManager);
         this.windowControlsManager = new WindowControlsManager();
-        this.uiManager = new UIManager(this.terminalManager);
-        this.settingsManager = new SettingsManager(this.terminalManager);
-        this.sidebarManager = new SidebarManager(this.terminalManager);
+        this.uiManager = new UIManager();
+        this.settingsManager = new SettingsManager();
+        this.sidebarManager = new SidebarManager();
         this.statusManager = new StatusManager();
         
         this.init();
@@ -30,44 +32,93 @@ class ThermicTerminal {
 
     async init() {
         try {
+            console.log('Starting Thermic initialization...');
+            
             // First, generate all dynamic HTML content
+            console.log('Initializing DOM...');
             this.domManager.initializeDOM();
 
             // Initialize all components
+            console.log('Initializing components...');
             await this.initializeComponents();
             
             // Set up inter-module communication
+            console.log('Setting up module communication...');
             this.setupModuleCommunication();
 
-            // Load available shells and start default shell
-            await this.loadAndStartDefaultShell();
+            // Load tabs and initialize tab system
+            try {
+                console.log('Attempting to load tabs system...');
+                await this.tabsManager.loadTabs();
+                console.log('Tabs system loaded successfully');
+            } catch (error) {
+                console.error('Failed to load tabs system:', error);
+                console.error('Stack trace:', error.stack);
+                updateStatus('Tabs system failed to initialize - using fallback terminal');
+                
+                // Initialize a fallback terminal if tabs fail
+                try {
+                    console.log('Initializing fallback terminal...');
+                    await this.initializeFallbackTerminal();
+                } catch (fallbackError) {
+                    console.error('Fallback terminal also failed:', fallbackError);
+                    updateStatus('Critical error: Unable to initialize terminal');
+                }
+            }
 
             // Set platform-specific styling
+            console.log('Setting platform-specific styling...');
             this.setPlatformStyling();
+            
+            console.log('Thermic initialization completed successfully!');
+            updateStatus('Application ready');
 
         } catch (error) {
-            console.error('Failed to initialize terminal:', error);
-            updateStatus('Initialization failed');
+            console.error('Failed to initialize Thermic application:', error);
+            console.error('Stack trace:', error.stack);
+            updateStatus('Initialization failed: ' + error.message);
         }
     }
 
     async initializeComponents() {
-        // Initialize status first to show platform info
-        await this.statusManager.initStatus();
+        try {
+            // Initialize status first to show platform info
+            console.log('Initializing status manager...');
+            await this.statusManager.initStatus();
 
-        // Initialize UI components
-        this.uiManager.initUI();
-        this.settingsManager.initSettings();
-        this.sidebarManager.initSidebar();
+            // Initialize UI components
+            console.log('Initializing UI manager...');
+            this.uiManager.initUI();
+            
+            console.log('Initializing settings manager...');
+            this.settingsManager.initSettings();
+            
+            console.log('Initializing sidebar manager...');
+            this.sidebarManager.initSidebar();
 
-        // Initialize terminal
-        this.terminalManager.initTerminal();
+            // Initialize terminal
+            console.log('Initializing terminal manager...');
+            this.terminalManager.initTerminal();
 
-        // Initialize context menu
-        this.contextMenuManager.init();
+            // Initialize tabs manager AFTER DOM is ready
+            console.log('Initializing tabs manager...');
+            this.tabsManager.init();
 
-        // Initialize window controls (Wails handles dragging natively via CSS)
-        this.windowControlsManager.init();
+            // Initialize context menu
+            console.log('Initializing context menu manager...');
+            this.contextMenuManager.init();
+
+            // Initialize window controls (Wails handles dragging natively via CSS)
+            console.log('Initializing window controls manager...');
+            this.windowControlsManager.init();
+            
+            console.log('Component initialization completed successfully');
+        } catch (error) {
+            console.error('Error during component initialization:', error);
+            console.error('Stack trace:', error.stack);
+            updateStatus('Component initialization failed: ' + error.message);
+            throw error;
+        }
 
         // Set up terminal resize and cleanup handlers
         this.terminalManager.setupResizeObserver();
@@ -134,73 +185,108 @@ class ThermicTerminal {
 
         // Set up shell selector event listener
         this.setupShellSelector();
+
+        // Set up tab keyboard shortcuts
+        this.setupTabShortcuts();
     }
 
     setupShellSelector() {
+        // Shell selection is now handled in the settings panel only
+        // when tabs system is active. This prevents accidentally changing
+        // shells for existing tabs when the default shell preference is changed.
+        
         const shellSelector = document.getElementById('shell-selector');
         
-        let switchTimeout = null;
-        shellSelector.addEventListener('change', async (event) => {
-            const selectedShell = event.target.value;
-            if (selectedShell) {
-                // Clear any pending switch
-                if (switchTimeout) {
-                    clearTimeout(switchTimeout);
-                }
-                
-                // Disable the selector during switch
-                shellSelector.disabled = true;
-                updateStatus('Switching shell...');
-                
-                try {
-                    await this.terminalManager.startShell(selectedShell);
-                } catch (error) {
-                    console.error('Shell switch failed:', error);
-                    updateStatus('Shell switch failed');
-                    
-                    // Reset selector to previous value
-                    const currentShell = this.terminalManager.currentShell;
-                    if (currentShell) {
-                        for (let option of shellSelector.options) {
-                            if (option.value === currentShell) {
-                                shellSelector.value = currentShell;
-                                break;
-                            }
-                        }
-                    } else {
-                        shellSelector.value = '';
+        if (!shellSelector) {
+            return; // Expected since shell selector is in settings panel
+        }
+        
+        // Check if this is the settings panel shell selector
+        const isInSettingsPanel = shellSelector.closest('.settings-panel') !== null;
+        
+        if (isInSettingsPanel) {
+            // Don't disable this one - it's the one we want to keep working
+            return;
+        }
+        
+        // Only disable shell selectors that are NOT in the settings panel
+        shellSelector.style.display = 'none';
+        shellSelector.disabled = true;
+    }
+
+    setupTabShortcuts() {
+        // Listen for tab-related keyboard events
+        document.addEventListener('terminal:new-tab', () => {
+            this.tabsManager.createNewTab();
+        });
+
+        document.addEventListener('terminal:close-tab', (e) => {
+            if (e.detail && e.detail.sessionId) {
+                // Find tab by session ID
+                for (const [tabId, tab] of this.tabsManager.tabs) {
+                    if (tab.sessionId === e.detail.sessionId) {
+                        this.tabsManager.closeTab(tabId);
+                        break;
                     }
-                } finally {
-                    shellSelector.disabled = false;
                 }
+            }
+        });
+
+        // Global keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            // Ctrl+Shift+T - New tab
+            if (e.ctrlKey && e.shiftKey && e.code === 'KeyT') {
+                e.preventDefault();
+                this.tabsManager.createNewTab();
+            }
+            // Ctrl+Shift+N - New SSH tab
+            else if (e.ctrlKey && e.shiftKey && e.code === 'KeyN') {
+                e.preventDefault();
+                this.tabsManager.showSSHDialog();
             }
         });
     }
 
-    async loadAndStartDefaultShell() {
+    async initializeFallbackTerminal() {
+        console.log('Setting up fallback terminal without tabs system');
+        
+        // Load available shells for the selector
         try {
-            // Load available shells
-            const { shells, defaultShell } = await this.terminalManager.loadShells();
-
-            // Auto-start default shell
-            if (defaultShell) {
-                const shellSelector = document.getElementById('shell-selector');
-                shellSelector.value = defaultShell;
-                
-                console.log('Starting default shell:', defaultShell);
-                await this.terminalManager.startShell(defaultShell);
-            } else {
-                console.error('No default shell detected');
-                updateStatus('No default shell found - Please select a shell manually');
-            }
+            await this.terminalManager.loadShells();
         } catch (error) {
-            console.error('Failed to load shells or start default shell:', error);
-            updateStatus('Failed to initialize shell system');
+            console.warn('Failed to load shells for fallback terminal:', error);
+        }
+
+        // Start with default shell
+        try {
+            const defaultShell = await this.terminalManager.getDefaultShell();
+            console.log('Starting fallback terminal with default shell:', defaultShell);
+            await this.terminalManager.startShell(defaultShell);
+            updateStatus('Fallback terminal ready');
+        } catch (error) {
+            console.error('Failed to start fallback terminal:', error);
+            updateStatus('Terminal initialization failed');
+            throw error;
         }
     }
 }
 
-// Initialize the terminal when the page loads
+// Initialize the terminal when the page loads - v2.0
 document.addEventListener('DOMContentLoaded', () => {
-    new ThermicTerminal();
+    console.log('DOM loaded, initializing Thermic Terminal...');
+    try {
+        const app = new ThermicTerminal();
+        // Store reference globally for debugging
+        window.thermicApp = app;
+    } catch (error) {
+        console.error('Critical error during application startup:', error);
+        console.error('Stack trace:', error.stack);
+        
+        // Show error in UI if possible
+        const statusElement = document.getElementById('status-info');
+        if (statusElement) {
+            statusElement.textContent = 'Startup failed: ' + error.message;
+            statusElement.style.color = 'red';
+        }
+    }
 });

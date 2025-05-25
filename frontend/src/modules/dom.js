@@ -19,7 +19,7 @@ export class DOMManager {
 
         // Populate all the dynamic HTML content
         this.renderHeader();
-        this.renderTabs();
+        this.renderTabs(); // Need this for basic tabs structure
         this.renderSidebar();
         this.renderStatusBar();
         this.renderSettingsPanel();
