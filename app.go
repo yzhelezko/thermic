@@ -3,6 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -32,6 +36,12 @@ func (a *App) startup(ctx context.Context) {
 	} else {
 		// This case should ideally not be reached if NewApp initializes config correctly
 		fmt.Println("Config is nil, cannot set initial window size.")
+	}
+
+	// Initialize profile management system
+	if err := a.InitializeProfiles(); err != nil {
+		fmt.Printf("Warning: Failed to initialize profiles: %v\n", err)
+		// Continue without profiles - they're not critical for basic functionality
 	}
 
 	// Listen for frontend resize events
@@ -85,6 +95,9 @@ func (a *App) shutdown(ctx context.Context) {
 
 	// Force save any pending config changes
 	a.saveConfigIfDirty()
+
+	// Stop profile watcher
+	a.StopProfileWatcher()
 
 	// Close all terminal sessions
 	a.mutex.Lock()
@@ -333,29 +346,28 @@ func (a *App) StartTabShell(tabId string) error {
 	return a.StartShell(tab.Shell, tab.SessionID)
 }
 
-// startSSHSession starts an SSH session for a tab
+// startSSHSession starts an SSH session for a tab using native SSH implementation
 func (a *App) startSSHSession(tab *Tab) error {
-	// For now, we'll use SSH through the local shell
-	// In a full implementation, you'd want to use an SSH library like golang.org/x/crypto/ssh
-
-	sshCmd := fmt.Sprintf("ssh %s@%s", tab.SSHConfig.Username, tab.SSHConfig.Host)
-	if tab.SSHConfig.Port != 22 {
-		sshCmd = fmt.Sprintf("ssh -p %d %s@%s", tab.SSHConfig.Port, tab.SSHConfig.Username, tab.SSHConfig.Host)
+	// Create native SSH session
+	sshSession, err := a.CreateSSHSession(tab.SessionID, tab.SSHConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create SSH session: %w", err)
 	}
 
-	// Use the system shell to run SSH command
-	systemShell := a.GetDefaultShell()
+	// Store SSH session
+	a.mutex.Lock()
+	a.sshSessions[tab.SessionID] = sshSession
+	a.mutex.Unlock()
 
-	// Start the shell and then execute SSH command
-	if err := a.StartShell(systemShell, tab.SessionID); err != nil {
-		return err
+	// Start SSH shell
+	if err := a.StartSSHShell(sshSession); err != nil {
+		// Clean up on failure
+		a.mutex.Lock()
+		delete(a.sshSessions, tab.SessionID)
+		a.mutex.Unlock()
+		a.CloseSSHSession(sshSession)
+		return fmt.Errorf("failed to start SSH shell: %w", err)
 	}
-
-	// Wait a moment for shell to initialize, then send SSH command
-	go func() {
-		time.Sleep(500 * time.Millisecond)
-		a.WriteToShell(tab.SessionID, sshCmd+"\n")
-	}()
 
 	return nil
 }
@@ -377,4 +389,518 @@ func (a *App) RenameTab(tabId, newTitle string) error {
 // Greet returns a greeting for the given name
 func (a *App) Greet(name string) string {
 	return fmt.Sprintf("Hello %s, It's show time!", name)
+}
+
+// Profile Management API Methods
+
+// GetProfileTreeAPI returns the profile tree structure for the frontend
+func (a *App) GetProfileTreeAPI() []*ProfileTreeNode {
+	a.mutex.RLock()
+	defer a.mutex.RUnlock()
+
+	// Build tree structure
+	tree := make(map[string]*ProfileTreeNode)
+	var rootNodes []*ProfileTreeNode
+
+	// Add folders first
+	for _, folder := range a.profileFolders {
+		node := &ProfileTreeNode{
+			ID:       folder.ID,
+			Name:     folder.Name,
+			Icon:     folder.Icon,
+			Type:     "folder",
+			Path:     a.buildFolderPath(folder.ID),
+			Children: make([]*ProfileTreeNode, 0),
+			Expanded: folder.Expanded,
+		}
+		tree[folder.ID] = node
+	}
+
+	// Add profiles
+	for _, profile := range a.profiles {
+		node := &ProfileTreeNode{
+			ID:      profile.ID,
+			Name:    profile.Name,
+			Icon:    profile.Icon,
+			Type:    "profile",
+			Path:    profile.FolderPath,
+			Profile: profile,
+		}
+
+		// Find parent folder
+		if profile.FolderPath == "" {
+			// Root level
+			rootNodes = append(rootNodes, node)
+		} else {
+			// Find parent folder by path
+			parentID := a.findFolderByPath(profile.FolderPath)
+			if parentID != "" && tree[parentID] != nil {
+				tree[parentID].Children = append(tree[parentID].Children, node)
+			} else {
+				// Parent not found, add to root
+				rootNodes = append(rootNodes, node)
+			}
+		}
+	}
+
+	// Add folders to their parents or root
+	for folderID, folder := range a.profileFolders {
+		node := tree[folderID]
+		if folder.ParentPath == "" {
+			// Root level folder
+			rootNodes = append(rootNodes, node)
+		} else {
+			// Find parent folder
+			parentID := a.findFolderByPath(folder.ParentPath)
+			if parentID != "" && tree[parentID] != nil {
+				tree[parentID].Children = append(tree[parentID].Children, node)
+			} else {
+				// Parent not found, add to root
+				rootNodes = append(rootNodes, node)
+			}
+		}
+	}
+
+	// Sort nodes
+	a.sortTreeNodes(rootNodes)
+	for _, node := range tree {
+		a.sortTreeNodes(node.Children)
+	}
+
+	return rootNodes
+}
+
+// CreateProfileAPI creates a new profile
+func (a *App) CreateProfileAPI(name, profileType, shell, icon, folderPath string) (*Profile, error) {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+
+	id := generateID()
+	now := time.Now()
+
+	profile := &Profile{
+		ID:           id,
+		Name:         name,
+		Icon:         icon,
+		Type:         profileType,
+		Shell:        shell,
+		FolderPath:   folderPath,
+		Environment:  make(map[string]string),
+		Created:      now,
+		LastModified: now,
+	}
+
+	if err := a.SaveProfile(profile); err != nil {
+		return nil, err
+	}
+
+	return profile, nil
+}
+
+// CreateProfileFolderAPI creates a new profile folder
+func (a *App) CreateProfileFolderAPI(name, icon, parentPath string) (*ProfileFolder, error) {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+
+	id := generateID()
+	now := time.Now()
+
+	folder := &ProfileFolder{
+		ID:           id,
+		Name:         name,
+		Icon:         icon,
+		ParentPath:   parentPath,
+		Expanded:     true,
+		Created:      now,
+		LastModified: now,
+	}
+
+	if err := a.SaveProfileFolder(folder); err != nil {
+		return nil, err
+	}
+
+	return folder, nil
+}
+
+// UpdateProfile updates an existing profile
+func (a *App) UpdateProfile(profile *Profile) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+	return a.SaveProfile(profile)
+}
+
+// UpdateProfileFolder updates an existing profile folder
+func (a *App) UpdateProfileFolder(folder *ProfileFolder) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+	return a.SaveProfileFolder(folder)
+}
+
+// DeleteProfileAPI deletes a profile
+func (a *App) DeleteProfileAPI(id string) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+
+	profile, exists := a.profiles[id]
+	if !exists {
+		return fmt.Errorf("profile not found: %s", id)
+	}
+
+	profilesDir, err := a.GetProfilesDirectory()
+	if err != nil {
+		return err
+	}
+
+	// Find and delete the file
+	filename := fmt.Sprintf("%s-%s.yaml", profile.Name, id)
+	filename = strings.ReplaceAll(filename, " ", "_")
+	filename = strings.ReplaceAll(filename, "/", "_")
+	filename = strings.ReplaceAll(filename, "\\", "_")
+
+	filePath := filepath.Join(profilesDir, filename)
+	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to delete profile file: %w", err)
+	}
+
+	// Remove from memory
+	delete(a.profiles, id)
+
+	return nil
+}
+
+// DeleteProfileFolderAPI deletes a profile folder
+func (a *App) DeleteProfileFolderAPI(id string) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+
+	folder, exists := a.profileFolders[id]
+	if !exists {
+		return fmt.Errorf("profile folder not found: %s", id)
+	}
+
+	profilesDir, err := a.GetProfilesDirectory()
+	if err != nil {
+		return err
+	}
+
+	// Find and delete the file
+	filename := fmt.Sprintf("folder-%s-%s.yaml", folder.Name, id)
+	filename = strings.ReplaceAll(filename, " ", "_")
+	filename = strings.ReplaceAll(filename, "/", "_")
+	filename = strings.ReplaceAll(filename, "\\", "_")
+
+	filePath := filepath.Join(profilesDir, filename)
+	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to delete profile folder file: %w", err)
+	}
+
+	// Move any profiles in this folder to root
+	folderPath := a.buildFolderPath(id)
+	for _, profile := range a.profiles {
+		if strings.HasPrefix(profile.FolderPath, folderPath) {
+			// Remove this folder from the path
+			newPath := strings.TrimPrefix(profile.FolderPath, folderPath)
+			newPath = strings.TrimPrefix(newPath, "/")
+			profile.FolderPath = newPath
+			a.SaveProfile(profile)
+		}
+	}
+
+	// Remove from memory
+	delete(a.profileFolders, id)
+
+	return nil
+}
+
+// GetProfile returns a specific profile by ID
+func (a *App) GetProfile(id string) (*Profile, error) {
+	a.mutex.RLock()
+	defer a.mutex.RUnlock()
+
+	profile, exists := a.profiles[id]
+	if !exists {
+		return nil, fmt.Errorf("profile not found: %s", id)
+	}
+	return profile, nil
+}
+
+// GetProfileFolder returns a specific profile folder by ID
+func (a *App) GetProfileFolder(id string) (*ProfileFolder, error) {
+	a.mutex.RLock()
+	defer a.mutex.RUnlock()
+
+	folder, exists := a.profileFolders[id]
+	if !exists {
+		return nil, fmt.Errorf("profile folder not found: %s", id)
+	}
+	return folder, nil
+}
+
+// MoveProfile moves a profile to a different folder
+func (a *App) MoveProfile(profileID, newFolderPath string) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+
+	profile, exists := a.profiles[profileID]
+	if !exists {
+		return fmt.Errorf("profile not found: %s", profileID)
+	}
+
+	profile.FolderPath = newFolderPath
+	return a.SaveProfile(profile)
+}
+
+// DuplicateProfile creates a copy of an existing profile
+func (a *App) DuplicateProfile(profileID string) (*Profile, error) {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+
+	original, exists := a.profiles[profileID]
+	if !exists {
+		return nil, fmt.Errorf("profile not found: %s", profileID)
+	}
+
+	// Create a copy with new ID and name
+	duplicate := *original
+	duplicate.ID = generateID()
+	duplicate.Name = original.Name + " (Copy)"
+	duplicate.Created = time.Now()
+	duplicate.LastModified = time.Now()
+
+	if err := a.SaveProfile(&duplicate); err != nil {
+		return nil, err
+	}
+
+	return &duplicate, nil
+}
+
+// DeleteProfileFolderWithContentsAPI deletes a profile folder and all profiles inside it
+func (a *App) DeleteProfileFolderWithContentsAPI(id string) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+
+	folder, exists := a.profileFolders[id]
+	if !exists {
+		return fmt.Errorf("profile folder not found: %s", id)
+	}
+
+	profilesDir, err := a.GetProfilesDirectory()
+	if err != nil {
+		return err
+	}
+
+	// Delete all profiles in this folder first
+	folderPath := a.buildFolderPath(id)
+	profilesToDelete := make([]string, 0)
+
+	// Collect profiles to delete
+	for profileID, profile := range a.profiles {
+		if strings.HasPrefix(profile.FolderPath, folderPath) {
+			profilesToDelete = append(profilesToDelete, profileID)
+		}
+	}
+
+	// Delete each profile file and remove from memory
+	for _, profileID := range profilesToDelete {
+		profile := a.profiles[profileID]
+
+		// Delete profile file
+		filename := fmt.Sprintf("%s-%s.yaml", profile.Name, profileID)
+		filename = strings.ReplaceAll(filename, " ", "_")
+		filename = strings.ReplaceAll(filename, "/", "_")
+		filename = strings.ReplaceAll(filename, "\\", "_")
+
+		filePath := filepath.Join(profilesDir, filename)
+		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+			fmt.Printf("Warning: Failed to delete profile file %s: %v\n", filePath, err)
+		}
+
+		// Remove from memory
+		delete(a.profiles, profileID)
+	}
+
+	// Delete the folder file
+	folderFilename := fmt.Sprintf("folder-%s-%s.yaml", folder.Name, id)
+	folderFilename = strings.ReplaceAll(folderFilename, " ", "_")
+	folderFilename = strings.ReplaceAll(folderFilename, "/", "_")
+	folderFilename = strings.ReplaceAll(folderFilename, "\\", "_")
+
+	folderFilePath := filepath.Join(profilesDir, folderFilename)
+	if err := os.Remove(folderFilePath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to delete profile folder file: %w", err)
+	}
+
+	// Remove folder from memory
+	delete(a.profileFolders, id)
+
+	return nil
+}
+
+// CreateTabFromProfile creates a new tab using a profile
+func (a *App) CreateTabFromProfile(profileID string) (*Tab, error) {
+	a.mutex.RLock()
+	profile, exists := a.profiles[profileID]
+	a.mutex.RUnlock()
+
+	if !exists {
+		return nil, fmt.Errorf("profile not found: %s", profileID)
+	}
+
+	// Update usage tracking
+	go a.updateProfileUsage(profileID)
+
+	// Create tab based on profile type
+	switch profile.Type {
+	case "ssh":
+		return a.CreateTab("", profile.SSHConfig)
+	default:
+		return a.CreateTab(profile.Shell, nil)
+	}
+}
+
+// Virtual Folder APIs
+func (a *App) GetVirtualFoldersAPI() []*VirtualFolder {
+	a.mutex.RLock()
+	defer a.mutex.RUnlock()
+	return a.virtualFolders
+}
+
+func (a *App) GetVirtualFolderProfilesAPI(folderID string) []*Profile {
+	a.mutex.RLock()
+	defer a.mutex.RUnlock()
+
+	for _, vf := range a.virtualFolders {
+		if vf.ID == folderID {
+			return a.getVirtualFolderProfiles(vf)
+		}
+	}
+	return []*Profile{}
+}
+
+// Enhanced Profile APIs
+func (a *App) ToggleFavoriteAPI(profileID string) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+
+	profile, exists := a.profiles[profileID]
+	if !exists {
+		return fmt.Errorf("profile not found: %s", profileID)
+	}
+
+	profile.IsFavorite = !profile.IsFavorite
+	err := a.SaveProfile(profile)
+	if err == nil {
+		go a.saveMetrics()
+	}
+	return err
+}
+
+func (a *App) UpdateProfileTagsAPI(profileID string, tags []string) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+
+	profile, exists := a.profiles[profileID]
+	if !exists {
+		return fmt.Errorf("profile not found: %s", profileID)
+	}
+
+	profile.Tags = tags
+	err := a.SaveProfile(profile)
+	if err == nil {
+		go a.saveMetrics()
+	}
+	return err
+}
+
+func (a *App) SearchProfilesAPI(query string, tags []string) []*Profile {
+	a.mutex.RLock()
+	defer a.mutex.RUnlock()
+
+	var results []*Profile
+	query = strings.ToLower(query)
+
+	for _, profile := range a.profiles {
+		// Text search
+		if query != "" {
+			nameMatch := strings.Contains(strings.ToLower(profile.Name), query)
+			descMatch := strings.Contains(strings.ToLower(profile.Description), query)
+			if !nameMatch && !descMatch {
+				continue
+			}
+		}
+
+		// Tag filtering
+		if len(tags) > 0 {
+			hasAllTags := true
+			for _, requiredTag := range tags {
+				found := false
+				for _, profileTag := range profile.Tags {
+					if strings.EqualFold(profileTag, requiredTag) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					hasAllTags = false
+					break
+				}
+			}
+			if !hasAllTags {
+				continue
+			}
+		}
+
+		results = append(results, profile)
+	}
+
+	// Sort by relevance (favorites first, then by usage)
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].IsFavorite != results[j].IsFavorite {
+			return results[i].IsFavorite
+		}
+		return results[i].UsageCount > results[j].UsageCount
+	})
+
+	return results
+}
+
+func (a *App) GetMetricsAPI() *ProfileMetrics {
+	a.mutex.RLock()
+	defer a.mutex.RUnlock()
+	return a.metrics
+}
+
+func (a *App) GetPopularTagsAPI() []string {
+	a.mutex.RLock()
+	defer a.mutex.RUnlock()
+
+	if a.metrics == nil || len(a.metrics.TagUsage) == 0 {
+		return []string{}
+	}
+
+	// Sort tags by usage
+	type tagCount struct {
+		tag   string
+		count int
+	}
+
+	var tags []tagCount
+	for tag, count := range a.metrics.TagUsage {
+		tags = append(tags, tagCount{tag, count})
+	}
+
+	sort.Slice(tags, func(i, j int) bool {
+		return tags[i].count > tags[j].count
+	})
+
+	// Return top 20 tags
+	var result []string
+	for i, tc := range tags {
+		if i >= 20 {
+			break
+		}
+		result = append(result, tc.tag)
+	}
+
+	return result
 }

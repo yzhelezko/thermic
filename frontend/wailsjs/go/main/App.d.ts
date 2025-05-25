@@ -4,13 +4,41 @@ import {main} from '../models';
 
 export function CheckWSLAvailable():Promise<boolean>;
 
+export function CloseSSHSession(arg1:main.SSHSession):Promise<void>;
+
 export function CloseShell(arg1:string):Promise<void>;
 
 export function CloseTab(arg1:string):Promise<void>;
 
 export function CloseWindow():Promise<void>;
 
+export function CreateDefaultProfiles():Promise<void>;
+
+export function CreateProfile(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<main.Profile>;
+
+export function CreateProfileAPI(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<main.Profile>;
+
+export function CreateProfileFolder(arg1:string,arg2:string,arg3:string):Promise<main.ProfileFolder>;
+
+export function CreateProfileFolderAPI(arg1:string,arg2:string,arg3:string):Promise<main.ProfileFolder>;
+
+export function CreateSSHSession(arg1:string,arg2:main.SSHConfig):Promise<main.SSHSession>;
+
 export function CreateTab(arg1:string,arg2:main.SSHConfig):Promise<main.Tab>;
+
+export function CreateTabFromProfile(arg1:string):Promise<main.Tab>;
+
+export function DeleteProfile(arg1:string):Promise<void>;
+
+export function DeleteProfileAPI(arg1:string):Promise<void>;
+
+export function DeleteProfileFolder(arg1:string):Promise<void>;
+
+export function DeleteProfileFolderAPI(arg1:string):Promise<void>;
+
+export function DeleteProfileFolderWithContentsAPI(arg1:string):Promise<void>;
+
+export function DuplicateProfile(arg1:string):Promise<main.Profile>;
 
 export function GetActiveTab():Promise<main.Tab>;
 
@@ -22,13 +50,31 @@ export function GetCurrentDefaultShellSetting():Promise<string>;
 
 export function GetDefaultShell():Promise<string>;
 
+export function GetMetricsAPI():Promise<main.ProfileMetrics>;
+
 export function GetOSInfo():Promise<Record<string, any>>;
 
 export function GetPlatformInfo():Promise<Record<string, any>>;
 
+export function GetPopularTagsAPI():Promise<Array<string>>;
+
+export function GetProfile(arg1:string):Promise<main.Profile>;
+
+export function GetProfileFolder(arg1:string):Promise<main.ProfileFolder>;
+
+export function GetProfileTree():Promise<Array<main.ProfileTreeNode>>;
+
+export function GetProfileTreeAPI():Promise<Array<main.ProfileTreeNode>>;
+
+export function GetProfilesDirectory():Promise<string>;
+
 export function GetShellsForUI():Promise<Array<Record<string, any>>>;
 
 export function GetTabs():Promise<Array<main.Tab>>;
+
+export function GetVirtualFolderProfilesAPI(arg1:string):Promise<Array<main.Profile>>;
+
+export function GetVirtualFoldersAPI():Promise<Array<main.VirtualFolder>>;
 
 export function GetWSLDistributions():Promise<Array<main.WSLDistribution>>;
 
@@ -38,17 +84,35 @@ export function GetWindowMaximizedState():Promise<boolean>;
 
 export function Greet(arg1:string):Promise<string>;
 
+export function InitializeProfiles():Promise<void>;
+
 export function IsSessionClosed(arg1:string):Promise<boolean>;
 
 export function IsWindowMaximized():Promise<boolean>;
+
+export function LoadProfile(arg1:string):Promise<main.Profile>;
+
+export function LoadProfileFolder(arg1:string):Promise<main.ProfileFolder>;
+
+export function LoadProfiles():Promise<void>;
 
 export function MaximizeWindow():Promise<void>;
 
 export function MinimizeWindow():Promise<void>;
 
+export function MoveProfile(arg1:string,arg2:string):Promise<void>;
+
 export function RenameTab(arg1:string,arg2:string):Promise<void>;
 
+export function ResizeSSHSession(arg1:main.SSHSession,arg2:number,arg3:number):Promise<void>;
+
 export function ResizeShell(arg1:string,arg2:number,arg3:number):Promise<void>;
+
+export function SaveProfile(arg1:main.Profile):Promise<void>;
+
+export function SaveProfileFolder(arg1:main.ProfileFolder):Promise<void>;
+
+export function SearchProfilesAPI(arg1:string,arg2:Array<string>):Promise<Array<main.Profile>>;
 
 export function SetActiveTab(arg1:string):Promise<void>;
 
@@ -56,10 +120,26 @@ export function SetDefaultShell(arg1:string):Promise<void>;
 
 export function ShowMessageDialog(arg1:string,arg2:string):Promise<void>;
 
+export function StartProfileWatcher():Promise<void>;
+
+export function StartSSHShell(arg1:main.SSHSession):Promise<void>;
+
 export function StartShell(arg1:string,arg2:string):Promise<void>;
 
 export function StartTabShell(arg1:string):Promise<void>;
 
+export function StopProfileWatcher():Promise<void>;
+
+export function ToggleFavoriteAPI(arg1:string):Promise<void>;
+
+export function UpdateProfile(arg1:main.Profile):Promise<void>;
+
+export function UpdateProfileFolder(arg1:main.ProfileFolder):Promise<void>;
+
+export function UpdateProfileTagsAPI(arg1:string,arg2:Array<string>):Promise<void>;
+
 export function WaitForSessionClose(arg1:string):Promise<void>;
+
+export function WriteToSSHSession(arg1:main.SSHSession,arg2:string):Promise<void>;
 
 export function WriteToShell(arg1:string,arg2:string):Promise<void>;

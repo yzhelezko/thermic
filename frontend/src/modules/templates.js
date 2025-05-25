@@ -36,7 +36,7 @@ export function createHeaderTemplate() {
         <div class="app-header">
             <div class="header-left">
                 <button class="toolbar-btn active" id="btn-explorer">
-                    <span>📁</span> Explorer
+                    <span>📁</span> Profiles
                 </button>
                 <button class="toolbar-btn" id="btn-filemanager">
                     <span>📂</span> Files
@@ -98,60 +98,13 @@ export function createTabsTemplate() {
 export function createSidebarTemplate() {
     return `
         <div class="sidebar-header">
-            <span>Terminal Database</span>
+            <span>Profiles</span>
         </div>
-        <div class="tree-view">
-            <div class="tree-group">
-                <div class="tree-group-header">
-                    <span class="tree-group-icon">▼</span>
-                    <span>Local Shells</span>
-                </div>
-                <div class="tree-group-content">
-                    <div class="tree-item tree-item-shell" data-shell="powershell.exe">
-                        <span class="tree-item-icon">💻</span>
-                        <span class="tree-item-text">PowerShell</span>
-                    </div>
-                    <div class="tree-item tree-item-shell" data-shell="pwsh.exe">
-                        <span class="tree-item-icon">🔷</span>
-                        <span class="tree-item-text">PowerShell Core</span>
-                    </div>
-                    <div class="tree-item tree-item-shell" data-shell="cmd.exe">
-                        <span class="tree-item-icon">⚫</span>
-                        <span class="tree-item-text">Command Prompt</span>
-                    </div>
-                </div>
-            </div>
-            <div class="tree-group">
-                <div class="tree-group-header">
-                    <span class="tree-group-icon">▼</span>
-                    <span>WSL Distributions</span>
-                </div>
-                <div class="tree-group-content">
-                    <div class="tree-item tree-item-shell" data-shell="wsl::Ubuntu">
-                        <span class="tree-item-icon">🐧</span>
-                        <span class="tree-item-text">Ubuntu</span>
-                    </div>
-                    <div class="tree-item tree-item-shell" data-shell="wsl::Debian">
-                        <span class="tree-item-icon">🌀</span>
-                        <span class="tree-item-text">Debian</span>
-                    </div>
-                </div>
-            </div>
-            <div class="tree-group">
-                <div class="tree-group-header">
-                    <span class="tree-group-icon">▼</span>
-                    <span>Saved Sessions</span>
-                </div>
-                <div class="tree-group-content">
-                    <div class="tree-item tree-item-folder">
-                        <span class="tree-item-icon">📁</span>
-                        <span class="tree-item-text">Development</span>
-                    </div>
-                    <div class="tree-item tree-item-folder">
-                        <span class="tree-item-icon">📁</span>
-                        <span class="tree-item-text">Servers</span>
-                    </div>
-                </div>
+        <div class="sidebar-content">
+            <!-- Profile tree will be dynamically populated by SidebarManager -->
+            <div class="loading-placeholder" style="padding: 20px; text-align: center; color: var(--text-tertiary);">
+                <div>📁</div>
+                <div style="margin-top: 8px;">Loading profiles...</div>
             </div>
         </div>
     `;
@@ -314,6 +267,20 @@ export function createSidebarContextMenuTemplate() {
                 <span>Connect</span>
             </div>
             <div class="context-menu-separator"></div>
+            <div class="context-menu-item context-menu-create-section" data-action="create-profile">
+                <span class="context-menu-item-icon">➕</span>
+                <span>Create Profile</span>
+            </div>
+            <div class="context-menu-item context-menu-create-section" data-action="create-folder">
+                <span class="context-menu-item-icon">📁</span>
+                <span>Create Folder</span>
+            </div>
+            <div class="context-menu-separator context-menu-create-separator"></div>
+            <div class="context-menu-item" data-action="search">
+                <span class="context-menu-item-icon">🔍</span>
+                <span>Search Profiles</span>
+            </div>
+            <div class="context-menu-separator"></div>
             <div class="context-menu-item" data-action="edit">
                 <span class="context-menu-item-icon">✏️</span>
                 <span>Edit</span>
@@ -338,4 +305,122 @@ export function createSidebarContextMenuTemplate() {
             </div>
         </div>
     `;
+}
+
+// Profile Panel Templates
+export function createProfilePanelTemplate() {
+    return `
+        <div class="profile-panel-overlay" id="profile-panel-overlay">
+            <div class="profile-panel">
+                <div class="profile-panel-header">
+                    <h3 id="profile-panel-title">Create Profile</h3>
+                    <button class="profile-panel-close" id="profile-panel-close">×</button>
+                </div>
+                <div class="profile-panel-content">
+                    <div class="profile-form" id="profile-form">
+                        <!-- Form content will be dynamically generated -->
+                    </div>
+                </div>
+                <div class="profile-panel-footer">
+                    <button class="btn btn-secondary" id="profile-cancel-btn">Cancel</button>
+                    <button class="btn btn-primary" id="profile-save-btn">Save</button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+export function createProfileFormTemplate(mode, type, data = null) {
+    const isEdit = mode === 'edit';
+    const isFolder = type === 'folder';
+    
+    if (isFolder) {
+        return `
+            <div class="form-group">
+                <label for="folder-name">Folder Name</label>
+                <input type="text" id="folder-name" class="form-input" value="${data?.name || ''}" placeholder="Enter folder name" required>
+            </div>
+            <div class="form-group">
+                <label for="folder-icon">Icon</label>
+                <div class="icon-selector">
+                    <input type="text" id="folder-icon" class="form-input icon-input" value="${data?.icon || '📁'}" placeholder="📁">
+                    <div class="icon-grid">
+                        <span class="icon-option" data-icon="📁">📁</span>
+                        <span class="icon-option" data-icon="📂">📂</span>
+                        <span class="icon-option" data-icon="🗂️">🗂️</span>
+                        <span class="icon-option" data-icon="📋">📋</span>
+                        <span class="icon-option" data-icon="🛠️">🛠️</span>
+                        <span class="icon-option" data-icon="🌐">🌐</span>
+                        <span class="icon-option" data-icon="🔧">🔧</span>
+                        <span class="icon-option" data-icon="⚙️">⚙️</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    } else {
+        return `
+            <div class="form-group">
+                <label for="profile-name">Profile Name</label>
+                <input type="text" id="profile-name" class="form-input" value="${data?.name || ''}" placeholder="Enter profile name" required>
+            </div>
+            <div class="form-group">
+                <label for="profile-icon">Icon</label>
+                <div class="icon-selector">
+                    <input type="text" id="profile-icon" class="form-input icon-input" value="${data?.icon || '💻'}" placeholder="💻">
+                    <div class="icon-grid">
+                        <span class="icon-option" data-icon="💻">💻</span>
+                        <span class="icon-option" data-icon="🔷">🔷</span>
+                        <span class="icon-option" data-icon="⚫">⚫</span>
+                        <span class="icon-option" data-icon="🐧">🐧</span>
+                        <span class="icon-option" data-icon="🌐">🌐</span>
+                        <span class="icon-option" data-icon="🐳">🐳</span>
+                        <span class="icon-option" data-icon="⚡">⚡</span>
+                        <span class="icon-option" data-icon="🚀">🚀</span>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="profile-type">Profile Type</label>
+                <select id="profile-type" class="form-select">
+                    <option value="local" ${data?.type === 'local' ? 'selected' : ''}>Local Shell</option>
+                    <option value="ssh" ${data?.type === 'ssh' ? 'selected' : ''}>SSH Connection</option>
+                    <option value="custom" ${data?.type === 'custom' ? 'selected' : ''}>Custom Command</option>
+                </select>
+            </div>
+            <div class="form-group local-shell-group" style="display: ${data?.type === 'local' || !data?.type ? 'block' : 'none'}">
+                <label for="profile-shell">Shell Command</label>
+                <select id="profile-shell" class="form-select">
+                    <option value="">Loading shells...</option>
+                </select>
+            </div>
+            <div class="form-group ssh-group" style="display: ${data?.type === 'ssh' ? 'block' : 'none'}">
+                <label for="ssh-host">SSH Host</label>
+                <input type="text" id="ssh-host" class="form-input" value="${data?.sshConfig?.host || ''}" placeholder="hostname or IP">
+            </div>
+            <div class="form-group ssh-group" style="display: ${data?.type === 'ssh' ? 'block' : 'none'}">
+                <label for="ssh-port">SSH Port</label>
+                <input type="number" id="ssh-port" class="form-input" value="${data?.sshConfig?.port || 22}" placeholder="22">
+            </div>
+            <div class="form-group ssh-group" style="display: ${data?.type === 'ssh' ? 'block' : 'none'}">
+                <label for="ssh-username">Username</label>
+                <input type="text" id="ssh-username" class="form-input" value="${data?.sshConfig?.username || ''}" placeholder="username">
+            </div>
+            <div class="form-group ssh-group" style="display: ${data?.type === 'ssh' ? 'block' : 'none'}">
+                <label for="ssh-password">Password (optional)</label>
+                <input type="password" id="ssh-password" class="form-input" value="${data?.sshConfig?.password || ''}" placeholder="password">
+            </div>
+            <div class="form-group ssh-group" style="display: ${data?.type === 'ssh' ? 'block' : 'none'}">
+                <label for="ssh-keypath">Private Key Path (optional)</label>
+                <input type="text" id="ssh-keypath" class="form-input" value="${data?.sshConfig?.keyPath || ''}" placeholder="/path/to/private/key">
+            </div>
+            <div class="form-group custom-group" style="display: ${data?.type === 'custom' ? 'block' : 'none'}">
+                <label for="custom-command">Custom Command</label>
+                <input type="text" id="custom-command" class="form-input" value="${data?.shell || ''}" placeholder="Enter custom command">
+            </div>
+            <div class="form-group">
+                <label for="profile-workdir">Working Directory (optional)</label>
+                <input type="text" id="profile-workdir" class="form-input" value="${data?.workingDir || ''}" placeholder="Enter working directory">
+            </div>
+        `;
+    }
 } 

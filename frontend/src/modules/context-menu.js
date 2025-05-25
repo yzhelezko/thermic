@@ -45,6 +45,13 @@ export class ContextMenuManager {
                 if (treeItem) {
                     this.selectSidebarItem(treeItem);
                     this.showSidebarContextMenu(e, treeItem);
+                } else {
+                    // Right-clicked on empty space anywhere in sidebar - show root context menu
+                    // Check if we're actually in the sidebar (not just a child element)
+                    const isInSidebar = e.target.closest('.sidebar');
+                    if (isInSidebar) {
+                        this.showRootContextMenu(e);
+                    }
                 }
             });
         }
@@ -98,6 +105,22 @@ export class ContextMenuManager {
         this.activeMenu = menu;
     }
 
+    showRootContextMenu(event) {
+        const menu = document.getElementById('sidebar-context-menu');
+        if (!menu) return;
+
+        this.hideAllMenus();
+        this.currentTarget = null; // No specific target - root context
+
+        // Update menu items for root context (only show create options)
+        this.updateRootMenuItems(menu);
+
+        // Position and show menu
+        this.positionMenu(menu, event.clientX, event.clientY);
+        this.showMenu(menu);
+        this.activeMenu = menu;
+    }
+
     updateTerminalMenuItems(menu) {
         const copyItem = menu.querySelector('[data-action="copy"]');
         const pasteItem = menu.querySelector('[data-action="paste"]');
@@ -123,24 +146,126 @@ export class ContextMenuManager {
 
     updateSidebarMenuItems(menu, treeItem) {
         const isShellItem = treeItem.classList.contains('tree-item-shell');
+        const isProfile = treeItem.dataset.type === 'profile';
+        const isFolder = treeItem.dataset.type === 'folder';
         const isConnected = this.terminalManager.isConnected;
+        
+        // First, reset ALL menu items to be visible (fixes broken state from root menu)
+        const allItems = menu.querySelectorAll('.context-menu-item');
+        allItems.forEach(item => {
+            item.style.display = 'flex';
+        });
         
         // Enable/disable items based on context
         const connectItem = menu.querySelector('[data-action="connect"]');
         const editItem = menu.querySelector('[data-action="edit"]');
+        const duplicateItem = menu.querySelector('[data-action="duplicate"]');
+        const renameItem = menu.querySelector('[data-action="rename"]');
         const deleteItem = menu.querySelector('[data-action="delete"]');
+        const propertiesItem = menu.querySelector('[data-action="properties"]');
+        const searchItem = menu.querySelector('[data-action="search"]');
+        
+        // Create options - only show for folders
+        const createProfileItem = menu.querySelector('[data-action="create-profile"]');
+        const createFolderItem = menu.querySelector('[data-action="create-folder"]');
 
+        // Show/hide create options based on target
+        const showCreateOptions = isFolder;
+        if (createProfileItem) {
+            createProfileItem.style.display = showCreateOptions ? 'flex' : 'none';
+        }
+        if (createFolderItem) {
+            createFolderItem.style.display = showCreateOptions ? 'flex' : 'none';
+        }
+
+        // Search - hide for profile/folder context menus (only show in root context)
+        if (searchItem) {
+            searchItem.style.display = 'none';
+        }
+
+        // Now handle separators manually based on what's visible
+        const allSeparators = menu.querySelectorAll('.context-menu-separator');
+        
+        // Hide all separators first
+        allSeparators.forEach(separator => {
+            separator.style.display = 'none';
+        });
+        
+        // For profile/folder context menus:
+        // - Show separator after Connect (before Edit section)
+        // - Show separator after Delete (before Properties)
+        // - Show create separator only if create options are visible
+        
+        // Separator 1: After Connect - always show for profile/folder menus
+        if (allSeparators[0]) {
+            allSeparators[0].style.display = 'block';
+        }
+        
+        // Create separator: Only show when create options are visible
+        const createSeparator = menu.querySelector('.context-menu-create-separator');
+        if (createSeparator && showCreateOptions) {
+            createSeparator.style.display = 'block';
+        }
+        
+        // Separator before Properties: Always show
+        if (allSeparators.length > 1) {
+            allSeparators[allSeparators.length - 1].style.display = 'block';
+        }
+
+        // Connect action - available for profiles and shell items
         if (connectItem) {
-            connectItem.classList.toggle('disabled', !isShellItem || isConnected);
+            connectItem.classList.toggle('disabled', !(isProfile || isShellItem));
         }
 
-        // All items can be edited/deleted for now
+        // Edit action - available for profiles and folders
         if (editItem) {
-            editItem.classList.remove('disabled');
+            editItem.classList.toggle('disabled', !(isProfile || isFolder));
         }
+
+        // Duplicate action - available for profiles
+        if (duplicateItem) {
+            duplicateItem.classList.toggle('disabled', !isProfile);
+        }
+
+        // Rename action - available for all items
+        if (renameItem) {
+            renameItem.classList.remove('disabled');
+        }
+
+        // Delete action - available for all items
         if (deleteItem) {
             deleteItem.classList.remove('disabled');
         }
+
+        // Properties action - available for all items
+        if (propertiesItem) {
+            propertiesItem.classList.remove('disabled');
+        }
+    }
+
+    updateRootMenuItems(menu) {
+        // Hide all regular menu items, only show create options and search
+        const allItems = menu.querySelectorAll('.context-menu-item');
+        const allSeparators = menu.querySelectorAll('.context-menu-separator');
+        
+        // Hide all items first
+        allItems.forEach(item => {
+            const action = item.dataset.action;
+            if (action === 'create-profile' || action === 'create-folder' || action === 'search') {
+                item.style.display = 'flex';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+        
+        // Show only the create and search separators
+        allSeparators.forEach(separator => {
+            if (separator.classList.contains('context-menu-create-separator')) {
+                separator.style.display = 'block';
+            } else {
+                separator.style.display = 'none';
+            }
+        });
     }
 
     selectSidebarItem(treeItem) {
@@ -211,22 +336,31 @@ export class ContextMenuManager {
                 await this.handleConnect();
                 break;
             case 'edit':
-                this.handleEdit();
+                await this.handleEdit();
                 break;
             case 'duplicate':
-                this.handleDuplicate();
+                await this.handleDuplicate();
                 break;
             case 'rename':
-                this.handleRename();
+                await this.handleRename();
                 break;
             case 'delete':
-                this.handleDelete();
+                await this.handleDelete();
                 break;
             case 'properties':
-                this.handleProperties();
+                await this.handleProperties();
+                break;
+            case 'create-profile':
+                await this.handleCreateProfile();
+                break;
+            case 'create-folder':
+                await this.handleCreateFolder();
+                break;
+            case 'search':
+                await this.handleSearch();
                 break;
             default:
-                console.warn('Unknown context menu action:', action);
+                console.log('Unknown action:', action);
         }
     }
 
@@ -288,7 +422,24 @@ export class ContextMenuManager {
 
     // Sidebar actions
     async handleConnect() {
-        if (this.currentTarget && this.currentTarget.classList.contains('tree-item-shell')) {
+        if (!this.currentTarget) return;
+
+        // Handle profiles (new system)
+        if (this.currentTarget.dataset.type === 'profile') {
+            const profileId = this.currentTarget.dataset.id;
+            if (profileId && window.sidebarManager) {
+                try {
+                    await window.sidebarManager.openProfile(profileId);
+                } catch (error) {
+                    console.error('Failed to connect to profile:', error);
+                    showNotification('Failed to connect to profile', 2000);
+                }
+            }
+            return;
+        }
+
+        // Handle legacy shell items (old system)
+        if (this.currentTarget.classList.contains('tree-item-shell')) {
             const shellPath = this.currentTarget.dataset.shell;
             if (shellPath && this.terminalManager) {
                 try {
@@ -301,33 +452,62 @@ export class ContextMenuManager {
         }
     }
 
-    handleEdit() {
-        if (this.currentTarget) {
-            const itemText = this.currentTarget.querySelector('.tree-item-text');
-            if (itemText) {
-                // Make item editable
-                const currentText = itemText.textContent;
-                const input = document.createElement('input');
-                input.type = 'text';
-                input.value = currentText;
-                input.className = 'tree-item-edit';
-                
-                input.addEventListener('blur', () => this.finishEdit(itemText, input));
-                input.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter') {
-                        this.finishEdit(itemText, input);
-                    } else if (e.key === 'Escape') {
-                        itemText.textContent = currentText;
-                        itemText.style.display = '';
-                        input.remove();
-                    }
-                });
+    async handleEdit() {
+        if (!this.currentTarget) return;
 
-                itemText.style.display = 'none';
-                itemText.parentNode.insertBefore(input, itemText.nextSibling);
-                input.focus();
-                input.select();
+        // Handle profiles (new system)
+        if (this.currentTarget.dataset.type === 'profile') {
+            const profileId = this.currentTarget.dataset.id;
+            if (profileId && window.sidebarManager) {
+                try {
+                    await window.sidebarManager.editProfile(profileId);
+                } catch (error) {
+                    console.error('Failed to edit profile:', error);
+                    showNotification('Failed to edit profile', 2000);
+                }
             }
+            return;
+        }
+
+        // Handle folders
+        if (this.currentTarget.dataset.type === 'folder') {
+            const folderId = this.currentTarget.dataset.id;
+            if (folderId && window.sidebarManager) {
+                try {
+                    await window.sidebarManager.editFolder(folderId);
+                } catch (error) {
+                    console.error('Failed to edit folder:', error);
+                    showNotification('Failed to edit folder', 2000);
+                }
+            }
+            return;
+        }
+
+        // Handle legacy items (old system)
+        const itemText = this.currentTarget.querySelector('.tree-item-text');
+        if (itemText) {
+            // Make item editable
+            const currentText = itemText.textContent;
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = currentText;
+            input.className = 'tree-item-edit';
+            
+            input.addEventListener('blur', () => this.finishEdit(itemText, input));
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    this.finishEdit(itemText, input);
+                } else if (e.key === 'Escape') {
+                    itemText.textContent = currentText;
+                    itemText.style.display = '';
+                    input.remove();
+                }
+            });
+
+            itemText.style.display = 'none';
+            itemText.parentNode.insertBefore(input, itemText.nextSibling);
+            input.focus();
+            input.select();
         }
     }
 
@@ -341,21 +521,36 @@ export class ContextMenuManager {
         inputElement.remove();
     }
 
-    handleDuplicate() {
-        if (this.currentTarget) {
-            const clone = this.currentTarget.cloneNode(true);
-            const itemText = clone.querySelector('.tree-item-text');
-            if (itemText) {
-                itemText.textContent += ' (Copy)';
+    async handleDuplicate() {
+        if (!this.currentTarget) return;
+
+        // Handle profiles (new system)
+        if (this.currentTarget.dataset.type === 'profile') {
+            const profileId = this.currentTarget.dataset.id;
+            if (profileId && window.sidebarManager) {
+                try {
+                    await window.sidebarManager.duplicateProfile(profileId);
+                } catch (error) {
+                    console.error('Failed to duplicate profile:', error);
+                    showNotification('Failed to duplicate profile', 2000);
+                }
             }
-            
-            // Remove selection from clone
-            clone.classList.remove('selected');
-            
-            // Insert after current item
-            this.currentTarget.parentNode.insertBefore(clone, this.currentTarget.nextSibling);
-            showNotification('Item duplicated', 1500);
+            return;
         }
+
+        // Handle legacy items (old system)
+        const clone = this.currentTarget.cloneNode(true);
+        const itemText = clone.querySelector('.tree-item-text');
+        if (itemText) {
+            itemText.textContent += ' (Copy)';
+        }
+        
+        // Remove selection from clone
+        clone.classList.remove('selected');
+        
+        // Insert after current item
+        this.currentTarget.parentNode.insertBefore(clone, this.currentTarget.nextSibling);
+        showNotification('Item duplicated', 1500);
     }
 
     handleRename() {
@@ -363,15 +558,51 @@ export class ContextMenuManager {
         this.handleEdit();
     }
 
-    handleDelete() {
-        if (this.currentTarget) {
-            const itemText = this.currentTarget.querySelector('.tree-item-text');
-            const itemName = itemText ? itemText.textContent : 'item';
-            
-            if (confirm(`Are you sure you want to delete "${itemName}"?`)) {
-                this.currentTarget.remove();
-                showNotification('Item deleted', 1500);
+    async handleDelete() {
+        if (!this.currentTarget) return;
+
+        // Handle profiles (new system)
+        if (this.currentTarget.dataset.type === 'profile') {
+            const profileId = this.currentTarget.dataset.id;
+            if (profileId && window.sidebarManager) {
+                try {
+                    await window.sidebarManager.deleteProfile(profileId);
+                } catch (error) {
+                    console.error('Failed to delete profile:', error);
+                    showNotification('Failed to delete profile', 2000);
+                }
             }
+            return;
+        }
+
+        // Handle folders
+        if (this.currentTarget.dataset.type === 'folder') {
+            const folderId = this.currentTarget.dataset.id;
+            const itemText = this.currentTarget.querySelector('.tree-item-text');
+            const itemName = itemText ? itemText.textContent : 'folder';
+            
+            // Show options for folder deletion
+            const result = confirm(`Delete "${itemName}"?\n\nOK = Move profiles to root\nCancel = Keep folder`);
+            if (result && window.sidebarManager) {
+                try {
+                    // Ask if they want to delete contents too
+                    const deleteContents = confirm(`Delete all profiles inside "${itemName}" too?\n\nOK = Delete all contents\nCancel = Move profiles to root`);
+                    await window.sidebarManager.deleteFolder(folderId, deleteContents);
+                } catch (error) {
+                    console.error('Failed to delete folder:', error);
+                    showNotification('Failed to delete folder', 2000);
+                }
+            }
+            return;
+        }
+
+        // Handle legacy items (old system)
+        const itemText = this.currentTarget.querySelector('.tree-item-text');
+        const itemName = itemText ? itemText.textContent : 'item';
+        
+        if (confirm(`Are you sure you want to delete "${itemName}"?`)) {
+            this.currentTarget.remove();
+            showNotification('Item deleted', 1500);
         }
     }
 
@@ -384,4 +615,52 @@ export class ContextMenuManager {
             alert(`Properties:\nName: ${itemName}\nType: ${itemType}`);
         }
     }
-} 
+
+    async handleCreateProfile() {
+        // Get the parent folder ID if right-clicking on a folder
+        let parentFolderId = null;
+        if (this.currentTarget && this.currentTarget.dataset.type === 'folder') {
+            parentFolderId = this.currentTarget.dataset.id;
+        }
+
+        // Use the sidebar manager to open the profile creation panel
+        if (window.sidebarManager) {
+            try {
+                await window.sidebarManager.openProfilePanel('create', 'profile', parentFolderId);
+            } catch (error) {
+                console.error('Failed to open profile creation panel:', error);
+                showNotification('Failed to create profile', 2000);
+            }
+        }
+    }
+
+    async handleCreateFolder() {
+        // Get the parent folder ID if right-clicking on a folder
+        let parentFolderId = null;
+        if (this.currentTarget && this.currentTarget.dataset.type === 'folder') {
+            parentFolderId = this.currentTarget.dataset.id;
+        }
+
+        // Use the sidebar manager to open the folder creation panel
+        if (window.sidebarManager) {
+            try {
+                await window.sidebarManager.openProfilePanel('create', 'folder', parentFolderId);
+            } catch (error) {
+                console.error('Failed to open folder creation panel:', error);
+                showNotification('Failed to create folder', 2000);
+            }
+        }
+    }
+
+    async handleSearch() {
+        // Open search panel through sidebar manager
+        if (window.sidebarManager) {
+            try {
+                window.sidebarManager.showSearchPanel();
+            } catch (error) {
+                console.error('Failed to open search panel:', error);
+                showNotification('Failed to open search', 'error');
+            }
+        }
+    }
+}

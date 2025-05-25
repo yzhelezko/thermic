@@ -6,6 +6,10 @@ export function CheckWSLAvailable() {
   return window['go']['main']['App']['CheckWSLAvailable']();
 }
 
+export function CloseSSHSession(arg1) {
+  return window['go']['main']['App']['CloseSSHSession'](arg1);
+}
+
 export function CloseShell(arg1) {
   return window['go']['main']['App']['CloseShell'](arg1);
 }
@@ -18,8 +22,60 @@ export function CloseWindow() {
   return window['go']['main']['App']['CloseWindow']();
 }
 
+export function CreateDefaultProfiles() {
+  return window['go']['main']['App']['CreateDefaultProfiles']();
+}
+
+export function CreateProfile(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['CreateProfile'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function CreateProfileAPI(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['CreateProfileAPI'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function CreateProfileFolder(arg1, arg2, arg3) {
+  return window['go']['main']['App']['CreateProfileFolder'](arg1, arg2, arg3);
+}
+
+export function CreateProfileFolderAPI(arg1, arg2, arg3) {
+  return window['go']['main']['App']['CreateProfileFolderAPI'](arg1, arg2, arg3);
+}
+
+export function CreateSSHSession(arg1, arg2) {
+  return window['go']['main']['App']['CreateSSHSession'](arg1, arg2);
+}
+
 export function CreateTab(arg1, arg2) {
   return window['go']['main']['App']['CreateTab'](arg1, arg2);
+}
+
+export function CreateTabFromProfile(arg1) {
+  return window['go']['main']['App']['CreateTabFromProfile'](arg1);
+}
+
+export function DeleteProfile(arg1) {
+  return window['go']['main']['App']['DeleteProfile'](arg1);
+}
+
+export function DeleteProfileAPI(arg1) {
+  return window['go']['main']['App']['DeleteProfileAPI'](arg1);
+}
+
+export function DeleteProfileFolder(arg1) {
+  return window['go']['main']['App']['DeleteProfileFolder'](arg1);
+}
+
+export function DeleteProfileFolderAPI(arg1) {
+  return window['go']['main']['App']['DeleteProfileFolderAPI'](arg1);
+}
+
+export function DeleteProfileFolderWithContentsAPI(arg1) {
+  return window['go']['main']['App']['DeleteProfileFolderWithContentsAPI'](arg1);
+}
+
+export function DuplicateProfile(arg1) {
+  return window['go']['main']['App']['DuplicateProfile'](arg1);
 }
 
 export function GetActiveTab() {
@@ -42,6 +98,10 @@ export function GetDefaultShell() {
   return window['go']['main']['App']['GetDefaultShell']();
 }
 
+export function GetMetricsAPI() {
+  return window['go']['main']['App']['GetMetricsAPI']();
+}
+
 export function GetOSInfo() {
   return window['go']['main']['App']['GetOSInfo']();
 }
@@ -50,12 +110,44 @@ export function GetPlatformInfo() {
   return window['go']['main']['App']['GetPlatformInfo']();
 }
 
+export function GetPopularTagsAPI() {
+  return window['go']['main']['App']['GetPopularTagsAPI']();
+}
+
+export function GetProfile(arg1) {
+  return window['go']['main']['App']['GetProfile'](arg1);
+}
+
+export function GetProfileFolder(arg1) {
+  return window['go']['main']['App']['GetProfileFolder'](arg1);
+}
+
+export function GetProfileTree() {
+  return window['go']['main']['App']['GetProfileTree']();
+}
+
+export function GetProfileTreeAPI() {
+  return window['go']['main']['App']['GetProfileTreeAPI']();
+}
+
+export function GetProfilesDirectory() {
+  return window['go']['main']['App']['GetProfilesDirectory']();
+}
+
 export function GetShellsForUI() {
   return window['go']['main']['App']['GetShellsForUI']();
 }
 
 export function GetTabs() {
   return window['go']['main']['App']['GetTabs']();
+}
+
+export function GetVirtualFolderProfilesAPI(arg1) {
+  return window['go']['main']['App']['GetVirtualFolderProfilesAPI'](arg1);
+}
+
+export function GetVirtualFoldersAPI() {
+  return window['go']['main']['App']['GetVirtualFoldersAPI']();
 }
 
 export function GetWSLDistributions() {
@@ -74,12 +166,28 @@ export function Greet(arg1) {
   return window['go']['main']['App']['Greet'](arg1);
 }
 
+export function InitializeProfiles() {
+  return window['go']['main']['App']['InitializeProfiles']();
+}
+
 export function IsSessionClosed(arg1) {
   return window['go']['main']['App']['IsSessionClosed'](arg1);
 }
 
 export function IsWindowMaximized() {
   return window['go']['main']['App']['IsWindowMaximized']();
+}
+
+export function LoadProfile(arg1) {
+  return window['go']['main']['App']['LoadProfile'](arg1);
+}
+
+export function LoadProfileFolder(arg1) {
+  return window['go']['main']['App']['LoadProfileFolder'](arg1);
+}
+
+export function LoadProfiles() {
+  return window['go']['main']['App']['LoadProfiles']();
 }
 
 export function MaximizeWindow() {
@@ -90,12 +198,32 @@ export function MinimizeWindow() {
   return window['go']['main']['App']['MinimizeWindow']();
 }
 
+export function MoveProfile(arg1, arg2) {
+  return window['go']['main']['App']['MoveProfile'](arg1, arg2);
+}
+
 export function RenameTab(arg1, arg2) {
   return window['go']['main']['App']['RenameTab'](arg1, arg2);
 }
 
+export function ResizeSSHSession(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ResizeSSHSession'](arg1, arg2, arg3);
+}
+
 export function ResizeShell(arg1, arg2, arg3) {
   return window['go']['main']['App']['ResizeShell'](arg1, arg2, arg3);
+}
+
+export function SaveProfile(arg1) {
+  return window['go']['main']['App']['SaveProfile'](arg1);
+}
+
+export function SaveProfileFolder(arg1) {
+  return window['go']['main']['App']['SaveProfileFolder'](arg1);
+}
+
+export function SearchProfilesAPI(arg1, arg2) {
+  return window['go']['main']['App']['SearchProfilesAPI'](arg1, arg2);
 }
 
 export function SetActiveTab(arg1) {
@@ -110,6 +238,14 @@ export function ShowMessageDialog(arg1, arg2) {
   return window['go']['main']['App']['ShowMessageDialog'](arg1, arg2);
 }
 
+export function StartProfileWatcher() {
+  return window['go']['main']['App']['StartProfileWatcher']();
+}
+
+export function StartSSHShell(arg1) {
+  return window['go']['main']['App']['StartSSHShell'](arg1);
+}
+
 export function StartShell(arg1, arg2) {
   return window['go']['main']['App']['StartShell'](arg1, arg2);
 }
@@ -118,8 +254,32 @@ export function StartTabShell(arg1) {
   return window['go']['main']['App']['StartTabShell'](arg1);
 }
 
+export function StopProfileWatcher() {
+  return window['go']['main']['App']['StopProfileWatcher']();
+}
+
+export function ToggleFavoriteAPI(arg1) {
+  return window['go']['main']['App']['ToggleFavoriteAPI'](arg1);
+}
+
+export function UpdateProfile(arg1) {
+  return window['go']['main']['App']['UpdateProfile'](arg1);
+}
+
+export function UpdateProfileFolder(arg1) {
+  return window['go']['main']['App']['UpdateProfileFolder'](arg1);
+}
+
+export function UpdateProfileTagsAPI(arg1, arg2) {
+  return window['go']['main']['App']['UpdateProfileTagsAPI'](arg1, arg2);
+}
+
 export function WaitForSessionClose(arg1) {
   return window['go']['main']['App']['WaitForSessionClose'](arg1);
+}
+
+export function WriteToSSHSession(arg1, arg2) {
+  return window['go']['main']['App']['WriteToSSHSession'](arg1, arg2);
 }
 
 export function WriteToShell(arg1, arg2) {

@@ -94,7 +94,10 @@ class ThermicTerminal {
             this.settingsManager.initSettings();
             
             console.log('Initializing sidebar manager...');
-            this.sidebarManager.initSidebar();
+            await this.sidebarManager.initSidebar();
+            
+            // Expose sidebar manager globally for back buttons
+            window.sidebarManager = this.sidebarManager;
 
             // Initialize terminal
             console.log('Initializing terminal manager...');
