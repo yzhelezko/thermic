@@ -191,11 +191,24 @@ func (a *App) CreateSSHSessionWithSize(sessionID string, config *SSHConfig, cols
 
 // StartSSHShell starts a shell on the SSH session
 func (a *App) StartSSHShell(sshSession *SSHSession) error {
-	// Request a pseudo-terminal
+	// Request a pseudo-terminal with comprehensive terminal modes
 	if err := sshSession.session.RequestPty("xterm-256color", sshSession.rows, sshSession.cols, ssh.TerminalModes{
-		ssh.ECHO:          1,
-		ssh.TTY_OP_ISPEED: 14400,
-		ssh.TTY_OP_OSPEED: 14400,
+		ssh.ECHO:          1,     // Enable echo
+		ssh.TTY_OP_ISPEED: 14400, // Input speed
+		ssh.TTY_OP_OSPEED: 14400, // Output speed
+		ssh.ICRNL:         1,     // Map CR to NL on input
+		ssh.OPOST:         1,     // Enable output processing
+		ssh.ONLCR:         1,     // Map NL to CR-NL on output
+		ssh.ICANON:        1,     // Enable canonical mode
+		ssh.ISIG:          1,     // Enable signals
+		ssh.IEXTEN:        1,     // Enable extended functions
+		ssh.INPCK:         0,     // Disable input parity checking
+		ssh.ISTRIP:        0,     // Don't strip 8th bit
+		ssh.INLCR:         0,     // Don't map NL to CR on input
+		ssh.IGNCR:         0,     // Don't ignore CR
+		ssh.IXON:          0,     // Disable XON/XOFF flow control on output
+		ssh.IXOFF:         0,     // Disable XON/XOFF flow control on input
+		ssh.IXANY:         0,     // Disable any character restart output
 	}); err != nil {
 		return fmt.Errorf("failed to request PTY: %w", err)
 	}
