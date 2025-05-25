@@ -138,6 +138,10 @@ export function GetShellsForUI() {
   return window['go']['main']['App']['GetShellsForUI']();
 }
 
+export function GetTabStatus(arg1) {
+  return window['go']['main']['App']['GetTabStatus'](arg1);
+}
+
 export function GetTabs() {
   return window['go']['main']['App']['GetTabs']();
 }
@@ -200,6 +204,10 @@ export function MinimizeWindow() {
 
 export function MoveProfile(arg1, arg2) {
   return window['go']['main']['App']['MoveProfile'](arg1, arg2);
+}
+
+export function ReconnectTab(arg1) {
+  return window['go']['main']['App']['ReconnectTab'](arg1);
 }
 
 export function RenameTab(arg1, arg2) {

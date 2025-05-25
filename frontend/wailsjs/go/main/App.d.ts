@@ -70,6 +70,8 @@ export function GetProfilesDirectory():Promise<string>;
 
 export function GetShellsForUI():Promise<Array<Record<string, any>>>;
 
+export function GetTabStatus(arg1:string):Promise<Record<string, any>>;
+
 export function GetTabs():Promise<Array<main.Tab>>;
 
 export function GetVirtualFolderProfilesAPI(arg1:string):Promise<Array<main.Profile>>;
@@ -101,6 +103,8 @@ export function MaximizeWindow():Promise<void>;
 export function MinimizeWindow():Promise<void>;
 
 export function MoveProfile(arg1:string,arg2:string):Promise<void>;
+
+export function ReconnectTab(arg1:string):Promise<void>;
 
 export function RenameTab(arg1:string,arg2:string):Promise<void>;
 

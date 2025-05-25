@@ -26,9 +26,10 @@ export class TerminalManager {
     }
 
     setupGlobalOutputListener() {
-        if (!this.globalListenerSetup && typeof window !== 'undefined' && window.runtime) {
-            console.log('Setting up global terminal output listener');
+        if (!this.globalListenerSetup) {
+            console.log('Setting up global event listeners');
             try {
+                // Set up terminal output listener
                 this.globalOutputListener = EventsOn('terminal-output', (data) => {
                     console.log(`Global listener received output for session: ${data.sessionId}`);
                     
@@ -61,15 +62,26 @@ export class TerminalManager {
                         console.warn(`Session ${sessionId} exists but terminal is missing:`, terminalSession);
                     }
                 });
+
+                // Set up tab status update listener
+                this.globalTabStatusListener = EventsOn('tab-status-update', (data) => {
+                    console.log('Global listener received tab status update:', data);
+                    
+                    // Forward to tabs manager if it exists
+                    if (window.tabsManager && typeof window.tabsManager.handleTabStatusUpdate === 'function') {
+                        window.tabsManager.handleTabStatusUpdate(data);
+                    } else {
+                        console.warn('TabsManager not available for status update:', data);
+                    }
+                });
+
                 this.globalListenerSetup = true;
-                console.log('Global terminal output listener set up successfully');
+                console.log('Global event listeners set up successfully');
             } catch (error) {
-                console.error('Failed to set up global output listener:', error);
+                console.error('Failed to set up global listeners:', error);
             }
-        } else if (this.globalListenerSetup) {
-            console.log('Global terminal output listener already set up');
         } else {
-            console.log('Cannot set up global listener - runtime not ready');
+            console.log('Global event listeners already set up');
         }
     }
 
@@ -116,8 +128,10 @@ export class TerminalManager {
         // Open terminal in the container
         terminal.open(terminalContainer);
 
-        // Fit terminal to container
-        fitAddon.fit();
+        // Delay fit to ensure container is properly sized
+        setTimeout(() => {
+            fitAddon.fit();
+        }, 100);
 
         // Handle terminal input - send to shell
         terminal.onData((data) => {
@@ -640,7 +654,7 @@ export class TerminalManager {
     }
 
     cleanup() {
-        // Cleanup global output listener
+        // Cleanup global listeners
         if (this.globalOutputListener) {
             try {
                 this.globalOutputListener();
@@ -648,6 +662,15 @@ export class TerminalManager {
                 console.warn('Error cleaning up global output listener:', error);
             }
             this.globalOutputListener = null;
+        }
+
+        if (this.globalTabStatusListener) {
+            try {
+                this.globalTabStatusListener();
+            } catch (error) {
+                console.warn('Error cleaning up global tab status listener:', error);
+            }
+            this.globalTabStatusListener = null;
         }
 
         // Cleanup all terminal sessions

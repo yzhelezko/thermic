@@ -198,6 +198,7 @@ func (a *App) CreateTab(shell string, sshConfig *SSHConfig) (*Tab, error) {
 
 	// Determine connection type and title
 	connectionType := "local"
+	status := "connecting"
 	title := shell
 	if shell == "" {
 		shell = a.GetDefaultShell()
@@ -223,6 +224,8 @@ func (a *App) CreateTab(shell string, sshConfig *SSHConfig) (*Tab, error) {
 		ConnectionType: connectionType,
 		SSHConfig:      sshConfig,
 		Created:        time.Now(),
+		Status:         status,
+		ErrorMessage:   "",
 	}
 
 	// Store tab
@@ -337,13 +340,208 @@ func (a *App) StartTabShell(tabId string) error {
 		return fmt.Errorf("tab %s not found", tabId)
 	}
 
-	// Handle SSH connections
+	var err error
+
+	// Handle SSH connections with status tracking and animation
 	if tab.ConnectionType == "ssh" && tab.SSHConfig != nil {
-		return a.startSSHSession(tab)
+		// Update tab status to connecting for SSH
+		a.mutex.Lock()
+		tab.Status = "connecting"
+		tab.ErrorMessage = ""
+		a.mutex.Unlock()
+
+		// Emit tab update event for SSH
+		if a.ctx != nil {
+			wailsRuntime.EventsEmit(a.ctx, "tab-status-update", map[string]interface{}{
+				"tabId":  tabId,
+				"status": "connecting",
+			})
+		}
+
+		// Start animated connection sequence for SSH
+		if a.ctx != nil {
+			a.startSSHConnectionAnimation(tab)
+		}
+
+		// Attempt SSH connection
+		err = a.startSSHSession(tab)
+
+		// Update SSH tab status based on result
+		a.mutex.Lock()
+		if err != nil {
+			tab.Status = "failed"
+			tab.ErrorMessage = err.Error()
+		} else {
+			tab.Status = "connected"
+			tab.ErrorMessage = ""
+		}
+		a.mutex.Unlock()
+
+		// Send SSH connection result to terminal
+		if a.ctx != nil {
+			if err != nil {
+				a.sendFormattedError(tab, err)
+			} else {
+				// Clear the connecting animation and show clean success message
+				a.sendSuccessMessage(tab)
+			}
+		}
+
+		// Emit SSH tab update event with final status
+		if a.ctx != nil {
+			wailsRuntime.EventsEmit(a.ctx, "tab-status-update", map[string]interface{}{
+				"tabId":        tabId,
+				"status":       tab.Status,
+				"errorMessage": tab.ErrorMessage,
+			})
+		}
+	} else {
+		// Handle local shell - no status tracking, just start directly
+		err = a.StartShell(tab.Shell, tab.SessionID)
+
+		// For local shells, only show errors in terminal if they occur
+		if err != nil && a.ctx != nil {
+			// Send local shell error to terminal
+			errorMsg := fmt.Sprintf("\r\n\033[31m╭─ Shell Error\033[0m\r\n\033[31m│\033[0m Failed to start: \033[33m%s\033[0m\r\n\033[31m│\033[0m %s\r\n\033[31m╰─\033[0m\r\n\r\n", tab.Shell, err.Error())
+			wailsRuntime.EventsEmit(a.ctx, "terminal-output", map[string]interface{}{
+				"sessionId": tab.SessionID,
+				"data":      errorMsg,
+			})
+		}
 	}
 
-	// Handle local shell
-	return a.StartShell(tab.Shell, tab.SessionID)
+	return err
+}
+
+// startSSHConnectionAnimation shows animated connecting sequence
+func (a *App) startSSHConnectionAnimation(tab *Tab) {
+	if a.ctx == nil {
+		return
+	}
+
+	// Show connecting banner with host info
+	banner := fmt.Sprintf("\r\n\033[36m╭─ SSH Connection\033[0m\r\n\033[36m│\033[0m Host: \033[33m%s:%d\033[0m\r\n\033[36m│\033[0m User: \033[33m%s\033[0m\r\n\033[36m│\033[0m",
+		tab.SSHConfig.Host, tab.SSHConfig.Port, tab.SSHConfig.Username)
+
+	wailsRuntime.EventsEmit(a.ctx, "terminal-output", map[string]interface{}{
+		"sessionId": tab.SessionID,
+		"data":      banner,
+	})
+
+	// Start animated connection sequence
+	go func() {
+		frames := []string{
+			"\033[36m│\033[0m \033[32m●\033[0m Connecting   ",
+			"\033[36m│\033[0m \033[32m●\033[0m Connecting.  ",
+			"\033[36m│\033[0m \033[32m●\033[0m Connecting.. ",
+			"\033[36m│\033[0m \033[32m●\033[0m Connecting...",
+		}
+		i := 0
+		for {
+			// Check if connection is still in progress
+			a.mutex.RLock()
+			currentStatus := tab.Status
+			a.mutex.RUnlock()
+
+			if currentStatus != "connecting" {
+				break
+			}
+
+			frame := frames[i%len(frames)]
+
+			// Use carriage return to overwrite the same line
+			wailsRuntime.EventsEmit(a.ctx, "terminal-output", map[string]interface{}{
+				"sessionId": tab.SessionID,
+				"data":      "\r" + frame,
+			})
+
+			time.Sleep(300 * time.Millisecond)
+			i++
+		}
+	}()
+}
+
+// sendFormattedError sends a nicely formatted error message to the terminal
+func (a *App) sendFormattedError(tab *Tab, err error) {
+	if a.ctx == nil {
+		return
+	}
+
+	// Complete the connection banner with failure
+	clearAndComplete := "\r\033[36m│\033[0m \033[31m✗ Connection failed\033[0m\r\n\033[36m╰─\033[0m\r\n"
+
+	// Create formatted error message for SSH
+	errorMsg := clearAndComplete
+
+	// Add error details box
+	errorBox := fmt.Sprintf("\r\n\033[31m╭─ Error Details\033[0m\r\n\033[31m│\033[0m %s\r\n\033[31m╰─\033[0m\r\n", err.Error())
+
+	// Add troubleshooting hints for SSH errors
+	hints := a.getSSHErrorHints(err.Error())
+	if hints != "" {
+		hintBox := fmt.Sprintf("\r\n\033[33m╭─ Troubleshooting Tips\033[0m\r\n%s\033[33m╰─\033[0m\r\n", hints)
+		errorBox += hintBox
+	}
+
+	fullError := errorMsg + errorBox + "\r\n"
+
+	// Send error message to terminal with a small delay to ensure terminal is ready
+	go func() {
+		time.Sleep(100 * time.Millisecond) // Small delay to ensure terminal session is established
+		wailsRuntime.EventsEmit(a.ctx, "terminal-output", map[string]interface{}{
+			"sessionId": tab.SessionID,
+			"data":      fullError,
+		})
+	}()
+}
+
+// sendSuccessMessage clears the connecting animation and terminal for clean SSH session
+func (a *App) sendSuccessMessage(tab *Tab) {
+	if a.ctx == nil {
+		return
+	}
+
+	// Complete the connection banner with success
+	clearAndComplete := "\r\033[36m│\033[0m \033[32m✓ Connected successfully\033[0m\r\n\033[36m╰─\033[0m\r\n"
+
+	// Clear the entire terminal for a clean SSH session
+	clearTerminal := "\033[2J\033[H"
+
+	// Send: complete connection box -> clear terminal (no welcome message, just raw SSH)
+	fullMessage := clearAndComplete + clearTerminal
+
+	wailsRuntime.EventsEmit(a.ctx, "terminal-output", map[string]interface{}{
+		"sessionId": tab.SessionID,
+		"data":      fullMessage,
+	})
+}
+
+// getSSHErrorHints provides helpful troubleshooting tips based on error type
+func (a *App) getSSHErrorHints(errorMsg string) string {
+	errorLower := strings.ToLower(errorMsg)
+
+	if strings.Contains(errorLower, "authentication failed") || strings.Contains(errorLower, "unable to authenticate") {
+		return "\033[33m│\033[0m • Check your username and password\r\n\033[33m│\033[0m • Verify SSH key permissions (chmod 600)\r\n\033[33m│\033[0m • Try using password authentication\r\n"
+	}
+
+	if strings.Contains(errorLower, "connection refused") {
+		return "\033[33m│\033[0m • SSH server may not be running\r\n\033[33m│\033[0m • Check if port 22 (or custom port) is open\r\n\033[33m│\033[0m • Verify firewall settings\r\n"
+	}
+
+	if strings.Contains(errorLower, "timeout") || strings.Contains(errorLower, "could not reach") {
+		return "\033[33m│\033[0m • Check network connectivity\r\n\033[33m│\033[0m • Verify the hostname/IP address\r\n\033[33m│\033[0m • Check VPN or proxy settings\r\n"
+	}
+
+	if strings.Contains(errorLower, "no route to host") || strings.Contains(errorLower, "not reachable") {
+		return "\033[33m│\033[0m • Host may be down or unreachable\r\n\033[33m│\033[0m • Check network routing\r\n\033[33m│\033[0m • Verify VPN connection if required\r\n"
+	}
+
+	if strings.Contains(errorLower, "host key") {
+		return "\033[33m│\033[0m • Host key has changed or is unknown\r\n\033[33m│\033[0m • Check ~/.ssh/known_hosts file\r\n\033[33m│\033[0m • Use ssh-keyscan to verify host key\r\n"
+	}
+
+	// Generic SSH tips
+	return "\033[33m│\033[0m • Check SSH server configuration\r\n\033[33m│\033[0m • Verify network connectivity\r\n\033[33m│\033[0m • Review SSH logs for details\r\n"
 }
 
 // startSSHSession starts an SSH session for a tab using native SSH implementation
@@ -903,4 +1101,81 @@ func (a *App) GetPopularTagsAPI() []string {
 	}
 
 	return result
+}
+
+// GetTabStatus returns the status of a specific tab
+func (a *App) GetTabStatus(tabId string) (map[string]interface{}, error) {
+	a.mutex.RLock()
+	defer a.mutex.RUnlock()
+
+	tab, exists := a.tabs[tabId]
+	if !exists {
+		return nil, fmt.Errorf("tab %s not found", tabId)
+	}
+
+	return map[string]interface{}{
+		"tabId":          tab.ID,
+		"status":         tab.Status,
+		"errorMessage":   tab.ErrorMessage,
+		"title":          tab.Title,
+		"connectionType": tab.ConnectionType,
+	}, nil
+}
+
+// ReconnectTab attempts to reconnect a failed SSH tab
+func (a *App) ReconnectTab(tabId string) error {
+	a.mutex.RLock()
+	tab, exists := a.tabs[tabId]
+	a.mutex.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("tab %s not found", tabId)
+	}
+
+	if tab.ConnectionType != "ssh" {
+		return fmt.Errorf("tab %s is not an SSH connection", tabId)
+	}
+
+	if tab.Status == "connecting" || tab.Status == "connected" {
+		return fmt.Errorf("tab %s is already connected or connecting", tabId)
+	}
+
+	// Clean up any existing SSH session
+	a.mutex.RLock()
+	if existingSession, exists := a.sshSessions[tab.SessionID]; exists {
+		a.mutex.RUnlock()
+		a.CloseSSHSession(existingSession)
+		a.mutex.Lock()
+		delete(a.sshSessions, tab.SessionID)
+		a.mutex.Unlock()
+	} else {
+		a.mutex.RUnlock()
+	}
+
+	// Reset tab status and attempt reconnection
+	a.mutex.Lock()
+	tab.Status = "connecting"
+	tab.ErrorMessage = ""
+	a.mutex.Unlock()
+
+	// Emit reconnection status
+	if a.ctx != nil {
+		wailsRuntime.EventsEmit(a.ctx, "tab-status-update", map[string]interface{}{
+			"tabId":  tabId,
+			"status": "connecting",
+		})
+
+		// Send reconnecting message with visual formatting
+		reconnectMsg := fmt.Sprintf("\r\n\033[36m╭─ SSH Reconnection\033[0m\r\n\033[36m│\033[0m Host: \033[33m%s:%d\033[0m\r\n\033[36m│\033[0m User: \033[33m%s\033[0m\r\n\033[36m│\033[0m \033[33m⟳ Attempting reconnection...\033[0m\r\n\033[36m╰─\033[0m\r\n",
+			tab.SSHConfig.Host, tab.SSHConfig.Port, tab.SSHConfig.Username)
+		wailsRuntime.EventsEmit(a.ctx, "terminal-output", map[string]interface{}{
+			"sessionId": tab.SessionID,
+			"data":      reconnectMsg,
+		})
+
+		// Don't call startSSHConnectionAnimation to avoid duplicate banners
+	}
+
+	// Attempt to start SSH session again
+	return a.StartTabShell(tabId)
 }

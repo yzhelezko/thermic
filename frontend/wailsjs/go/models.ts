@@ -255,6 +255,8 @@ export namespace main {
 	    sshConfig?: SSHConfig;
 	    // Go type: time
 	    created: any;
+	    status: string;
+	    errorMessage?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Tab(source);
@@ -270,6 +272,8 @@ export namespace main {
 	        this.connectionType = source["connectionType"];
 	        this.sshConfig = this.convertValues(source["sshConfig"], SSHConfig);
 	        this.created = this.convertValues(source["created"], null);
+	        this.status = source["status"];
+	        this.errorMessage = source["errorMessage"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
