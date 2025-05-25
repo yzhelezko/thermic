@@ -48,6 +48,8 @@ type Tab struct {
 	ConnectionType string     `json:"connectionType"` // "local" or "ssh"
 	SSHConfig      *SSHConfig `json:"sshConfig,omitempty"`
 	Created        time.Time  `json:"created"`
+	Status         string     `json:"status"`                 // "connecting", "connected", "failed", "disconnected"
+	ErrorMessage   string     `json:"errorMessage,omitempty"` // Store error details for failed connections
 }
 
 // SSHConfig represents SSH connection configuration

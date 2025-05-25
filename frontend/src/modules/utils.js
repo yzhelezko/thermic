@@ -53,8 +53,8 @@ export const DEFAULT_TERMINAL_OPTIONS = {
     fontFamily: 'Consolas, Monaco, "Lucida Console", monospace',
     allowTransparency: false,
     rightClickSelectsWord: true,
-    cols: 80,
-    rows: 24,
+    cols: 120,
+    rows: 30,
     // Scrolling configuration
     scrollback: 10000,           // Keep 10,000 lines of scrollback
     fastScrollModifier: 'alt',   // Use Alt key for fast scrolling

@@ -31,13 +31,19 @@
     height: 32px;
     min-width: 120px;
     max-width: 200px;
-    padding: 0 12px;
     border-right: 1px solid var(--border-color);
     background: var(--bg-tertiary);
     color: var(--text-secondary);
     cursor: pointer;
     transition: background-color 0.15s ease;
     position: relative;
+}
+
+.tab-content {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 0 12px;
 }
 
 .tab.active {
@@ -73,6 +79,59 @@
     padding-right: 0;
 }
 
+/* Status indicator */
+.tab-status-indicator {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-left: 4px;
+    margin-right: 4px;
+    flex-shrink: 0;
+    background: transparent;
+    transition: background-color 0.2s ease;
+}
+
+/* Status-based styling */
+.tab.connecting .tab-status-indicator {
+    background: var(--warning-color);
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+.tab.connected .tab-status-indicator {
+    background: var(--success-color);
+}
+
+.tab.failed .tab-status-indicator {
+    background: var(--error-color);
+    animation: blink 1s ease-in-out infinite;
+}
+
+.tab.disconnected .tab-status-indicator {
+    background: var(--text-tertiary);
+}
+
+/* Reconnect button */
+.tab-reconnect {
+    width: 16px;
+    height: 16px;
+    margin-left: 4px;
+    border-radius: 3px;
+    background: none;
+    border: none;
+    color: var(--warning-color);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.tab-reconnect:hover {
+    background: var(--warning-color);
+    color: white;
+}
+
 .tab-close {
     width: 16px;
     height: 16px;
@@ -97,6 +156,23 @@
 .tab-close:hover {
     background: var(--error-color);
     color: white;
+}
+
+/* Status-based tab styling */
+.tab.connecting {
+    border-left: 3px solid var(--warning-color);
+}
+
+.tab.connected {
+    border-left: 3px solid var(--success-color);
+}
+
+.tab.failed {
+    border-left: 3px solid var(--error-color);
+}
+
+.tab.disconnected {
+    border-left: 3px solid var(--text-tertiary);
 }
 
 .tabs-controls {
@@ -160,6 +236,14 @@
     color: var(--warning-color);
 }
 
+/* Override SSH styling when status is available */
+.tab.ssh-tab.connecting,
+.tab.ssh-tab.connected,
+.tab.ssh-tab.failed,
+.tab.ssh-tab.disconnected {
+    /* Status-based border will override SSH border */
+}
+
 /* Closing tab styling */
 .tab.closing {
     opacity: 0.6;
@@ -173,7 +257,18 @@
     animation: spin 1s linear infinite;
 }
 
+/* Animations */
 @keyframes spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.3; }
 } 

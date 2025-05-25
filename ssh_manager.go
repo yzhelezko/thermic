@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -29,32 +30,47 @@ type SSHSession struct {
 
 // CreateSSHSession creates a new SSH connection and session
 func (a *App) CreateSSHSession(sessionID string, config *SSHConfig) (*SSHSession, error) {
+	// Validate configuration
+	if config.Host == "" {
+		return nil, fmt.Errorf("SSH host cannot be empty")
+	}
+	if config.Username == "" {
+		return nil, fmt.Errorf("SSH username cannot be empty")
+	}
+	if config.Port <= 0 || config.Port > 65535 {
+		return nil, fmt.Errorf("SSH port must be between 1 and 65535")
+	}
+
 	// Create SSH client configuration
 	sshConfig := &ssh.ClientConfig{
 		User:            config.Username,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // For now, accept all host keys
-		Timeout:         30 * time.Second,
+		Timeout:         10 * time.Second,
 	}
 
 	// Add authentication methods
+	authMethodsAdded := 0
 	if config.Password != "" {
 		sshConfig.Auth = append(sshConfig.Auth, ssh.Password(config.Password))
+		authMethodsAdded++
 	}
 
 	if config.KeyPath != "" {
 		key, err := a.loadSSHKey(config.KeyPath)
 		if err != nil {
-			fmt.Printf("Warning: Failed to load SSH key from %s: %v\n", config.KeyPath, err)
+			return nil, fmt.Errorf("failed to load SSH key from %s: %w", config.KeyPath, err)
 		} else {
 			sshConfig.Auth = append(sshConfig.Auth, ssh.PublicKeys(key))
+			authMethodsAdded++
 		}
 	}
 
 	// If no auth methods, try ssh-agent or default keys
-	if len(sshConfig.Auth) == 0 {
+	if authMethodsAdded == 0 {
 		// Try to add default authentication methods
 		if agentAuth, err := a.getSSHAgentAuth(); err == nil {
 			sshConfig.Auth = append(sshConfig.Auth, agentAuth)
+			authMethodsAdded++
 		}
 
 		// Try default key locations
@@ -67,16 +83,45 @@ func (a *App) CreateSSHSession(sessionID string, config *SSHConfig) (*SSHSession
 		for _, keyPath := range defaultKeys {
 			if key, err := a.loadSSHKey(keyPath); err == nil {
 				sshConfig.Auth = append(sshConfig.Auth, ssh.PublicKeys(key))
+				authMethodsAdded++
 				break
 			}
 		}
 	}
 
-	// Connect to SSH server
+	// If still no auth methods available, return specific error
+	if authMethodsAdded == 0 {
+		return nil, fmt.Errorf("no authentication methods available: please provide password or SSH key")
+	}
+
+	// Connect to SSH server with more specific error handling
 	address := fmt.Sprintf("%s:%d", config.Host, config.Port)
 	client, err := ssh.Dial("tcp", address, sshConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to SSH server: %w", err)
+		// Provide more specific error messages based on error type
+		if netErr, ok := err.(net.Error); ok {
+			if netErr.Timeout() {
+				return nil, fmt.Errorf("connection timeout: could not reach %s (check host and port)", address)
+			}
+		}
+
+		// Check for common SSH errors
+		errStr := err.Error()
+		if strings.Contains(errStr, "connection refused") {
+			return nil, fmt.Errorf("connection refused: SSH server may not be running on %s", address)
+		}
+		if strings.Contains(errStr, "no route to host") {
+			return nil, fmt.Errorf("no route to host: %s is not reachable", config.Host)
+		}
+		if strings.Contains(errStr, "authentication failed") || strings.Contains(errStr, "unable to authenticate") {
+			return nil, fmt.Errorf("authentication failed: invalid username/password or SSH key")
+		}
+		if strings.Contains(errStr, "host key verification failed") {
+			return nil, fmt.Errorf("host key verification failed: host key has changed or is unknown")
+		}
+
+		// Generic connection error
+		return nil, fmt.Errorf("failed to connect to %s: %v", address, err)
 	}
 
 	// Create SSH session
@@ -225,13 +270,70 @@ func (a *App) waitForSSHSessionEnd(sshSession *SSHSession) {
 	}()
 
 	err := sshSession.session.Wait()
+
+	// Find the tab associated with this session to update status
+	a.mutex.RLock()
+	var associatedTab *Tab
+	for _, tab := range a.tabs {
+		if tab.SessionID == sshSession.sessionID {
+			associatedTab = tab
+			break
+		}
+	}
+	a.mutex.RUnlock()
+
 	if err != nil && !sshSession.cleaning {
 		fmt.Printf("SSH session ended with error: %v\n", err)
+
+		// Update tab status to disconnected with error
+		if associatedTab != nil {
+			a.mutex.Lock()
+			associatedTab.Status = "failed"
+			associatedTab.ErrorMessage = fmt.Sprintf("SSH connection lost: %v", err)
+			a.mutex.Unlock()
+
+			// Emit tab status update
+			if a.ctx != nil {
+				wailsRuntime.EventsEmit(a.ctx, "tab-status-update", map[string]interface{}{
+					"tabId":        associatedTab.ID,
+					"status":       "failed",
+					"errorMessage": associatedTab.ErrorMessage,
+				})
+			}
+		}
+
 		if a.ctx != nil {
-			errorMsg := fmt.Sprintf("\r\n\x1b[31mSSH connection closed: %v\x1b[0m\r\n", err)
+			// Send formatted disconnect error message
+			disconnectError := fmt.Sprintf("\r\n\033[31m╭─ Connection Lost\033[0m\r\n\033[31m│\033[0m %v\r\n\033[31m╰─\033[0m \033[33mUse the reconnect button to try again\033[0m\r\n\r\n", err)
 			wailsRuntime.EventsEmit(a.ctx, "terminal-output", map[string]interface{}{
 				"sessionId": sshSession.sessionID,
-				"data":      errorMsg,
+				"data":      disconnectError,
+			})
+		}
+	} else if !sshSession.cleaning {
+		// Clean disconnection
+		if associatedTab != nil {
+			a.mutex.Lock()
+			associatedTab.Status = "disconnected"
+			associatedTab.ErrorMessage = ""
+			a.mutex.Unlock()
+
+			// Emit tab status update
+			if a.ctx != nil {
+				wailsRuntime.EventsEmit(a.ctx, "tab-status-update", map[string]interface{}{
+					"tabId":        associatedTab.ID,
+					"status":       "disconnected",
+					"errorMessage": "",
+				})
+			}
+		}
+
+		if a.ctx != nil {
+			// Send formatted clean disconnect message
+			disconnectMsg := "\r\n\033[36m╭─ Connection Closed\033[0m\r\n\033[36m│\033[0m SSH session ended normally\r\n\033[36m╰─\033[0m \033[32m✓ Clean disconnect\033[0m\r\n\r\n"
+			wailsRuntime.EventsEmit(a.ctx, "terminal-output", map[string]interface{}{
+				"sessionId": sshSession.sessionID,
+				"data":      disconnectMsg,
 			})
 		}
 	}

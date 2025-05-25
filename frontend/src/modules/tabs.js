@@ -132,6 +132,9 @@ export class TabsManager {
                 // Add visual feedback while closing
                 tab.classList.add('closing');
                 this.closeTab(tabId);
+            } else if (e.target.closest('.tab-reconnect')) {
+                e.stopPropagation();
+                this.reconnectTab(tabId);
             } else {
                 this.switchToTab(tabId);
             }
@@ -145,6 +148,119 @@ export class TabsManager {
                 this.showTabContextMenu(tab.dataset.tabId, e.clientX, e.clientY);
             }
         });
+
+        // Tab status updates are now handled by the global listener in terminal manager
+    }
+
+
+
+    handleTabStatusUpdate(data) {
+        const { tabId, status, errorMessage } = data;
+        const tab = this.tabs.get(tabId);
+        
+        if (!tab) {
+            console.warn('Received status update for unknown tab:', tabId);
+            return;
+        }
+
+        // Update tab data
+        tab.status = status;
+        tab.errorMessage = errorMessage || '';
+
+        // Update UI
+        this.updateTabStatusDisplay(tabId);
+        
+        console.log(`Tab ${tabId} status updated to: ${status}`, errorMessage ? `Error: ${errorMessage}` : '');
+    }
+
+    updateTabStatusDisplay(tabId) {
+        const tabElement = document.querySelector(`[data-tab-id="${tabId}"]`);
+        if (!tabElement) return;
+
+        const tab = this.tabs.get(tabId);
+        if (!tab) return;
+
+        // Only show status for SSH connections, not local shells
+        if (tab.connectionType === 'ssh') {
+            // Remove all status classes
+            tabElement.classList.remove('connecting', 'connected', 'failed', 'disconnected');
+            
+            // Add current status class
+            if (tab.status) {
+                tabElement.classList.add(tab.status);
+            }
+
+            // Update status indicator
+            let statusIndicator = tabElement.querySelector('.tab-status-indicator');
+            if (!statusIndicator) {
+                statusIndicator = document.createElement('div');
+                statusIndicator.className = 'tab-status-indicator';
+                tabElement.querySelector('.tab-content').appendChild(statusIndicator);
+            }
+
+            // Update reconnect button visibility
+            let reconnectBtn = tabElement.querySelector('.tab-reconnect');
+            if (tab.status === 'failed') {
+                if (!reconnectBtn) {
+                    reconnectBtn = document.createElement('button');
+                    reconnectBtn.className = 'tab-reconnect';
+                    reconnectBtn.title = 'Reconnect';
+                    reconnectBtn.innerHTML = `
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="23 4 23 10 17 10"></polyline>
+                            <polyline points="1 20 1 14 7 14"></polyline>
+                            <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                        </svg>
+                    `;
+                    
+                    // Insert before close button to maintain proper order
+                    const tabContent = tabElement.querySelector('.tab-content');
+                    const closeBtn = tabContent.querySelector('.tab-close');
+                    if (closeBtn) {
+                        tabContent.insertBefore(reconnectBtn, closeBtn);
+                    } else {
+                        tabContent.appendChild(reconnectBtn);
+                    }
+                }
+            } else if (reconnectBtn) {
+                reconnectBtn.remove();
+            }
+
+            // Update title to show error on hover if failed
+            if (tab.status === 'failed' && tab.errorMessage) {
+                tabElement.title = `${tab.title} - Error: ${tab.errorMessage}`;
+            } else {
+                tabElement.title = tab.title;
+            }
+        } else {
+            // For local shells, remove any status indicators and reconnect buttons
+            tabElement.classList.remove('connecting', 'connected', 'failed', 'disconnected');
+            
+            const statusIndicator = tabElement.querySelector('.tab-status-indicator');
+            if (statusIndicator) statusIndicator.remove();
+            
+            const reconnectBtn = tabElement.querySelector('.tab-reconnect');
+            if (reconnectBtn) reconnectBtn.remove();
+            
+            // Just set the basic title
+            tabElement.title = tab.title;
+        }
+    }
+
+    async reconnectTab(tabId) {
+        try {
+            console.log(`Attempting to reconnect tab: ${tabId}`);
+            updateStatus('Reconnecting...');
+            
+            // Call backend reconnect function
+            const { ReconnectTab } = await import('../../wailsjs/go/main/App');
+            await ReconnectTab(tabId);
+            
+            updateStatus('Reconnection initiated');
+        } catch (error) {
+            console.error('Failed to reconnect tab:', error);
+            updateStatus(`Reconnection failed: ${error.message}`);
+        }
     }
 
     async createNewTab(shell = null, sshConfig = null) {
@@ -189,12 +305,11 @@ export class TabsManager {
             // Create terminal session using backend's session ID
             this.terminalManager.createTerminalSession(tab.sessionId);
 
-            // Update UI
-            this.renderTabs();
-
-            // Start shell first (creates backend shell process), then switch to make it visible
-            await this.startTabShell(tab.id);
+            // Switch to the new tab immediately so user can see connection progress
             await this.switchToTab(tab.id);
+
+            // Start shell process (this will show connecting status and progress)
+            await this.startTabShell(tab.id);
 
             updateStatus(`New tab created: ${tab.title}`);
             console.log(`Tab ${tab.id} now has its own isolated shell process`);
@@ -216,13 +331,14 @@ export class TabsManager {
             
             console.log(`Starting backend shell for tab: ${tabId}, session: ${tab.sessionId}`);
             
-            // Start the backend shell process for this tab
-            await StartTabShell(tabId);
-            console.log(`Backend shell started for tab: ${tabId}`);
-            
-            // Connect the frontend terminal to the backend shell session
+            // IMPORTANT: Connect the frontend terminal BEFORE starting the backend shell
+            // This ensures the terminal can receive error messages immediately during connection
             this.terminalManager.connectToSession(tab.sessionId);
             console.log(`Frontend terminal connected to session: ${tab.sessionId}`);
+            
+            // Now start the backend shell process - any errors will be routed to the connected terminal
+            await StartTabShell(tabId);
+            console.log(`Backend shell started for tab: ${tabId}`);
             
         } catch (error) {
             console.error(`Failed to start shell for tab ${tabId}:`, error);
@@ -336,8 +452,6 @@ export class TabsManager {
         }
     }
 
-
-
     renderTabs() {
         const tabsList = document.getElementById('tabs-list');
         if (!tabsList) return;
@@ -359,6 +473,11 @@ export class TabsManager {
         tabEl.className = `tab ${isActive ? 'active' : ''} ${isSSH ? 'ssh-tab' : ''}`;
         tabEl.dataset.tabId = tab.id;
 
+        // Add status class only for SSH connections
+        if (tab.status && isSSH) {
+            tabEl.classList.add(tab.status);
+        }
+
         // Determine icon
         const iconSvg = isSSH ? 
             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"></path><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H5a2 2 0 0 0-2-2z"></path></svg>' :
@@ -378,12 +497,39 @@ export class TabsManager {
             </button>
         ` : '';
 
+        // Show reconnect button for failed SSH connections
+        const reconnectButtonHtml = (tab.status === 'failed' && isSSH) ? `
+            <button class="tab-reconnect" title="Reconnect">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <polyline points="1 20 1 14 7 14"></polyline>
+                    <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+            </button>
+        ` : '';
+
+        // Status indicator only for SSH connections
+        const statusIndicatorHtml = isSSH ? '<div class="tab-status-indicator"></div>' : '';
+
+        // Update tooltip to include error if failed
+        let tooltipText = tab.title || 'Untitled';
+        if (tab.status === 'failed' && tab.errorMessage) {
+            tooltipText += ` - Error: ${tab.errorMessage}`;
+        }
+
         tabEl.innerHTML = `
-            <div class="tab-icon">${iconSvg}</div>
-            <div class="tab-title">${displayTitle}</div>
-            ${closeButtonHtml}
-            ${needsTooltip ? `<div class="tab-tooltip">${tab.title || 'Untitled'}</div>` : ''}
+            <div class="tab-content">
+                <div class="tab-icon">${iconSvg}</div>
+                <div class="tab-title">${displayTitle}</div>
+                ${statusIndicatorHtml}
+                ${reconnectButtonHtml}
+                ${closeButtonHtml}
+            </div>
+            ${needsTooltip || (tab.status === 'failed' && tab.errorMessage && isSSH) ? `<div class="tab-tooltip">${tooltipText}</div>` : ''}
         `;
+
+        // Set tooltip on the element
+        tabEl.title = tooltipText;
 
         return tabEl;
     }

@@ -36,8 +36,8 @@ func (a *App) StartShell(shell string, sessionId string) error {
 		return fmt.Errorf("failed to create pty: %v", err)
 	}
 
-	// Set initial terminal size (VS Code default)
-	cols, rows := 80, 24
+	// Set initial terminal size (larger to prevent text wrapping)
+	cols, rows := 120, 30
 	if err := ptty.Resize(cols, rows); err != nil {
 		// Not critical, continue
 	}
