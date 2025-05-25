@@ -16,7 +16,7 @@ if [ "$DEMO_MODE" = "--demo" ]; then
   echo "Running in DEMO mode with example commit data"
   
   # Create demo data showing how bullet points would be extracted
-  cat << 'EOF' > /tmp/demo_commits.txt
+  cat << 'EOF' > demo_commits.txt
 feat: Add SSH connection management|- Add auto-reconnect functionality for dropped connections
 - Implement connection status monitoring 
 - Add visual indicators for connection states|a1b2c3d|John Doe
@@ -29,7 +29,7 @@ improve: Enhance UI and performance|- Optimize terminal rendering performance
 Other commit without bullets|No bullet points here, just regular text|d4e5f6g|Alice Brown
 EOF
 
-  ALL_COMMITS=$(cat /tmp/demo_commits.txt)
+  ALL_COMMITS=$(cat demo_commits.txt)
   COMMIT_COUNT=4
   PREVIOUS_TAG="v0.1.0"
   
@@ -77,27 +77,30 @@ while IFS='|' read -r subject body hash author; do
     commit_category="OTHER"
   fi
   
-  # Extract bullet points from commit body
-  bullet_points=$(echo "$body" | grep -E "^\s*-\s+" | sed 's/^\s*-\s*/- /' | sed 's/$//')
+  # Extract bullet points from commit body (clean up whitespace and encoding)  
+  bullet_points=$(echo "$body" | grep -E "^\s*[-•]\s+" | sed 's/^\s*[-•]\s*//' | sed 's/[[:space:]]*$//' | tr -d '\r')
   
   if [ -n "$bullet_points" ]; then
     # Add bullet points with commit reference
     while IFS= read -r bullet; do
-      if [ -n "$bullet" ]; then
+      if [ -n "$bullet" ] && [ "$bullet" != "-" ]; then
+        # Clean the bullet point text
+        clean_bullet="- $(echo "$bullet" | sed 's/[[:space:]]*$//' | tr -d '\r')"
+        
         # Categorize bullet points based on keywords
-        if [[ $bullet =~ [Ff]eat|[Aa]dd|[Nn]ew|[Ii]mplement ]]; then
-          FEATURES="$FEATURES$bullet ([$hash])\n"
-        elif [[ $bullet =~ [Ff]ix|[Bb]ug|[Rr]epair|[Cc]orrect ]]; then
-          FIXES="$FIXES$bullet ([$hash])\n"
-        elif [[ $bullet =~ [Ii]mprove|[Ee]nhance|[Oo]ptimize|[Uu]pdate|[Rr]efactor ]]; then
-          IMPROVEMENTS="$IMPROVEMENTS$bullet ([$hash])\n"
+        if [[ $clean_bullet =~ [Ff]eat|[Aa]dd|[Nn]ew|[Ii]mplement ]]; then
+          FEATURES="${FEATURES}${clean_bullet}\n"
+        elif [[ $clean_bullet =~ [Ff]ix|[Bb]ug|[Rr]epair|[Cc]orrect ]]; then
+          FIXES="${FIXES}${clean_bullet}\n"
+        elif [[ $clean_bullet =~ [Ii]mprove|[Ee]nhance|[Oo]ptimize|[Uu]pdate|[Rr]efactor ]]; then
+          IMPROVEMENTS="${IMPROVEMENTS}${clean_bullet}\n"
         else
           # Use the commit's category for uncategorized bullet points
           case $commit_category in
-            "FEATURES") FEATURES="$FEATURES$bullet ([$hash])\n" ;;
-            "FIXES") FIXES="$FIXES$bullet ([$hash])\n" ;;
-            "IMPROVEMENTS") IMPROVEMENTS="$IMPROVEMENTS$bullet ([$hash])\n" ;;
-            *) OTHER="$OTHER$bullet ([$hash])\n" ;;
+            "FEATURES") FEATURES="${FEATURES}${clean_bullet}\n" ;;
+            "FIXES") FIXES="${FIXES}${clean_bullet}\n" ;;
+            "IMPROVEMENTS") IMPROVEMENTS="${IMPROVEMENTS}${clean_bullet}\n" ;;
+            *) OTHER="${OTHER}${clean_bullet}\n" ;;
           esac
         fi
       fi
@@ -105,10 +108,10 @@ while IFS='|' read -r subject body hash author; do
   else
     # No bullet points, add the main subject
     case $commit_category in
-      "FEATURES") FEATURES="$FEATURES- $subject ([$hash])\n" ;;
-      "FIXES") FIXES="$FIXES- $subject ([$hash])\n" ;;
-      "IMPROVEMENTS") IMPROVEMENTS="$IMPROVEMENTS- $subject ([$hash])\n" ;;
-      *) OTHER="$OTHER- $subject ([$hash])\n" ;;
+      "FEATURES") FEATURES="${FEATURES}- ${subject}\n" ;;
+      "FIXES") FIXES="${FIXES}- ${subject}\n" ;;
+      "IMPROVEMENTS") IMPROVEMENTS="${IMPROVEMENTS}- ${subject}\n" ;;
+      *) OTHER="${OTHER}- ${subject}\n" ;;
     esac
   fi
 done <<< "$ALL_COMMITS"
@@ -230,4 +233,4 @@ echo ""
 echo "Test release notes saved to: test_release_notes.md"
 
 # Clean up demo file
-[ "$DEMO_MODE" = "--demo" ] && rm -f /tmp/demo_commits.txt 
+[ "$DEMO_MODE" = "--demo" ] && rm -f demo_commits.txt 
