@@ -86,13 +86,26 @@ jobs:
       - name: Verify Wails installation
         run: wails doctor
 
+      - name: Get version info
+        id: version
+        shell: bash
+        run: |
+          VERSION="dev-$(git rev-parse --short HEAD)"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "git_commit=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          echo "build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
+
       - name: Build application (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: wails build -clean -tags webkit2_41
+        run: |
+          wails build -clean -tags webkit2_41 \
+            -ldflags "-X main.Version=${{ steps.version.outputs.version }} -X main.GitCommit=${{ steps.version.outputs.git_commit }} -X main.BuildDate=${{ steps.version.outputs.build_date }}"
 
       - name: Build application (Windows/macOS)
         if: matrix.os != 'ubuntu-latest'
-        run: wails build -clean
+        run: |
+          wails build -clean \
+            -ldflags "-X main.Version=${{ steps.version.outputs.version }} -X main.GitCommit=${{ steps.version.outputs.git_commit }} -X main.BuildDate=${{ steps.version.outputs.build_date }}"
 
       - name: Test build artifacts
         shell: bash
