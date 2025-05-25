@@ -11,10 +11,93 @@ export class ContextMenuManager {
         // Add tab context properties
         this.currentTab = null;
         this.currentTabData = null;
+        // Context menu settings
+        this.selectToCopyEnabled = false;
     }
 
-    init() {
+    async init() {
+        await this.loadContextMenuSettings();
         this.bindEvents();
+    }
+
+    async loadContextMenuSettings() {
+        try {
+            this.selectToCopyEnabled = await window.go.main.App.GetSelectToCopyEnabled();
+        } catch (error) {
+            console.error('Error loading context menu settings:', error);
+            // Use defaults if loading fails
+            this.selectToCopyEnabled = false;
+        }
+    }
+
+    async updateContextMenuSettings() {
+        await this.loadContextMenuSettings();
+        // Rebind events if select-to-copy-paste setting changed
+        this.bindTerminalEvents();
+    }
+
+    bindTerminalEvents() {
+        // Remove existing terminal event listeners by storing references and removing them
+        const terminalContainer = document.querySelector('.terminal-container');
+        if (!terminalContainer) return;
+
+        // Remove existing listeners if they exist
+        if (this.terminalMouseUpHandler) {
+            terminalContainer.removeEventListener('mouseup', this.terminalMouseUpHandler);
+        }
+        if (this.terminalContextMenuHandler) {
+            terminalContainer.removeEventListener('contextmenu', this.terminalContextMenuHandler);
+        }
+
+        if (this.selectToCopyEnabled) {
+            // Select-to-copy mode: auto-copy on selection, right-click to paste
+            this.terminalMouseUpHandler = async (e) => {
+                // Only handle if we're not in the middle of dragging/selecting
+                if (e.button !== 0) return; // Only handle left mouse button release
+                
+                // Small delay to ensure selection is complete
+                setTimeout(async () => {
+                    if (this.terminalManager.terminal && this.terminalManager.terminal.hasSelection()) {
+                        const selectedText = this.terminalManager.terminal.getSelection();
+                        if (selectedText && selectedText.trim().length > 0) {
+                            try {
+                                await navigator.clipboard.writeText(selectedText);
+                                console.log('Auto-copied:', selectedText.substring(0, 50) + '...');
+                            } catch (error) {
+                                console.error('Failed to copy selected text:', error);
+                            }
+                        }
+                    }
+                }, 100);
+            };
+
+            this.terminalContextMenuHandler = async (e) => {
+                e.preventDefault();
+                // Right-click to paste - only if connected and has session
+                if (this.terminalManager.isConnected && this.terminalManager.sessionId) {
+                    try {
+                        const text = await navigator.clipboard.readText();
+                        if (text && text.trim()) {
+                            await WriteToShell(this.terminalManager.sessionId, text);
+                            console.log('Pasted:', text.substring(0, 50) + '...');
+                        }
+                    } catch (error) {
+                        console.error('Failed to paste text:', error);
+                    }
+                }
+            };
+
+            terminalContainer.addEventListener('mouseup', this.terminalMouseUpHandler);
+            terminalContainer.addEventListener('contextmenu', this.terminalContextMenuHandler);
+        } else {
+            // Standard context menu mode
+            this.terminalContextMenuHandler = (e) => {
+                e.preventDefault();
+                this.showTerminalContextMenu(e);
+            };
+
+            terminalContainer.addEventListener('contextmenu', this.terminalContextMenuHandler);
+        }
     }
 
     bindEvents() {
@@ -30,14 +113,8 @@ export class ContextMenuManager {
             }
         });
 
-        // Terminal context menu
-        const terminalContainer = document.querySelector('.terminal-container');
-        if (terminalContainer) {
-            terminalContainer.addEventListener('contextmenu', (e) => {
-                e.preventDefault();
-                this.showTerminalContextMenu(e);
-            });
-        }
+        // Bind terminal events
+        this.bindTerminalEvents();
 
         // Sidebar context menu
         const sidebar = document.querySelector('.sidebar');
