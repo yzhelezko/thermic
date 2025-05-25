@@ -26,7 +26,7 @@ class ThermicTerminal {
         this.settingsManager = new SettingsManager();
         this.sidebarManager = new SidebarManager();
         this.statusManager = new StatusManager();
-        this.versionManager = new VersionManager();
+        this.versionManager = null; // Initialize later after DOM is ready
         
         this.init();
         this.setupCleanup();
@@ -119,6 +119,10 @@ class ThermicTerminal {
             // Initialize window controls (Wails handles dragging natively via CSS)
             console.log('Initializing window controls manager...');
             this.windowControlsManager.init();
+            
+            // Initialize version manager AFTER DOM is fully ready
+            console.log('Initializing version manager...');
+            this.versionManager = new VersionManager();
             
             console.log('Component initialization completed successfully');
         } catch (error) {
