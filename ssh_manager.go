@@ -26,10 +26,19 @@ type SSHSession struct {
 	rows      int
 	cleaning  bool
 	sessionID string
+	// Add connection monitoring fields
+	lastActivity time.Time
+	isHanging    bool
+	forceClose   chan bool
 }
 
 // CreateSSHSession creates a new SSH connection and session
 func (a *App) CreateSSHSession(sessionID string, config *SSHConfig) (*SSHSession, error) {
+	return a.CreateSSHSessionWithSize(sessionID, config, 80, 24)
+}
+
+// CreateSSHSessionWithSize creates a new SSH connection and session with specified terminal size
+func (a *App) CreateSSHSessionWithSize(sessionID string, config *SSHConfig, cols, rows int) (*SSHSession, error) {
 	// Validate configuration
 	if config.Host == "" {
 		return nil, fmt.Errorf("SSH host cannot be empty")
@@ -39,6 +48,11 @@ func (a *App) CreateSSHSession(sessionID string, config *SSHConfig) (*SSHSession
 	}
 	if config.Port <= 0 || config.Port > 65535 {
 		return nil, fmt.Errorf("SSH port must be between 1 and 65535")
+	}
+
+	// Validate terminal dimensions
+	if cols <= 0 || rows <= 0 {
+		cols, rows = 80, 24 // fallback to default
 	}
 
 	// Create SSH client configuration
@@ -162,10 +176,14 @@ func (a *App) CreateSSHSession(sessionID string, config *SSHConfig) (*SSHSession
 		stderr:    stderr,
 		done:      make(chan bool),
 		closed:    make(chan bool),
-		cols:      80,
-		rows:      24,
+		cols:      cols,
+		rows:      rows,
 		cleaning:  false,
 		sessionID: sessionID,
+		// Add connection monitoring fields
+		lastActivity: time.Now(),
+		isHanging:    false,
+		forceClose:   make(chan bool),
 	}
 
 	return sshSession, nil
@@ -209,20 +227,51 @@ func (a *App) handleSSHOutput(sshSession *SSHSession) {
 			break
 		}
 
+		// Check for force close signal
+		select {
+		case <-sshSession.forceClose:
+			fmt.Printf("SSH session %s force closed\n", sshSession.sessionID)
+			return
+		default:
+		}
+
+		// Set read timeout to detect hanging connections
+		if conn, ok := sshSession.client.Conn.(net.Conn); ok {
+			conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+		}
+
 		n, err := sshSession.stdout.Read(buffer)
 		if err != nil {
-			if err != io.EOF {
-				fmt.Printf("SSH stdout read error: %v\n", err)
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				// Check if session has been inactive too long
+				if time.Since(sshSession.lastActivity) > 60*time.Second {
+					fmt.Printf("SSH session %s appears to be hanging (no activity for %v)\n",
+						sshSession.sessionID, time.Since(sshSession.lastActivity))
+					sshSession.isHanging = true
+					a.handleHangingSession(sshSession)
+					return
+				}
+				continue // Continue reading after timeout
 			}
+			if err == io.EOF {
+				break
+			}
+			fmt.Printf("SSH stdout read error: %v\n", err)
 			break
 		}
 
-		if n > 0 && a.ctx != nil {
-			output := string(buffer[:n])
-			wailsRuntime.EventsEmit(a.ctx, "terminal-output", map[string]interface{}{
-				"sessionId": sshSession.sessionID,
-				"data":      output,
-			})
+		if n > 0 {
+			// Update activity timestamp
+			sshSession.lastActivity = time.Now()
+			sshSession.isHanging = false
+
+			if a.ctx != nil {
+				output := string(buffer[:n])
+				wailsRuntime.EventsEmit(a.ctx, "terminal-output", map[string]interface{}{
+					"sessionId": sshSession.sessionID,
+					"data":      output,
+				})
+			}
 		}
 	}
 }
@@ -301,15 +350,6 @@ func (a *App) waitForSSHSessionEnd(sshSession *SSHSession) {
 				})
 			}
 		}
-
-		if a.ctx != nil {
-			// Send formatted disconnect error message
-			disconnectError := fmt.Sprintf("\r\n\033[31m╭─ Connection Lost\033[0m\r\n\033[31m│\033[0m %v\r\n\033[31m╰─\033[0m \033[33mUse the reconnect button to try again\033[0m\r\n\r\n", err)
-			wailsRuntime.EventsEmit(a.ctx, "terminal-output", map[string]interface{}{
-				"sessionId": sshSession.sessionID,
-				"data":      disconnectError,
-			})
-		}
 	} else if !sshSession.cleaning {
 		// Clean disconnection
 		if associatedTab != nil {
@@ -326,15 +366,6 @@ func (a *App) waitForSSHSessionEnd(sshSession *SSHSession) {
 					"errorMessage": "",
 				})
 			}
-		}
-
-		if a.ctx != nil {
-			// Send formatted clean disconnect message
-			disconnectMsg := "\r\n\033[36m╭─ Connection Closed\033[0m\r\n\033[36m│\033[0m SSH session ended normally\r\n\033[36m╰─\033[0m \033[32m✓ Clean disconnect\033[0m\r\n\r\n"
-			wailsRuntime.EventsEmit(a.ctx, "terminal-output", map[string]interface{}{
-				"sessionId": sshSession.sessionID,
-				"data":      disconnectMsg,
-			})
 		}
 	}
 
@@ -418,4 +449,59 @@ func (a *App) getSSHAgentAuth() (ssh.AuthMethod, error) {
 	}
 
 	return ssh.PublicKeysCallback(agent.NewClient(sshAgent).Signers), nil
+}
+
+// handleHangingSession handles SSH sessions that appear to be hanging
+func (a *App) handleHangingSession(sshSession *SSHSession) {
+	if a.ctx == nil {
+		return
+	}
+
+	// Find the tab associated with this session
+	a.mutex.RLock()
+	var associatedTab *Tab
+	for _, tab := range a.tabs {
+		if tab.SessionID == sshSession.sessionID {
+			associatedTab = tab
+			break
+		}
+	}
+	a.mutex.RUnlock()
+
+	if associatedTab != nil {
+		// Update tab status to indicate hanging connection
+		a.mutex.Lock()
+		associatedTab.Status = "hanging"
+		associatedTab.ErrorMessage = "Connection appears to be hanging - no response from server"
+		a.mutex.Unlock()
+
+		// Emit tab status update
+		wailsRuntime.EventsEmit(a.ctx, "tab-status-update", map[string]interface{}{
+			"tabId":        associatedTab.ID,
+			"status":       "hanging",
+			"errorMessage": associatedTab.ErrorMessage,
+		})
+	}
+}
+
+// ForceDisconnectSSHSession forcefully disconnects a hanging SSH session
+func (a *App) ForceDisconnectSSHSession(sessionID string) error {
+	a.mutex.RLock()
+	sshSession, exists := a.sshSessions[sessionID]
+	a.mutex.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("SSH session %s not found", sessionID)
+	}
+
+	fmt.Printf("Force disconnecting SSH session: %s\n", sessionID)
+
+	// Signal force close to all handlers
+	select {
+	case sshSession.forceClose <- true:
+	default:
+	}
+
+	// Force close the session
+	return a.CloseSSHSession(sshSession)
 }

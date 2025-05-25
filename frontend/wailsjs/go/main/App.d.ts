@@ -26,6 +26,8 @@ export function CreateProfileFolderAPI(arg1:string,arg2:string,arg3:string):Prom
 
 export function CreateSSHSession(arg1:string,arg2:main.SSHConfig):Promise<main.SSHSession>;
 
+export function CreateSSHSessionWithSize(arg1:string,arg2:main.SSHConfig,arg3:number,arg4:number):Promise<main.SSHSession>;
+
 export function CreateTab(arg1:string,arg2:main.SSHConfig):Promise<main.Tab>;
 
 export function CreateTabFromProfile(arg1:string):Promise<main.Tab>;
@@ -43,6 +45,10 @@ export function DeleteProfileFolderWithContentsAPI(arg1:string):Promise<void>;
 export function DownloadAndInstallUpdate(arg1:string):Promise<void>;
 
 export function DuplicateProfile(arg1:string):Promise<main.Profile>;
+
+export function ForceDisconnectSSHSession(arg1:string):Promise<void>;
+
+export function ForceDisconnectTab(arg1:string):Promise<void>;
 
 export function GetActiveTab():Promise<main.Tab>;
 
@@ -139,6 +145,8 @@ export function StartSSHShell(arg1:main.SSHSession):Promise<void>;
 export function StartShell(arg1:string,arg2:string):Promise<void>;
 
 export function StartTabShell(arg1:string):Promise<void>;
+
+export function StartTabShellWithSize(arg1:string,arg2:number,arg3:number):Promise<void>;
 
 export function StopProfileWatcher():Promise<void>;
 

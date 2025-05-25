@@ -18,8 +18,12 @@ class ThermicTerminal {
     constructor() {
         // Initialize all managers
         this.domManager = new DOMManager();
-        this.terminalManager = new TerminalManager();
+        this.terminalManager = new TerminalManager(); // Initialize without tabs manager first
         this.tabsManager = new TabsManager(this.terminalManager);
+        
+        // Now update terminal manager with tabs manager reference
+        this.terminalManager.tabsManager = this.tabsManager;
+        
         this.contextMenuManager = new ContextMenuManager(this.terminalManager);
         this.windowControlsManager = new WindowControlsManager();
         this.uiManager = new UIManager();
@@ -103,6 +107,9 @@ class ThermicTerminal {
             
             // Expose tabs manager globally for event handling
             window.tabsManager = this.tabsManager;
+            
+            // Expose context menu manager globally for tab context menu integration
+            window.contextMenuManager = this.contextMenuManager;
 
             // Initialize terminal
             console.log('Initializing terminal manager...');

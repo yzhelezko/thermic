@@ -307,6 +307,35 @@ export function createSidebarContextMenuTemplate() {
     `;
 }
 
+export function createTabContextMenuTemplate() {
+    return `
+        <div class="context-menu" id="tab-context-menu">
+            <div class="context-menu-item" data-action="tab-reconnect">
+                <span class="context-menu-item-icon">🔄</span>
+                <span>Reconnect</span>
+            </div>
+            <div class="context-menu-item" data-action="tab-force-disconnect">
+                <span class="context-menu-item-icon">❌</span>
+                <span>Force Disconnect</span>
+            </div>
+            <div class="context-menu-separator"></div>
+            <div class="context-menu-item" data-action="tab-duplicate">
+                <span class="context-menu-item-icon">📑</span>
+                <span>Duplicate Tab</span>
+            </div>
+            <div class="context-menu-separator"></div>
+            <div class="context-menu-item" data-action="tab-close">
+                <span class="context-menu-item-icon">❌</span>
+                <span>Close Tab</span>
+            </div>
+            <div class="context-menu-item" data-action="tab-close-others">
+                <span class="context-menu-item-icon">🗂️</span>
+                <span>Close Other Tabs</span>
+            </div>
+        </div>
+    `;
+}
+
 // Profile Panel Templates
 export function createProfilePanelTemplate() {
     return `

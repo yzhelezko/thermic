@@ -7,8 +7,8 @@ import { EventsOn } from '../../wailsjs/runtime/runtime';
 import { THEMES, DEFAULT_TERMINAL_OPTIONS, generateSessionId, formatShellName, updateStatus } from './utils.js';
 
 export class TerminalManager {
-    constructor() {
-        this.terminals = new Map(); // sessionId -> { terminal, fitAddon, isConnected }
+    constructor(tabsManager = null) {
+        this.terminals = new Map(); // sessionId -> { terminal, fitAddon, container, isConnected }
         this.activeSessionId = null;
         this.currentShell = null;
         this.isDarkTheme = true;
@@ -23,6 +23,8 @@ export class TerminalManager {
         // Global terminal output handler - single listener for all sessions
         this.globalOutputListener = null;
         this.globalListenerSetup = false;
+        this.globalOutputListenerSetup = false;
+        this.tabsManager = tabsManager; // Reference to tabs manager for reconnection
     }
 
     setupGlobalOutputListener() {
@@ -137,6 +139,16 @@ export class TerminalManager {
         terminal.onData((data) => {
             console.log(`Terminal input received for session ${sessionId}:`, data.charCodeAt(0));
             const terminalSession = this.terminals.get(sessionId);
+            
+            // Check for Enter key (char code 13) and if we should trigger reconnection
+            if (data.charCodeAt(0) === 13 && this.tabsManager) {
+                const shouldReconnect = this.checkForReconnection(sessionId);
+                if (shouldReconnect) {
+                    console.log(`Enter key pressed - triggering reconnection for session ${sessionId}`);
+                    return; // Don't send Enter to shell, just trigger reconnection
+                }
+            }
+            
             if (terminalSession && terminalSession.isConnected) {
                 console.log(`Sending input to shell for session ${sessionId}`);
                 WriteToShell(sessionId, data).catch(error => {
@@ -677,5 +689,26 @@ export class TerminalManager {
         for (const [sessionId, terminalSession] of this.terminals) {
             this.disconnectSession(sessionId);
         }
+    }
+
+    checkForReconnection(sessionId) {
+        // Find the tab associated with this session
+        for (const [tabId, tab] of this.tabsManager.tabs) {
+            if (tab.sessionId === sessionId) {
+                // Check if it's an SSH tab that is disconnected/failed/hanging
+                const isSSH = tab.connectionType === 'ssh';
+                const needsReconnection = tab.status === 'failed' || tab.status === 'disconnected' || tab.status === 'hanging';
+                
+                if (isSSH && needsReconnection) {
+                    // Trigger reconnection
+                    this.tabsManager.reconnectTab(tabId).catch(error => {
+                        console.error('Failed to reconnect tab via Enter key:', error);
+                    });
+                    return true;
+                }
+                break;
+            }
+        }
+        return false;
     }
 } 

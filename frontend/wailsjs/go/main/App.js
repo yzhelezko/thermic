@@ -50,6 +50,10 @@ export function CreateSSHSession(arg1, arg2) {
   return window['go']['main']['App']['CreateSSHSession'](arg1, arg2);
 }
 
+export function CreateSSHSessionWithSize(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['CreateSSHSessionWithSize'](arg1, arg2, arg3, arg4);
+}
+
 export function CreateTab(arg1, arg2) {
   return window['go']['main']['App']['CreateTab'](arg1, arg2);
 }
@@ -84,6 +88,14 @@ export function DownloadAndInstallUpdate(arg1) {
 
 export function DuplicateProfile(arg1) {
   return window['go']['main']['App']['DuplicateProfile'](arg1);
+}
+
+export function ForceDisconnectSSHSession(arg1) {
+  return window['go']['main']['App']['ForceDisconnectSSHSession'](arg1);
+}
+
+export function ForceDisconnectTab(arg1) {
+  return window['go']['main']['App']['ForceDisconnectTab'](arg1);
 }
 
 export function GetActiveTab() {
@@ -276,6 +288,10 @@ export function StartShell(arg1, arg2) {
 
 export function StartTabShell(arg1) {
   return window['go']['main']['App']['StartTabShell'](arg1);
+}
+
+export function StartTabShellWithSize(arg1, arg2, arg3) {
+  return window['go']['main']['App']['StartTabShellWithSize'](arg1, arg2, arg3);
 }
 
 export function StopProfileWatcher() {
