@@ -1,5 +1,5 @@
 // Tabs management module
-import { CreateTab, GetTabs, SetActiveTab, CloseTab, StartTabShell, GetAvailableShellsFormatted } from '../../wailsjs/go/main/App';
+import { CreateTab, GetTabs, SetActiveTab, CloseTab, StartTabShell, GetAvailableShellsFormatted, StartTabShellWithSize, ResizeShell, ForceDisconnectTab, ReconnectTab } from '../../wailsjs/go/main/App';
 import { generateSessionId, formatShellName, updateStatus } from './utils.js';
 
 export class TabsManager {
@@ -21,7 +21,6 @@ export class TabsManager {
             this.initTabsUI();
             this.setupTabEvents();
             this.isInitialized = true;
-            console.log('TabsManager initialized successfully');
         } catch (error) {
             console.error('Failed to initialize TabsManager:', error);
             updateStatus('Tabs system initialization failed');
@@ -37,7 +36,6 @@ export class TabsManager {
 
         // Only initialize if not already done
         if (tabsContainer.querySelector('.tabs-bar')) {
-            console.log('Tabs UI already initialized');
             return;
         }
 
@@ -66,8 +64,6 @@ export class TabsManager {
 
         // Add some initial styling if not present
         this.addTabsCSS();
-        
-        console.log('Tabs UI initialized successfully');
     }
 
     addTabsCSS() {
@@ -84,8 +80,6 @@ export class TabsManager {
             shells.forEach(shell => {
                 this.shellFormats.set(shell.value, shell.name);
             });
-            
-            console.log('Loaded shell formats:', this.shellFormats);
         } catch (error) {
             console.warn('Failed to load shell formats:', error);
             // Fallback to using formatShellName utility function
@@ -106,14 +100,12 @@ export class TabsManager {
         // New tab button
         document.addEventListener('click', (e) => {
             if (e.target.closest('#new-tab-btn')) {
-                console.log('New tab button clicked');
                 e.preventDefault();
                 e.stopPropagation();
                 this.createNewTab().catch(error => {
                     console.error('Error creating new tab:', error);
                 });
             } else if (e.target.closest('#new-ssh-tab-btn')) {
-                console.log('New SSH tab button clicked');
                 e.preventDefault();
                 e.stopPropagation();
                 this.showSSHDialog();
@@ -135,6 +127,9 @@ export class TabsManager {
             } else if (e.target.closest('.tab-reconnect')) {
                 e.stopPropagation();
                 this.reconnectTab(tabId);
+            } else if (e.target.closest('.tab-force-disconnect')) {
+                e.stopPropagation();
+                this.forceDisconnectTab(tabId);
             } else {
                 this.switchToTab(tabId);
             }
@@ -145,21 +140,19 @@ export class TabsManager {
             const tab = e.target.closest('.tab');
             if (tab) {
                 e.preventDefault();
-                this.showTabContextMenu(tab.dataset.tabId, e.clientX, e.clientY);
+                e.stopPropagation();
+                this.handleTabContextMenu(tab, e);
             }
         });
 
         // Tab status updates are now handled by the global listener in terminal manager
     }
 
-
-
     handleTabStatusUpdate(data) {
         const { tabId, status, errorMessage } = data;
         const tab = this.tabs.get(tabId);
         
         if (!tab) {
-            console.warn('Received status update for unknown tab:', tabId);
             return;
         }
 
@@ -169,8 +162,6 @@ export class TabsManager {
 
         // Update UI
         this.updateTabStatusDisplay(tabId);
-        
-        console.log(`Tab ${tabId} status updated to: ${status}`, errorMessage ? `Error: ${errorMessage}` : '');
     }
 
     updateTabStatusDisplay(tabId) {
@@ -183,7 +174,7 @@ export class TabsManager {
         // Only show status for SSH connections, not local shells
         if (tab.connectionType === 'ssh') {
             // Remove all status classes
-            tabElement.classList.remove('connecting', 'connected', 'failed', 'disconnected');
+            tabElement.classList.remove('connecting', 'connected', 'failed', 'disconnected', 'hanging');
             
             // Add current status class
             if (tab.status) {
@@ -198,75 +189,152 @@ export class TabsManager {
                 tabElement.querySelector('.tab-content').appendChild(statusIndicator);
             }
 
-            // Update reconnect button visibility
-            let reconnectBtn = tabElement.querySelector('.tab-reconnect');
-            if (tab.status === 'failed') {
-                if (!reconnectBtn) {
-                    reconnectBtn = document.createElement('button');
-                    reconnectBtn.className = 'tab-reconnect';
-                    reconnectBtn.title = 'Reconnect';
-                    reconnectBtn.innerHTML = `
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="23 4 23 10 17 10"></polyline>
-                            <polyline points="1 20 1 14 7 14"></polyline>
-                            <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                        </svg>
-                    `;
-                    
-                    // Insert before close button to maintain proper order
-                    const tabContent = tabElement.querySelector('.tab-content');
-                    const closeBtn = tabContent.querySelector('.tab-close');
-                    if (closeBtn) {
-                        tabContent.insertBefore(reconnectBtn, closeBtn);
-                    } else {
-                        tabContent.appendChild(reconnectBtn);
-                    }
-                }
-            } else if (reconnectBtn) {
-                reconnectBtn.remove();
-            }
+            // Update action buttons based on status
+            this.updateTabActionButtons(tabElement, tab);
 
-            // Update title to show error on hover if failed
-            if (tab.status === 'failed' && tab.errorMessage) {
-                tabElement.title = `${tab.title} - Error: ${tab.errorMessage}`;
+            // Update title to show error on hover if failed or hanging
+            if ((tab.status === 'failed' || tab.status === 'hanging') && tab.errorMessage) {
+                tabElement.title = `${tab.title} - ${tab.errorMessage}`;
             } else {
                 tabElement.title = tab.title;
             }
         } else {
-            // For local shells, remove any status indicators and reconnect buttons
-            tabElement.classList.remove('connecting', 'connected', 'failed', 'disconnected');
+            // For local shells, remove any status indicators and action buttons
+            tabElement.classList.remove('connecting', 'connected', 'failed', 'disconnected', 'hanging');
             
             const statusIndicator = tabElement.querySelector('.tab-status-indicator');
             if (statusIndicator) statusIndicator.remove();
             
-            const reconnectBtn = tabElement.querySelector('.tab-reconnect');
-            if (reconnectBtn) reconnectBtn.remove();
+            this.removeTabActionButtons(tabElement);
             
             // Just set the basic title
             tabElement.title = tab.title;
         }
     }
 
+    updateTabActionButtons(tabElement, tab) {
+        // Remove existing action buttons
+        this.removeTabActionButtons(tabElement);
+
+        const tabContent = tabElement.querySelector('.tab-content');
+        const closeBtn = tabContent.querySelector('.tab-close');
+
+        // Add appropriate action buttons based on status
+        if (tab.status === 'failed') {
+            const reconnectBtn = this.createActionButton('reconnect', 'Reconnect', `
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <polyline points="1 20 1 14 7 14"></polyline>
+                    <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+            `, () => this.reconnectTab(tab.id));
+            
+            if (closeBtn) {
+                tabContent.insertBefore(reconnectBtn, closeBtn);
+            } else {
+                tabContent.appendChild(reconnectBtn);
+            }
+        } else if (tab.status === 'hanging') {
+            // For hanging connections, show both force disconnect and reconnect options
+            const forceDisconnectBtn = this.createActionButton('force-disconnect', 'Force Disconnect', `
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="m18 6 12 12"></path>
+                    <path d="m6 6 12 12"></path>
+                    <circle cx="12" cy="12" r="10"></circle>
+                </svg>
+            `, () => this.forceDisconnectTab(tab.id));
+
+            const reconnectBtn = this.createActionButton('reconnect', 'Reconnect (will force disconnect first)', `
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <polyline points="1 20 1 14 7 14"></polyline>
+                    <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+            `, () => this.reconnectTab(tab.id));
+
+            if (closeBtn) {
+                tabContent.insertBefore(forceDisconnectBtn, closeBtn);
+                tabContent.insertBefore(reconnectBtn, closeBtn);
+            } else {
+                tabContent.appendChild(forceDisconnectBtn);
+                tabContent.appendChild(reconnectBtn);
+            }
+        } else if (tab.status === 'disconnected') {
+            const reconnectBtn = this.createActionButton('reconnect', 'Reconnect', `
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <polyline points="1 20 1 14 7 14"></polyline>
+                    <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+            `, () => this.reconnectTab(tab.id));
+            
+            if (closeBtn) {
+                tabContent.insertBefore(reconnectBtn, closeBtn);
+            } else {
+                tabContent.appendChild(reconnectBtn);
+            }
+        }
+    }
+
+    createActionButton(className, title, iconSvg, onClick) {
+        const button = document.createElement('button');
+        button.className = `tab-${className}`;
+        button.title = title;
+        button.innerHTML = iconSvg;
+        button.onclick = (e) => {
+            e.stopPropagation();
+            onClick();
+        };
+        return button;
+    }
+
+    removeTabActionButtons(tabElement) {
+        const actionButtons = tabElement.querySelectorAll('.tab-reconnect, .tab-force-disconnect');
+        actionButtons.forEach(btn => btn.remove());
+    }
+
+    async forceDisconnectTab(tabId) {
+        try {
+            updateStatus('Force disconnecting...');
+            
+            await ForceDisconnectTab(tabId);
+            
+            updateStatus('Connection forcefully closed');
+        } catch (error) {
+            console.error('Failed to force disconnect tab:', error);
+            updateStatus(`Force disconnect failed: ${error.message}`);
+        }
+    }
+
     async reconnectTab(tabId) {
         try {
-            console.log(`Attempting to reconnect tab: ${tabId}`);
             updateStatus('Reconnecting...');
             
-            // Call backend reconnect function
-            const { ReconnectTab } = await import('../../wailsjs/go/main/App');
-            await ReconnectTab(tabId);
+            if (!tabId) {
+                throw new Error('Tab ID is required for reconnection');
+            }
             
+            const tab = this.tabs.get(tabId);
+            if (!tab) {
+                throw new Error(`Tab ${tabId} not found`);
+            }
+            
+            if (tab.connectionType !== 'ssh') {
+                throw new Error('Only SSH connections can be reconnected');
+            }
+            
+            await ReconnectTab(tabId);
             updateStatus('Reconnection initiated');
         } catch (error) {
-            console.error('Failed to reconnect tab:', error);
-            updateStatus(`Reconnection failed: ${error.message}`);
+            const errorMessage = error?.message || error?.toString() || 'Unknown error';
+            updateStatus(`Reconnection failed: ${errorMessage}`);
+            throw error;
         }
     }
 
     async createNewTab(shell = null, sshConfig = null) {
         try {
             updateStatus('Creating new tab...');
-            console.log('Creating new tab with shell:', shell, 'ssh:', sshConfig);
 
             // Load shell formats if not already loaded
             if (this.shellFormats.size === 0) {
@@ -277,7 +345,6 @@ export class TabsManager {
             if (!shell && !sshConfig) {
                 try {
                     shell = await this.terminalManager.getDefaultShell();
-                    console.log('Got default shell:', shell);
                 } catch (error) {
                     console.warn('Failed to get default shell, using empty string:', error);
                     shell = '';
@@ -285,10 +352,7 @@ export class TabsManager {
             }
 
             // Create tab on backend (backend generates its own session ID)
-            console.log('Calling CreateTab with:', shell || '', sshConfig);
             const tab = await CreateTab(shell || '', sshConfig);
-            console.log('Tab created on backend:', tab);
-            console.log(`Backend assigned session ID: ${tab.sessionId} to tab: ${tab.id}`);
             
             // Enhance tab title with formatted shell name
             if (!sshConfig && shell) {
@@ -296,7 +360,6 @@ export class TabsManager {
                 tab.formattedShellName = formattedShellName;
                 // Update title to include formatted shell name
                 tab.title = formattedShellName;
-                console.log(`Tab title updated to: ${tab.title}`);
             }
             
             // Add to local tabs (use backend's session ID)
@@ -312,7 +375,6 @@ export class TabsManager {
             await this.startTabShell(tab.id);
 
             updateStatus(`New tab created: ${tab.title}`);
-            console.log(`Tab ${tab.id} now has its own isolated shell process`);
             return tab;
         } catch (error) {
             console.error('Failed to create tab:', error);
@@ -329,16 +391,41 @@ export class TabsManager {
                 throw new Error(`Tab ${tabId} not found`);
             }
             
-            console.log(`Starting backend shell for tab: ${tabId}, session: ${tab.sessionId}`);
-            
             // IMPORTANT: Connect the frontend terminal BEFORE starting the backend shell
             // This ensures the terminal can receive error messages immediately during connection
             this.terminalManager.connectToSession(tab.sessionId);
-            console.log(`Frontend terminal connected to session: ${tab.sessionId}`);
             
-            // Now start the backend shell process - any errors will be routed to the connected terminal
-            await StartTabShell(tabId);
-            console.log(`Backend shell started for tab: ${tabId}`);
+            // Get current terminal dimensions for SSH sessions
+            let cols = 80, rows = 24; // default fallback
+            
+            const terminalSession = this.terminalManager.terminals.get(tab.sessionId);
+            if (terminalSession && terminalSession.terminal) {
+                // Ensure terminal is fitted before getting dimensions
+                if (terminalSession.fitAddon) {
+                    terminalSession.fitAddon.fit();
+                }
+                
+                cols = terminalSession.terminal.cols || 80;
+                rows = terminalSession.terminal.rows || 24;
+            }
+            
+            // Start the backend shell process with terminal dimensions
+            await StartTabShellWithSize(tabId, cols, rows);
+            
+            // For SSH connections, send an additional resize to ensure proper synchronization
+            if (tab.connectionType === 'ssh') {
+                setTimeout(async () => {
+                    if (terminalSession && terminalSession.terminal && terminalSession.isConnected) {
+                        const currentCols = terminalSession.terminal.cols;
+                        const currentRows = terminalSession.terminal.rows;
+                        try {
+                            await ResizeShell(tab.sessionId, currentCols, currentRows);
+                        } catch (error) {
+                            console.warn('Failed to sync SSH terminal size:', error);
+                        }
+                    }
+                }, 500); // Small delay to ensure SSH session is fully established
+            }
             
         } catch (error) {
             console.error(`Failed to start shell for tab ${tabId}:`, error);
@@ -348,8 +435,6 @@ export class TabsManager {
 
     async switchToTab(tabId) {
         try {
-            console.log(`Switching to tab: ${tabId}`);
-            
             const tab = this.tabs.get(tabId);
             if (!tab) {
                 console.error(`Tab ${tabId} not found`);
@@ -361,7 +446,6 @@ export class TabsManager {
             this.activeTabId = tabId;
             
             // Switch terminal manager to this session immediately
-            console.log(`Switching terminal to session: ${tab.sessionId}`);
             this.terminalManager.switchToSession(tab.sessionId);
             
             // Update UI immediately
@@ -369,14 +453,11 @@ export class TabsManager {
             updateStatus(`Switched to: ${tab.title}`);
 
             // Set active on backend asynchronously (don't block UI)
-            SetActiveTab(tabId).then(() => {
-                console.log(`Backend SetActiveTab completed for: ${tabId}`);
-            }).catch((error) => {
+            SetActiveTab(tabId).catch((error) => {
                 console.warn('Backend SetActiveTab failed:', error);
                 // UI is already updated, so this is not critical
             });
             
-            console.log(`Successfully switched to tab: ${tabId}`);
         } catch (error) {
             console.error('Failed to switch tab:', error);
             updateStatus('Failed to switch tab: ' + error.message);
@@ -391,7 +472,6 @@ export class TabsManager {
 
         // Prevent multiple close operations on the same tab
         if (this.closingTabs.has(tabId)) {
-            console.log('Tab already being closed:', tabId);
             return;
         }
 
@@ -399,7 +479,6 @@ export class TabsManager {
 
         try {
             updateStatus('Closing tab...');
-            console.log('Closing tab:', tabId);
 
             const tab = this.tabs.get(tabId);
             if (!tab) {
@@ -411,13 +490,11 @@ export class TabsManager {
             if (this.activeTabId === tabId) {
                 const remainingTabs = Array.from(this.tabs.keys()).filter(id => id !== tabId);
                 if (remainingTabs.length > 0) {
-                    console.log('Switching to tab before close:', remainingTabs[0]);
                     await this.switchToTab(remainingTabs[0]);
                 }
             }
 
             // Then disconnect the terminal session after switching away
-            console.log('Disconnecting terminal session:', tab.sessionId);
             this.terminalManager.disconnectSession(tab.sessionId);
 
             // Remove from local tabs first (optimistic update)
@@ -425,10 +502,7 @@ export class TabsManager {
             this.renderTabs();
 
             // Close on backend asynchronously (don't wait for it)
-            console.log('Calling backend CloseTab asynchronously...');
-            CloseTab(tabId).then(() => {
-                console.log('Backend CloseTab completed successfully');
-            }).catch((error) => {
+            CloseTab(tabId).catch((error) => {
                 console.warn('Backend CloseTab failed:', error);
                 // This is fine, the UI is already updated
             });
@@ -439,7 +513,6 @@ export class TabsManager {
             
             // Check if the tab was already removed from UI (optimistic update worked)
             if (!this.tabs.has(tabId)) {
-                console.log('Tab was successfully removed from UI despite error');
                 updateStatus('Tab closed');
             } else {
                 console.error('Tab close failed completely, restoring tab...');
@@ -497,24 +570,56 @@ export class TabsManager {
             </button>
         ` : '';
 
-        // Show reconnect button for failed SSH connections
-        const reconnectButtonHtml = (tab.status === 'failed' && isSSH) ? `
-            <button class="tab-reconnect" title="Reconnect">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="23 4 23 10 17 10"></polyline>
-                    <polyline points="1 20 1 14 7 14"></polyline>
-                    <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                </svg>
-            </button>
-        ` : '';
+        // Show action buttons for SSH connections with issues
+        let actionButtonsHtml = '';
+        if (isSSH && (tab.status === 'failed' || tab.status === 'hanging' || tab.status === 'disconnected')) {
+            if (tab.status === 'hanging') {
+                actionButtonsHtml = `
+                    <button class="tab-force-disconnect" title="Force Disconnect">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="m18 6 12 12"></path>
+                            <path d="m6 6 12 12"></path>
+                            <circle cx="12" cy="12" r="10"></circle>
+                        </svg>
+                    </button>
+                    <button class="tab-reconnect" title="Reconnect (will force disconnect first)">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="23 4 23 10 17 10"></polyline>
+                            <polyline points="1 20 1 14 7 14"></polyline>
+                            <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                        </svg>
+                    </button>
+                `;
+            } else {
+                actionButtonsHtml = `
+                    <button class="tab-reconnect" title="Reconnect">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="23 4 23 10 17 10"></polyline>
+                            <polyline points="1 20 1 14 7 14"></polyline>
+                            <path d="m3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                        </svg>
+                    </button>
+                `;
+            }
+        }
 
         // Status indicator only for SSH connections
         const statusIndicatorHtml = isSSH ? '<div class="tab-status-indicator"></div>' : '';
 
-        // Update tooltip to include error if failed
+        // Update tooltip to include status information
         let tooltipText = tab.title || 'Untitled';
-        if (tab.status === 'failed' && tab.errorMessage) {
-            tooltipText += ` - Error: ${tab.errorMessage}`;
+        if (isSSH && tab.status) {
+            if (tab.status === 'hanging') {
+                tooltipText += ' - Connection hanging (no response from server)';
+            } else if (tab.status === 'failed' && tab.errorMessage) {
+                tooltipText += ` - Error: ${tab.errorMessage}`;
+            } else if (tab.status === 'connecting') {
+                tooltipText += ' - Connecting...';
+            } else if (tab.status === 'connected') {
+                tooltipText += ' - Connected';
+            } else if (tab.status === 'disconnected') {
+                tooltipText += ' - Disconnected';
+            }
         }
 
         tabEl.innerHTML = `
@@ -522,10 +627,10 @@ export class TabsManager {
                 <div class="tab-icon">${iconSvg}</div>
                 <div class="tab-title">${displayTitle}</div>
                 ${statusIndicatorHtml}
-                ${reconnectButtonHtml}
+                ${actionButtonsHtml}
                 ${closeButtonHtml}
             </div>
-            ${needsTooltip || (tab.status === 'failed' && tab.errorMessage && isSSH) ? `<div class="tab-tooltip">${tooltipText}</div>` : ''}
+            ${needsTooltip || (isSSH && tab.status && (tab.status === 'failed' || tab.status === 'hanging')) ? `<div class="tab-tooltip">${tooltipText}</div>` : ''}
         `;
 
         // Set tooltip on the element
@@ -783,85 +888,26 @@ export class TabsManager {
         document.head.appendChild(style);
     }
 
-    showTabContextMenu(tabId, x, y) {
-        // Simple context menu for tab operations
-        const menu = document.createElement('div');
-        menu.className = 'tab-context-menu';
-        menu.style.left = x + 'px';
-        menu.style.top = y + 'px';
+    handleTabContextMenu(tabElement, e) {
+        const tabId = tabElement.dataset.tabId;
+        const tabData = this.tabs.get(tabId);
         
-        const tab = this.tabs.get(tabId);
-        const canClose = this.tabs.size > 1;
-        
-        menu.innerHTML = `
-            <div class="context-menu-item" data-action="duplicate">Duplicate Tab</div>
-            <div class="context-menu-separator"></div>
-            <div class="context-menu-item ${!canClose ? 'disabled' : ''}" data-action="close">Close Tab</div>
-            <div class="context-menu-item" data-action="close-others">Close Other Tabs</div>
-        `;
-
-        document.body.appendChild(menu);
-
-        // Position menu properly
-        const rect = menu.getBoundingClientRect();
-        if (rect.right > window.innerWidth) {
-            menu.style.left = (x - rect.width) + 'px';
+        if (!tabData) {
+            return;
         }
-        if (rect.bottom > window.innerHeight) {
-            menu.style.top = (y - rect.height) + 'px';
-        }
-
-        // Handle menu clicks
-        const handleMenuClick = async (e) => {
-            const action = e.target.dataset.action;
-            if (!action || e.target.classList.contains('disabled')) return;
-
-            switch (action) {
-                case 'duplicate':
-                    if (tab.connectionType === 'ssh') {
-                        await this.createNewTab(null, tab.sshConfig);
-                    } else {
-                        await this.createNewTab(tab.shell);
-                    }
-                    break;
-                case 'close':
-                    if (canClose) {
-                        await this.closeTab(tabId);
-                    }
-                    break;
-                case 'close-others':
-                    const otherTabs = Array.from(this.tabs.keys()).filter(id => id !== tabId);
-                    for (const otherId of otherTabs) {
-                        await this.closeTab(otherId);
-                    }
-                    break;
-            }
-
-            document.body.removeChild(menu);
-            document.removeEventListener('click', handleMenuClick);
-        };
-
-        menu.addEventListener('click', handleMenuClick);
         
-        // Close menu on outside click
-        setTimeout(() => {
-            document.addEventListener('click', (e) => {
-                if (!menu.contains(e.target)) {
-                    document.body.removeChild(menu);
-                }
-            }, { once: true });
-        }, 0);
+        // Set the tab as the context menu target and delegate to the existing context menu system
+        if (window.contextMenuManager) {
+            window.contextMenuManager.showTabContextMenu(e, tabElement, tabData);
+        }
     }
 
     async loadTabs() {
         try {
-            console.log('Loading tabs...');
-            
             // Load shell formats first
             await this.loadShellFormats();
             
             const tabs = await GetTabs();
-            console.log('Retrieved tabs:', tabs);
             
             this.tabs.clear();
             for (const tab of tabs) {
@@ -885,17 +931,12 @@ export class TabsManager {
             
             // If no tabs exist, create a default one
             if (this.tabs.size === 0) {
-                console.log('No tabs found, creating default tab');
                 await this.createNewTab();
             } else {
-                console.log(`Loaded ${this.tabs.size} tabs, creating fresh shells for each...`);
-                
                 // Create terminal sessions for all loaded tabs using their existing session IDs
                 // The backend has already created the tabs and assigned session IDs
                 for (const [tabId, tab] of this.tabs) {
                     try {
-                        console.log(`Setting up terminal for tab: ${tabId} (${tab.title}) with session: ${tab.sessionId}`);
-                        
                         // Create terminal session using the backend's session ID
                         this.terminalManager.createTerminalSession(tab.sessionId);
                         
@@ -904,24 +945,19 @@ export class TabsManager {
                         
                         // If this is the active tab, switch to it
                         if (tab.isActive) {
-                            console.log(`Switching to active tab: ${tabId}`);
                             await this.switchToTab(tabId);
                         }
                     } catch (error) {
                         console.error(`Failed to setup shell for tab ${tabId}:`, error);
                     }
                 }
-                
-                console.log('All tabs now have fresh, isolated shells');
             }
             
             // Mark tabs system as available
             this.isAvailable = true;
-            console.log('Tabs system is now available');
         } catch (error) {
             console.error('Failed to load tabs:', error);
             // Create a default tab as fallback
-            console.log('Creating fallback tab due to error');
             try {
                 await this.createNewTab();
                 this.isAvailable = true; // Still available even with fallback

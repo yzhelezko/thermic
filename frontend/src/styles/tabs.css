@@ -110,6 +110,11 @@
     background: var(--text-tertiary);
 }
 
+.tab.hanging .tab-status-indicator {
+    background: var(--warning-color);
+    animation: pulse 2s ease-in-out infinite;
+}
+
 /* Reconnect button */
 .tab-reconnect {
     width: 16px;
@@ -129,6 +134,28 @@
 
 .tab-reconnect:hover {
     background: var(--warning-color);
+    color: white;
+}
+
+/* Force disconnect button */
+.tab-force-disconnect {
+    width: 16px;
+    height: 16px;
+    margin-left: 4px;
+    border-radius: 3px;
+    background: none;
+    border: none;
+    color: var(--error-color);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.tab-force-disconnect:hover {
+    background: var(--error-color);
     color: white;
 }
 
@@ -173,6 +200,11 @@
 
 .tab.disconnected {
     border-left: 3px solid var(--text-tertiary);
+}
+
+.tab.hanging {
+    border-left: 3px solid var(--warning-color);
+    background: linear-gradient(45deg, var(--bg-tertiary), rgba(255, 193, 7, 0.1));
 }
 
 .tabs-controls {
@@ -271,4 +303,6 @@
 @keyframes blink {
     0%, 50% { opacity: 1; }
     51%, 100% { opacity: 0.3; }
-} 
+}
+
+ 

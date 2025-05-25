@@ -8,6 +8,9 @@ export class ContextMenuManager {
         this.activeMenu = null;
         this.currentTarget = null;
         this.selectedSidebarItem = null;
+        // Add tab context properties
+        this.currentTab = null;
+        this.currentTabData = null;
     }
 
     init() {
@@ -114,6 +117,25 @@ export class ContextMenuManager {
 
         // Update menu items for root context (only show create options)
         this.updateRootMenuItems(menu);
+
+        // Position and show menu
+        this.positionMenu(menu, event.clientX, event.clientY);
+        this.showMenu(menu);
+        this.activeMenu = menu;
+    }
+
+    showTabContextMenu(event, tabElement, tabData) {
+        const menu = document.getElementById('tab-context-menu');
+        if (!menu) {
+            return;
+        }
+
+        this.hideAllMenus();
+        this.currentTab = tabElement;
+        this.currentTabData = tabData;
+
+        // Update menu items based on tab state
+        this.updateTabMenuItems(menu, tabData);
 
         // Position and show menu
         this.positionMenu(menu, event.clientX, event.clientY);
@@ -268,6 +290,47 @@ export class ContextMenuManager {
         });
     }
 
+    updateTabMenuItems(menu, tabData) {
+        const isSSH = tabData.connectionType === 'ssh';
+        const canReconnect = isSSH; // Allow reconnect for any SSH connection
+        const canForceDisconnect = isSSH && tabData.status === 'hanging';
+        const canClose = window.tabsManager && window.tabsManager.tabs.size > 1;
+
+        // Get menu items
+        const reconnectItem = menu.querySelector('[data-action="tab-reconnect"]');
+        const forceDisconnectItem = menu.querySelector('[data-action="tab-force-disconnect"]');
+        const duplicateItem = menu.querySelector('[data-action="tab-duplicate"]');
+        const closeItem = menu.querySelector('[data-action="tab-close"]');
+        const closeOthersItem = menu.querySelector('[data-action="tab-close-others"]');
+
+        // Show/hide and enable/disable items based on tab state
+        if (reconnectItem) {
+            reconnectItem.style.display = canReconnect ? 'flex' : 'none';
+        }
+        
+        if (forceDisconnectItem) {
+            forceDisconnectItem.style.display = canForceDisconnect ? 'flex' : 'none';
+        }
+
+        if (duplicateItem) {
+            duplicateItem.classList.remove('disabled');
+        }
+
+        if (closeItem) {
+            closeItem.classList.toggle('disabled', !canClose);
+        }
+
+        if (closeOthersItem) {
+            closeOthersItem.classList.toggle('disabled', !canClose);
+        }
+
+        // Handle separators - show the first separator for SSH connections (since reconnect is always available)
+        const separators = menu.querySelectorAll('.context-menu-separator');
+        if (separators[0]) {
+            separators[0].style.display = isSSH ? 'block' : 'none';
+        }
+    }
+
     selectSidebarItem(treeItem) {
         // Remove previous selection
         const prevSelected = document.querySelector('.tree-item.selected');
@@ -310,6 +373,8 @@ export class ContextMenuManager {
         menus.forEach(menu => menu.classList.remove('active'));
         this.activeMenu = null;
         this.currentTarget = null;
+        this.currentTab = null;
+        this.currentTabData = null;
     }
 
     async handleMenuAction(action) {
@@ -358,6 +423,21 @@ export class ContextMenuManager {
                 break;
             case 'search':
                 await this.handleSearch();
+                break;
+            case 'tab-reconnect':
+                await this.handleTabReconnect();
+                break;
+            case 'tab-force-disconnect':
+                await this.handleTabForceDisconnect();
+                break;
+            case 'tab-duplicate':
+                await this.handleTabDuplicate();
+                break;
+            case 'tab-close':
+                await this.handleTabClose();
+                break;
+            case 'tab-close-others':
+                await this.handleTabCloseOthers();
                 break;
             default:
                 console.log('Unknown action:', action);
@@ -661,6 +741,82 @@ export class ContextMenuManager {
                 console.error('Failed to open search panel:', error);
                 showNotification('Failed to open search', 'error');
             }
+        }
+    }
+
+    async handleTabReconnect() {
+        if (!this.currentTabData) {
+            showNotification('No tab data available for reconnection', 2000);
+            return;
+        }
+        
+        if (!window.tabsManager) {
+            showNotification('TabsManager not available', 2000);
+            return;
+        }
+        
+        try {
+            await window.tabsManager.reconnectTab(this.currentTabData.id);
+        } catch (error) {
+            const errorMessage = error?.message || error?.toString() || 'Unknown error';
+            showNotification(`Reconnection failed: ${errorMessage}`, 3000);
+        }
+    }
+
+    async handleTabForceDisconnect() {
+        if (!this.currentTabData || !window.tabsManager) return;
+        
+        try {
+            await window.tabsManager.forceDisconnectTab(this.currentTabData.id);
+        } catch (error) {
+            console.error('Failed to force disconnect tab:', error);
+            showNotification('Failed to force disconnect tab', 2000);
+        }
+    }
+
+    async handleTabDuplicate() {
+        if (!this.currentTabData || !window.tabsManager) return;
+        
+        try {
+            if (this.currentTabData.connectionType === 'ssh') {
+                await window.tabsManager.createNewTab(null, this.currentTabData.sshConfig);
+            } else {
+                await window.tabsManager.createNewTab(this.currentTabData.shell);
+            }
+        } catch (error) {
+            console.error('Failed to duplicate tab:', error);
+            showNotification('Failed to duplicate tab', 2000);
+        }
+    }
+
+    async handleTabClose() {
+        if (!this.currentTabData || !window.tabsManager) return;
+        
+        // Check if we can close (need more than 1 tab)
+        if (window.tabsManager.tabs.size <= 1) {
+            showNotification('Cannot close the last tab', 2000);
+            return;
+        }
+        
+        try {
+            await window.tabsManager.closeTab(this.currentTabData.id);
+        } catch (error) {
+            console.error('Failed to close tab:', error);
+            showNotification('Failed to close tab', 2000);
+        }
+    }
+
+    async handleTabCloseOthers() {
+        if (!this.currentTabData || !window.tabsManager) return;
+        
+        try {
+            const otherTabs = Array.from(window.tabsManager.tabs.keys()).filter(id => id !== this.currentTabData.id);
+            for (const otherId of otherTabs) {
+                await window.tabsManager.closeTab(otherId);
+            }
+        } catch (error) {
+            console.error('Failed to close other tabs:', error);
+            showNotification('Failed to close other tabs', 2000);
         }
     }
 }

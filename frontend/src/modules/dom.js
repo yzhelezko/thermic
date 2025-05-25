@@ -6,7 +6,9 @@ import {
     createStatusBarTemplate, 
     createSettingsPanelTemplate,
     createTerminalContextMenuTemplate,
-    createSidebarContextMenuTemplate
+    createSidebarContextMenuTemplate,
+    createTabContextMenuTemplate,
+    createProfilePanelTemplate
 } from './templates.js';
 
 export class DOMManager {
@@ -78,7 +80,8 @@ export class DOMManager {
         // Add terminal and sidebar context menus
         contextMenuContainer.innerHTML = 
             createTerminalContextMenuTemplate() + 
-            createSidebarContextMenuTemplate();
+            createSidebarContextMenuTemplate() +
+            createTabContextMenuTemplate();
     }
 
     // Utility methods for dynamic updates
