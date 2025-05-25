@@ -49,6 +49,25 @@
     color: var(--text-tertiary);
 }
 
+/* Create section styling */
+.context-menu-create-section {
+    background: linear-gradient(90deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+    font-weight: 500;
+}
+
+.context-menu-create-section:hover {
+    background: linear-gradient(90deg, var(--accent-color) 0%, var(--accent-color-light, var(--accent-color)) 100%);
+    color: white;
+}
+
+.context-menu-create-section .context-menu-item-icon {
+    color: var(--accent-color);
+}
+
+.context-menu-create-section:hover .context-menu-item-icon {
+    color: white;
+}
+
 .context-menu-item-icon {
     width: 16px;
     height: 16px;

@@ -83,13 +83,29 @@ export function formatShellName(shell) {
     return shell;
 }
 
-export function showNotification(message, duration = 3000) {
+export function showNotification(message, type = 'info', duration = 3000) {
     const statusInfo = document.getElementById('status-info');
     if (!statusInfo) return;
     
     const originalText = statusInfo.textContent;
     statusInfo.textContent = message;
-    statusInfo.style.color = '#ffcc02';
+    
+    // Set color based on type
+    let color = '#ffcc02'; // default yellow
+    switch (type) {
+        case 'success':
+            color = '#0dbc79'; // green
+            break;
+        case 'error':
+            color = '#cd3131'; // red
+            break;
+        case 'info':
+            color = '#2472c8'; // blue
+            break;
+        default:
+            color = '#ffcc02'; // yellow
+    }
+    statusInfo.style.color = color;
     
     setTimeout(() => {
         statusInfo.textContent = originalText;

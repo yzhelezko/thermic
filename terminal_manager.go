@@ -179,70 +179,79 @@ func (a *App) monitorProcess(sessionId string, cmd *pty.Cmd) {
 	})
 }
 
-// WriteToShell writes data to the PTY (exactly like VS Code)
+// WriteToShell writes data to the PTY or SSH session
 func (a *App) WriteToShell(sessionId string, data string) error {
 	a.mutex.RLock()
-	session, exists := a.sessions[sessionId]
-	a.mutex.RUnlock()
 
-	if !exists {
-		return fmt.Errorf("session %s not found", sessionId)
+	// Check if it's a PTY session
+	if session, exists := a.sessions[sessionId]; exists {
+		a.mutex.RUnlock()
+		_, err := session.pty.Write([]byte(data))
+		return err
 	}
 
-	_, err := session.pty.Write([]byte(data))
-	return err
+	// Check if it's an SSH session
+	if sshSession, exists := a.sshSessions[sessionId]; exists {
+		a.mutex.RUnlock()
+		return a.WriteToSSHSession(sshSession, data)
+	}
+
+	a.mutex.RUnlock()
+	return fmt.Errorf("session %s not found", sessionId)
 }
 
-// ResizeShell resizes the PTY (proper implementation like VS Code)
+// ResizeShell resizes the PTY or SSH session
 func (a *App) ResizeShell(sessionId string, cols, rows int) error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 
-	session, exists := a.sessions[sessionId]
-	if !exists {
-		return fmt.Errorf("session %s not found", sessionId)
+	// Check if it's a PTY session
+	if session, exists := a.sessions[sessionId]; exists {
+		session.cols = cols
+		session.rows = rows
+		return session.pty.Resize(cols, rows)
 	}
 
-	// Update session size
-	session.cols = cols
-	session.rows = rows
+	// Check if it's an SSH session
+	if sshSession, exists := a.sshSessions[sessionId]; exists {
+		return a.ResizeSSHSession(sshSession, cols, rows)
+	}
 
-	// Resize the PTY (this is exactly what VS Code does)
-	return session.pty.Resize(cols, rows)
+	return fmt.Errorf("session %s not found", sessionId)
 }
 
-// CloseShell closes a PTY session (non-blocking version)
+// CloseShell closes a PTY or SSH session
 func (a *App) CloseShell(sessionId string) error {
 	a.mutex.Lock()
-	session, exists := a.sessions[sessionId]
-	if !exists {
+
+	// Check if it's a PTY session
+	if session, exists := a.sessions[sessionId]; exists {
+		session.cleaning = true
+		delete(a.sessions, sessionId)
 		a.mutex.Unlock()
-		return fmt.Errorf("session %s not found", sessionId)
+
+		// Do cleanup asynchronously to avoid blocking
+		go func() {
+			if session.pty != nil {
+				session.pty.Close()
+			}
+			if session.cmd != nil && session.cmd.Process != nil {
+				time.Sleep(1 * time.Second)
+				session.cmd.Process.Kill()
+			}
+		}()
+		return nil
 	}
 
-	// Mark session as being cleaned up to stop goroutines
-	session.cleaning = true
+	// Check if it's an SSH session
+	if sshSession, exists := a.sshSessions[sessionId]; exists {
+		delete(a.sshSessions, sessionId)
+		a.mutex.Unlock()
+		return a.CloseSSHSession(sshSession)
+	}
 
-	// Remove from sessions map immediately
-	delete(a.sessions, sessionId)
 	a.mutex.Unlock()
-
-	// Do cleanup asynchronously to avoid blocking
-	go func() {
-		// Close PTY (will terminate the shell process)
-		if session.pty != nil {
-			session.pty.Close()
-		}
-
-		// Force kill the process after a short delay if it doesn't terminate
-		if session.cmd != nil && session.cmd.Process != nil {
-			// Give the process 1 second to terminate gracefully
-			time.Sleep(1 * time.Second)
-			session.cmd.Process.Kill()
-		}
-	}()
-
-	return nil
+	return fmt.Errorf("session %s not found", sessionId)
 }
 
 // IsSessionClosed checks if a session is completely closed and cleaned up
