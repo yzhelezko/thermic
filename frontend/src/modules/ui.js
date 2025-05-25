@@ -22,121 +22,44 @@ export class UIManager {
     initUI() {
         this.setupThemeToggle();
         this.setupToolbarButtons();
-        this.setupTabManagement();
         this.setupResizablePanels();
         this.setupAccountButton();
+        this.setupSettingsButton();
     }
 
     setupThemeToggle() {
         const themeToggle = document.getElementById('theme-toggle');
-        themeToggle.addEventListener('click', () => this.toggleTheme());
+        if (themeToggle) {
+            themeToggle.addEventListener('click', () => this.toggleTheme());
+        } else {
+            console.warn('Theme toggle button not found');
+        }
     }
 
     setupToolbarButtons() {
         const buttons = ['btn-explorer', 'btn-filemanager', 'btn-search'];
         buttons.forEach(btnId => {
             const btn = document.getElementById(btnId);
-            btn.addEventListener('click', () => {
-                // Remove active class from all buttons
-                buttons.forEach(id => document.getElementById(id).classList.remove('active'));
-                // Add active class to clicked button
-                btn.classList.add('active');
-                
-                // Trigger sidebar content update
-                this.onSidebarChange?.(btnId);
-            });
-        });
-    }
-
-    setupTabManagement() {
-        // Add tab button
-        document.getElementById('add-tab').addEventListener('click', () => {
-            this.addNewTab();
-        });
-
-        // Tab close buttons
-        this.updateTabEventListeners();
-    }
-
-    updateTabEventListeners() {
-        const tabs = document.querySelectorAll('.tab');
-        tabs.forEach(tab => {
-            const closeBtn = tab.querySelector('.tab-close');
-            if (closeBtn) {
-                closeBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    this.closeTab(tab.dataset.tab);
-                };
+            if (btn) {
+                btn.addEventListener('click', () => {
+                    // Remove active class from all buttons
+                    buttons.forEach(id => {
+                        const button = document.getElementById(id);
+                        if (button) button.classList.remove('active');
+                    });
+                    // Add active class to clicked button
+                    btn.classList.add('active');
+                    
+                    // Trigger sidebar content update
+                    this.onSidebarChange?.(btnId);
+                });
+            } else {
+                console.warn(`Toolbar button not found: ${btnId}`);
             }
-            
-            tab.onclick = () => {
-                this.switchToTab(tab.dataset.tab);
-            };
         });
     }
 
-    addNewTab() {
-        this.tabCounter++;
-        const newTabId = `terminal-${this.tabCounter}`;
-        this.tabs.push({
-            id: newTabId,
-            title: `Terminal ${this.tabCounter}`,
-            active: false
-        });
-        
-        this.renderTabs();
-        this.switchToTab(newTabId);
-    }
 
-    closeTab(tabId) {
-        if (this.tabs.length <= 1) {
-            showNotification('Cannot close the last tab');
-            return;
-        }
-
-        const tabIndex = this.tabs.findIndex(tab => tab.id === tabId);
-        if (tabIndex === -1) return;
-
-        const wasActive = this.tabs[tabIndex].active;
-        this.tabs.splice(tabIndex, 1);
-
-        if (wasActive && this.tabs.length > 0) {
-            const newActiveIndex = Math.max(0, tabIndex - 1);
-            this.tabs[newActiveIndex].active = true;
-        }
-
-        this.renderTabs();
-    }
-
-    switchToTab(tabId) {
-        this.tabs.forEach(tab => {
-            tab.active = tab.id === tabId;
-        });
-        this.renderTabs();
-    }
-
-    renderTabs() {
-        const tabsContainer = document.querySelector('.tabs-container');
-        const addTabBtn = document.getElementById('add-tab');
-        
-        // Remove existing tabs
-        const existingTabs = tabsContainer.querySelectorAll('.tab');
-        existingTabs.forEach(tab => tab.remove());
-
-        // Add tabs
-        this.tabs.forEach(tab => {
-            const tabElement = document.createElement('div');
-            tabElement.className = `tab ${tab.active ? 'active' : ''}`;
-            tabElement.dataset.tab = tab.id;
-            tabElement.innerHTML = `
-                <span class="tab-title">${tab.title}</span>
-                <button class="tab-close">×</button>
-            `;
-            tabsContainer.insertBefore(tabElement, addTabBtn);
-        });
-
-        this.updateTabEventListeners();
-    }
 
     setupResizablePanels() {
         this.setupResize('sidebar-resize', 'left');
@@ -180,15 +103,39 @@ export class UIManager {
     }
 
     setupAccountButton() {
-        document.getElementById('account-btn').addEventListener('click', () => {
-            showNotification('Account management coming soon!');
-        });
+        const accountBtn = document.getElementById('account-btn');
+        if (accountBtn) {
+            accountBtn.addEventListener('click', () => {
+                showNotification('Account management coming soon!');
+            });
+        } else {
+            console.warn('Account button not found');
+        }
+    }
+
+    setupSettingsButton() {
+        const settingsBtn = document.getElementById('settings-btn');
+        if (settingsBtn) {
+            settingsBtn.addEventListener('click', () => {
+                const settingsOverlay = document.getElementById('settings-overlay');
+                if (settingsOverlay) {
+                    settingsOverlay.style.display = settingsOverlay.style.display === 'flex' ? 'none' : 'flex';
+                }
+            });
+        } else {
+            console.warn('Settings button not found');
+        }
     }
 
     toggleTheme() {
         this.isDarkTheme = !this.isDarkTheme;
         const body = document.body;
         const themeToggle = document.getElementById('theme-toggle');
+
+        if (!themeToggle) {
+            console.warn('Theme toggle button not found');
+            return;
+        }
 
         if (this.isDarkTheme) {
             body.setAttribute('data-theme', 'dark');

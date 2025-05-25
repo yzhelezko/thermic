@@ -6,7 +6,13 @@ export function CheckWSLAvailable():Promise<boolean>;
 
 export function CloseShell(arg1:string):Promise<void>;
 
+export function CloseTab(arg1:string):Promise<void>;
+
 export function CloseWindow():Promise<void>;
+
+export function CreateTab(arg1:string,arg2:main.SSHConfig):Promise<main.Tab>;
+
+export function GetActiveTab():Promise<main.Tab>;
 
 export function GetAvailableShells():Promise<Array<string>>;
 
@@ -21,6 +27,8 @@ export function GetOSInfo():Promise<Record<string, any>>;
 export function GetPlatformInfo():Promise<Record<string, any>>;
 
 export function GetShellsForUI():Promise<Array<Record<string, any>>>;
+
+export function GetTabs():Promise<Array<main.Tab>>;
 
 export function GetWSLDistributions():Promise<Array<main.WSLDistribution>>;
 
@@ -38,13 +46,19 @@ export function MaximizeWindow():Promise<void>;
 
 export function MinimizeWindow():Promise<void>;
 
+export function RenameTab(arg1:string,arg2:string):Promise<void>;
+
 export function ResizeShell(arg1:string,arg2:number,arg3:number):Promise<void>;
+
+export function SetActiveTab(arg1:string):Promise<void>;
 
 export function SetDefaultShell(arg1:string):Promise<void>;
 
 export function ShowMessageDialog(arg1:string,arg2:string):Promise<void>;
 
 export function StartShell(arg1:string,arg2:string):Promise<void>;
+
+export function StartTabShell(arg1:string):Promise<void>;
 
 export function WaitForSessionClose(arg1:string):Promise<void>;
 

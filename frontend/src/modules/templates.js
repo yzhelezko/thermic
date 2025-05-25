@@ -73,11 +73,25 @@ export function createHeaderTemplate() {
 
 export function createTabsTemplate() {
     return `
-        <div class="tab active" data-tab="terminal-1">
-            <span class="tab-title">Terminal 1</span>
-            <button class="tab-close">×</button>
+        <div class="tabs-bar">
+            <div class="tabs-list" id="tabs-list">
+                <!-- Tabs will be inserted here dynamically -->
+            </div>
+            <div class="tabs-controls">
+                <button class="new-tab-btn" id="new-tab-btn" title="New Terminal">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                </button>
+                <button class="new-ssh-tab-btn" id="new-ssh-tab-btn" title="New SSH Connection">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 12l2 2 4-4"></path>
+                        <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H5a2 2 0 0 0-2-2z"></path>
+                    </svg>
+                </button>
+            </div>
         </div>
-        <button class="tab-add" id="add-tab">+</button>
     `;
 }
 

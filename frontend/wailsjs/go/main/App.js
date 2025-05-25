@@ -10,8 +10,20 @@ export function CloseShell(arg1) {
   return window['go']['main']['App']['CloseShell'](arg1);
 }
 
+export function CloseTab(arg1) {
+  return window['go']['main']['App']['CloseTab'](arg1);
+}
+
 export function CloseWindow() {
   return window['go']['main']['App']['CloseWindow']();
+}
+
+export function CreateTab(arg1, arg2) {
+  return window['go']['main']['App']['CreateTab'](arg1, arg2);
+}
+
+export function GetActiveTab() {
+  return window['go']['main']['App']['GetActiveTab']();
 }
 
 export function GetAvailableShells() {
@@ -40,6 +52,10 @@ export function GetPlatformInfo() {
 
 export function GetShellsForUI() {
   return window['go']['main']['App']['GetShellsForUI']();
+}
+
+export function GetTabs() {
+  return window['go']['main']['App']['GetTabs']();
 }
 
 export function GetWSLDistributions() {
@@ -74,8 +90,16 @@ export function MinimizeWindow() {
   return window['go']['main']['App']['MinimizeWindow']();
 }
 
+export function RenameTab(arg1, arg2) {
+  return window['go']['main']['App']['RenameTab'](arg1, arg2);
+}
+
 export function ResizeShell(arg1, arg2, arg3) {
   return window['go']['main']['App']['ResizeShell'](arg1, arg2, arg3);
+}
+
+export function SetActiveTab(arg1) {
+  return window['go']['main']['App']['SetActiveTab'](arg1);
 }
 
 export function SetDefaultShell(arg1) {
@@ -88,6 +112,10 @@ export function ShowMessageDialog(arg1, arg2) {
 
 export function StartShell(arg1, arg2) {
   return window['go']['main']['App']['StartShell'](arg1, arg2);
+}
+
+export function StartTabShell(arg1) {
+  return window['go']['main']['App']['StartTabShell'](arg1);
 }
 
 export function WaitForSessionClose(arg1) {

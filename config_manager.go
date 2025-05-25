@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -64,6 +65,12 @@ func (a *App) loadConfig() error {
 		fmt.Printf("Warning: Failed to parse config file %s: %v. Using default config.\n", configPath, err)
 		a.config = DefaultConfig() // Reset to default on parse error
 		return nil
+	}
+
+	// Migrate legacy configuration to platform-specific format
+	if migrated := a.migrateLegacyConfig(); migrated {
+		fmt.Println("Migrated legacy shell configuration to platform-specific format")
+		a.markConfigDirty() // Save the migrated config
 	}
 
 	fmt.Printf("Config loaded successfully from %s\n", configPath)
@@ -174,27 +181,89 @@ func (a *App) handleFrontendResizeEvent(optionalData ...interface{}) {
 	}
 }
 
-// SetDefaultShell updates the default shell in the configuration and marks it dirty.
+// SetDefaultShell updates the platform-specific default shell in the configuration and marks it dirty.
 func (a *App) SetDefaultShell(shellPath string) error {
 	if a.config == nil {
 		return fmt.Errorf("config not initialized, cannot set default shell")
 	}
 
-	// Only mark dirty if value actually changes
-	if a.config.DefaultShell != shellPath {
-		a.config.DefaultShell = shellPath
-		fmt.Printf("Default shell set to: %s\n", shellPath)
+	// Set the platform-specific shell configuration
+	currentShell := a.getPlatformDefaultShell()
+	if currentShell != shellPath {
+		a.setPlatformDefaultShell(shellPath)
+		fmt.Printf("Default shell for %s set to: %s\n", getOSName(), shellPath)
 		a.markConfigDirty()
 	}
 	return nil
 }
 
-// GetCurrentDefaultShellSetting returns the raw default shell string from the configuration.
+// setPlatformDefaultShell sets the platform-specific default shell configuration
+func (a *App) setPlatformDefaultShell(shellPath string) {
+	switch runtime.GOOS {
+	case "windows":
+		a.config.DefaultShellWindows = shellPath
+	case "darwin":
+		a.config.DefaultShellDarwin = shellPath
+	case "linux":
+		a.config.DefaultShellLinux = shellPath
+	default:
+		// For other Unix-like systems, use Linux configuration
+		a.config.DefaultShellLinux = shellPath
+	}
+}
+
+// getOSName returns a human-readable OS name for logging
+func getOSName() string {
+	switch runtime.GOOS {
+	case "windows":
+		return "Windows"
+	case "darwin":
+		return "macOS"
+	case "linux":
+		return "Linux"
+	default:
+		return runtime.GOOS
+	}
+}
+
+// migrateLegacyConfig migrates legacy default_shell configuration to platform-specific format
+func (a *App) migrateLegacyConfig() bool {
+	if a.config == nil {
+		return false
+	}
+
+	// Check if we have a legacy default_shell set
+	if a.config.DefaultShell != "" {
+		// Only migrate to the current platform if it's not already set
+		currentPlatformShell := a.getPlatformDefaultShell()
+		if currentPlatformShell == "" {
+			// Set only the current platform's shell
+			a.setPlatformDefaultShell(a.config.DefaultShell)
+			fmt.Printf("Migrated legacy shell '%s' to %s configuration\n", a.config.DefaultShell, getOSName())
+
+			// Clear the legacy field after migration
+			a.config.DefaultShell = ""
+			return true
+		} else {
+			// Platform-specific shell already set, just clear legacy field
+			fmt.Printf("Legacy shell '%s' found but %s already has platform-specific shell '%s', clearing legacy field\n",
+				a.config.DefaultShell, getOSName(), currentPlatformShell)
+			a.config.DefaultShell = ""
+			return true
+		}
+	}
+
+	return false
+}
+
+// GetCurrentDefaultShellSetting returns the platform-specific default shell string from the configuration.
 // This is intended for populating UI elements.
 func (a *App) GetCurrentDefaultShellSetting() string {
 	if a.config == nil {
 		fmt.Println("GetCurrentDefaultShellSetting: config is nil, returning empty string.")
 		return ""
 	}
-	return a.config.DefaultShell
+
+	// Get platform-specific shell configuration
+	return a.getPlatformDefaultShell()
 }

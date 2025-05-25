@@ -1,60 +1,93 @@
 /* Tabs Component Styles */
 
 .tabs-container {
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+}
+
+.tabs-bar {
     display: flex;
     align-items: center;
-    background-color: var(--bg-secondary);
-    border-bottom: 1px solid var(--border-color);
-    height: 35px;
-    padding: 0 8px;
+    height: 32px;
+    user-select: none;
+}
+
+.tabs-list {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.tabs-list::-webkit-scrollbar {
+    display: none;
 }
 
 .tab {
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-color);
-    border-bottom: none;
-    padding: 6px 12px;
-    cursor: pointer;
-    font-size: 12px;
-    color: var(--text-secondary);
-    border-radius: 4px 4px 0 0;
-    margin-right: 2px;
-    position: relative;
     display: flex;
     align-items: center;
-    gap: 6px;
+    height: 32px;
+    min-width: 120px;
     max-width: 200px;
-    min-width: 100px;
+    padding: 0 12px;
+    border-right: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    position: relative;
 }
 
 .tab.active {
     background: var(--bg-primary);
     color: var(--text-primary);
-    border-bottom: 1px solid var(--bg-primary);
-    margin-bottom: -1px;
+    border-bottom: 2px solid var(--accent-color);
 }
 
 .tab:hover:not(.active) {
     background: var(--bg-quaternary);
 }
 
+.tab-icon {
+    width: 14px;
+    height: 14px;
+    margin-right: 6px;
+    flex-shrink: 0;
+}
+
 .tab-title {
+    flex: 1;
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
-    flex: 1;
+    font-size: 13px;
+    line-height: 1;
+    /* Add right padding when no close button to match spacing */
+    padding-right: 6px;
+}
+
+/* Remove padding when close button is present */
+.tab:has(.tab-close) .tab-title {
+    padding-right: 0;
 }
 
 .tab-close {
+    width: 16px;
+    height: 16px;
+    margin-left: 6px;
+    border-radius: 3px;
     background: none;
     border: none;
     color: var(--text-tertiary);
     cursor: pointer;
-    font-size: 12px;
-    padding: 2px;
-    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
     opacity: 0;
-    transition: opacity 0.2s ease;
+    transition: opacity 0.15s ease, background-color 0.15s ease;
 }
 
 .tab:hover .tab-close {
@@ -66,23 +99,81 @@
     color: white;
 }
 
-.tab-add {
+.tabs-controls {
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    gap: 4px;
+}
+
+.new-tab-btn,
+.new-ssh-tab-btn {
+    width: 24px;
+    height: 24px;
+    border: none;
     background: none;
-    border: 1px solid var(--border-color);
     color: var(--text-tertiary);
-    padding: 4px 8px;
     cursor: pointer;
-    font-size: 16px;
-    border-radius: 4px;
-    margin-left: 4px;
-    width: 28px;
-    height: 28px;
+    border-radius: 3px;
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: background-color 0.15s ease;
 }
 
-.tab-add:hover {
+.new-tab-btn:hover,
+.new-ssh-tab-btn:hover {
+    background: var(--bg-quaternary);
+    color: var(--text-primary);
+}
+
+/* Tooltip for truncated tab names */
+.tab-tooltip {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
     background: var(--bg-tertiary);
     color: var(--text-primary);
+    padding: 4px 8px;
+    font-size: 12px;
+    border-radius: 4px;
+    white-space: nowrap;
+    z-index: 1000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    margin-bottom: 4px;
+    border: 1px solid var(--border-color);
+}
+
+.tab:hover .tab-tooltip {
+    opacity: 1;
+}
+
+/* SSH tab styling */
+.tab.ssh-tab {
+    border-left: 3px solid var(--warning-color);
+}
+
+.tab.ssh-tab .tab-icon {
+    color: var(--warning-color);
+}
+
+/* Closing tab styling */
+.tab.closing {
+    opacity: 0.6;
+    pointer-events: none;
+    background: var(--bg-tertiary);
+    transition: opacity 0.2s ease;
+}
+
+.tab.closing .tab-close {
+    opacity: 1;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 } 

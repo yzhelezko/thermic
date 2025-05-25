@@ -172,6 +172,208 @@ func (a *App) GetShellsForUI() []map[string]interface{} {
 	return result
 }
 
+// Tab Management Methods
+
+// CreateTab creates a new terminal tab
+func (a *App) CreateTab(shell string, sshConfig *SSHConfig) (*Tab, error) {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+
+	// Generate unique IDs
+	tabId := fmt.Sprintf("tab_%d", time.Now().UnixNano())
+	sessionId := fmt.Sprintf("session_%d", time.Now().UnixNano())
+
+	// Determine connection type and title
+	connectionType := "local"
+	title := shell
+	if shell == "" {
+		shell = a.GetDefaultShell()
+		title = shell
+	}
+
+	// Handle SSH connections
+	if sshConfig != nil {
+		connectionType = "ssh"
+		title = fmt.Sprintf("%s@%s", sshConfig.Username, sshConfig.Host)
+		if sshConfig.Port != 22 {
+			title = fmt.Sprintf("%s@%s:%d", sshConfig.Username, sshConfig.Host, sshConfig.Port)
+		}
+	}
+
+	// Create tab
+	tab := &Tab{
+		ID:             tabId,
+		Title:          title,
+		SessionID:      sessionId,
+		Shell:          shell,
+		IsActive:       false,
+		ConnectionType: connectionType,
+		SSHConfig:      sshConfig,
+		Created:        time.Now(),
+	}
+
+	// Store tab
+	a.tabs[tabId] = tab
+
+	return tab, nil
+}
+
+// GetTabs returns all tabs
+func (a *App) GetTabs() []*Tab {
+	a.mutex.RLock()
+	defer a.mutex.RUnlock()
+
+	tabs := make([]*Tab, 0, len(a.tabs))
+	for _, tab := range a.tabs {
+		tabs = append(tabs, tab)
+	}
+
+	// Sort by creation time
+	for i := 0; i < len(tabs)-1; i++ {
+		for j := i + 1; j < len(tabs); j++ {
+			if tabs[i].Created.After(tabs[j].Created) {
+				tabs[i], tabs[j] = tabs[j], tabs[i]
+			}
+		}
+	}
+
+	return tabs
+}
+
+// SetActiveTab sets the active tab
+func (a *App) SetActiveTab(tabId string) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+
+	// Check if tab exists
+	tab, exists := a.tabs[tabId]
+	if !exists {
+		return fmt.Errorf("tab %s not found", tabId)
+	}
+
+	// Deactivate current active tab
+	if a.activeTabId != "" {
+		if currentTab, exists := a.tabs[a.activeTabId]; exists {
+			currentTab.IsActive = false
+		}
+	}
+
+	// Activate new tab
+	tab.IsActive = true
+	a.activeTabId = tabId
+
+	return nil
+}
+
+// GetActiveTab returns the currently active tab
+func (a *App) GetActiveTab() *Tab {
+	a.mutex.RLock()
+	defer a.mutex.RUnlock()
+
+	if a.activeTabId == "" {
+		return nil
+	}
+
+	return a.tabs[a.activeTabId]
+}
+
+// CloseTab closes a tab and its associated session
+func (a *App) CloseTab(tabId string) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+
+	tab, exists := a.tabs[tabId]
+	if !exists {
+		return fmt.Errorf("tab %s not found", tabId)
+	}
+
+	// Remove tab first
+	delete(a.tabs, tabId)
+
+	// Close the associated session asynchronously to avoid blocking
+	if tab.SessionID != "" {
+		go func(sessionID string) {
+			if err := a.CloseShell(sessionID); err != nil {
+				fmt.Printf("Error closing session %s: %v\n", sessionID, err)
+			}
+		}(tab.SessionID)
+	}
+
+	// If this was the active tab, find a new active tab
+	if a.activeTabId == tabId {
+		a.activeTabId = ""
+
+		// Set first available tab as active
+		for id, t := range a.tabs {
+			t.IsActive = true
+			a.activeTabId = id
+			break
+		}
+	}
+
+	return nil
+}
+
+// StartTabShell starts a shell for a specific tab
+func (a *App) StartTabShell(tabId string) error {
+	a.mutex.RLock()
+	tab, exists := a.tabs[tabId]
+	a.mutex.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("tab %s not found", tabId)
+	}
+
+	// Handle SSH connections
+	if tab.ConnectionType == "ssh" && tab.SSHConfig != nil {
+		return a.startSSHSession(tab)
+	}
+
+	// Handle local shell
+	return a.StartShell(tab.Shell, tab.SessionID)
+}
+
+// startSSHSession starts an SSH session for a tab
+func (a *App) startSSHSession(tab *Tab) error {
+	// For now, we'll use SSH through the local shell
+	// In a full implementation, you'd want to use an SSH library like golang.org/x/crypto/ssh
+
+	sshCmd := fmt.Sprintf("ssh %s@%s", tab.SSHConfig.Username, tab.SSHConfig.Host)
+	if tab.SSHConfig.Port != 22 {
+		sshCmd = fmt.Sprintf("ssh -p %d %s@%s", tab.SSHConfig.Port, tab.SSHConfig.Username, tab.SSHConfig.Host)
+	}
+
+	// Use the system shell to run SSH command
+	systemShell := a.GetDefaultShell()
+
+	// Start the shell and then execute SSH command
+	if err := a.StartShell(systemShell, tab.SessionID); err != nil {
+		return err
+	}
+
+	// Wait a moment for shell to initialize, then send SSH command
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		a.WriteToShell(tab.SessionID, sshCmd+"\n")
+	}()
+
+	return nil
+}
+
+// RenameTab renames a tab
+func (a *App) RenameTab(tabId, newTitle string) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+
+	tab, exists := a.tabs[tabId]
+	if !exists {
+		return fmt.Errorf("tab %s not found", tabId)
+	}
+
+	tab.Title = newTitle
+	return nil
+}
+
 // Greet returns a greeting for the given name
 func (a *App) Greet(name string) string {
 	return fmt.Sprintf("Hello %s, It's show time!", name)

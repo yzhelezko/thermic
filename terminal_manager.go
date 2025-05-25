@@ -211,7 +211,7 @@ func (a *App) ResizeShell(sessionId string, cols, rows int) error {
 	return session.pty.Resize(cols, rows)
 }
 
-// CloseShell closes a PTY session (exactly like VS Code)
+// CloseShell closes a PTY session (non-blocking version)
 func (a *App) CloseShell(sessionId string) error {
 	a.mutex.Lock()
 	session, exists := a.sessions[sessionId]
@@ -222,38 +222,25 @@ func (a *App) CloseShell(sessionId string) error {
 
 	// Mark session as being cleaned up to stop goroutines
 	session.cleaning = true
-	a.mutex.Unlock()
 
-	// Close PTY (will terminate the shell process)
-	if session.pty != nil {
-		session.pty.Close()
-	}
-
-	// Wait for process to finish with timeout
-	if session.cmd != nil {
-		done := make(chan error, 1)
-		go func() {
-			done <- session.cmd.Wait()
-		}()
-
-		// Wait for either process completion or timeout (max 3 seconds)
-		select {
-		case <-done:
-			// Process finished normally
-		case <-session.closed:
-			// Stream goroutine finished
-		case <-time.After(3 * time.Second):
-			// Timeout - force kill the process
-			if session.cmd.Process != nil {
-				session.cmd.Process.Kill()
-			}
-		}
-	}
-
-	// Remove from sessions map
-	a.mutex.Lock()
+	// Remove from sessions map immediately
 	delete(a.sessions, sessionId)
 	a.mutex.Unlock()
+
+	// Do cleanup asynchronously to avoid blocking
+	go func() {
+		// Close PTY (will terminate the shell process)
+		if session.pty != nil {
+			session.pty.Close()
+		}
+
+		// Force kill the process after a short delay if it doesn't terminate
+		if session.cmd != nil && session.cmd.Process != nil {
+			// Give the process 1 second to terminate gracefully
+			time.Sleep(1 * time.Second)
+			session.cmd.Process.Kill()
+		}
+	}()
 
 	return nil
 }
