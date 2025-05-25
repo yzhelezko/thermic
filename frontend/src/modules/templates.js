@@ -216,6 +216,26 @@ export function createTerminalSettingsCard() {
                 </div>
             </div>
         </div>
+        <div class="settings-card">
+            <div class="settings-card-header">
+                <div class="settings-card-icon">🖱️</div>
+                <div class="settings-card-title">Terminal Interaction</div>
+            </div>
+            <div class="settings-card-content">
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Select to Copy</div>
+                            <div class="setting-item-description">Automatically copy selected text and paste with right-click</div>
+                        </div>
+                        <label class="modern-toggle">
+                            <input type="checkbox" id="select-to-copy-toggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
     `;
 }
 

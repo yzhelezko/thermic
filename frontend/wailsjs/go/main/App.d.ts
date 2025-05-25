@@ -78,6 +78,8 @@ export function GetProfileTreeAPI():Promise<Array<main.ProfileTreeNode>>;
 
 export function GetProfilesDirectory():Promise<string>;
 
+export function GetSelectToCopyEnabled():Promise<boolean>;
+
 export function GetShellsForUI():Promise<Array<Record<string, any>>>;
 
 export function GetTabStatus(arg1:string):Promise<Record<string, any>>;
@@ -135,6 +137,8 @@ export function SearchProfilesAPI(arg1:string,arg2:Array<string>):Promise<Array<
 export function SetActiveTab(arg1:string):Promise<void>;
 
 export function SetDefaultShell(arg1:string):Promise<void>;
+
+export function SetSelectToCopyEnabled(arg1:boolean):Promise<void>;
 
 export function ShowMessageDialog(arg1:string,arg2:string):Promise<void>;
 

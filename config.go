@@ -9,6 +9,8 @@ type AppConfig struct {
 	DefaultShellWindows string `yaml:"default_shell_windows"`   // Windows-specific default shell
 	DefaultShellLinux   string `yaml:"default_shell_linux"`     // Linux-specific default shell
 	DefaultShellDarwin  string `yaml:"default_shell_darwin"`    // macOS-specific default shell
+	// Context menu settings
+	EnableSelectToCopy bool `yaml:"enable_select_to_copy"` // Enable select-to-copy and right-click-to-paste (disables context menu)
 }
 
 // DefaultConfig returns a new AppConfig with default values
@@ -21,5 +23,7 @@ func DefaultConfig() *AppConfig {
 		DefaultShellWindows: "",    // Empty string means use system default
 		DefaultShellLinux:   "",    // Empty string means use system default
 		DefaultShellDarwin:  "",    // Empty string means use system default
+		// Default context menu settings
+		EnableSelectToCopy: false, // Default to disabled (standard context menu behavior)
 	}
 }

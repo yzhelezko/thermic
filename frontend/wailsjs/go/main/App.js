@@ -154,6 +154,10 @@ export function GetProfilesDirectory() {
   return window['go']['main']['App']['GetProfilesDirectory']();
 }
 
+export function GetSelectToCopyEnabled() {
+  return window['go']['main']['App']['GetSelectToCopyEnabled']();
+}
+
 export function GetShellsForUI() {
   return window['go']['main']['App']['GetShellsForUI']();
 }
@@ -268,6 +272,10 @@ export function SetActiveTab(arg1) {
 
 export function SetDefaultShell(arg1) {
   return window['go']['main']['App']['SetDefaultShell'](arg1);
+}
+
+export function SetSelectToCopyEnabled(arg1) {
+  return window['go']['main']['App']['SetSelectToCopyEnabled'](arg1);
 }
 
 export function ShowMessageDialog(arg1, arg2) {

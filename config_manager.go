@@ -267,3 +267,26 @@ func (a *App) GetCurrentDefaultShellSetting() string {
 	// Get platform-specific shell configuration
 	return a.getPlatformDefaultShell()
 }
+
+// GetSelectToCopyEnabled returns whether select-to-copy mode is enabled
+func (a *App) GetSelectToCopyEnabled() bool {
+	if a.config == nil {
+		fmt.Println("GetSelectToCopyEnabled: config is nil, returning default false.")
+		return false
+	}
+	return a.config.EnableSelectToCopy
+}
+
+// SetSelectToCopyEnabled updates the select-to-copy setting
+func (a *App) SetSelectToCopyEnabled(enabled bool) error {
+	if a.config == nil {
+		return fmt.Errorf("config not initialized, cannot set select-to-copy setting")
+	}
+
+	if a.config.EnableSelectToCopy != enabled {
+		a.config.EnableSelectToCopy = enabled
+		fmt.Printf("Select-to-copy setting updated to: %t\n", enabled)
+		a.markConfigDirty()
+	}
+	return nil
+}

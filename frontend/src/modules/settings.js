@@ -200,6 +200,51 @@ export class SettingsManager {
                 }
             });
         }
+
+        // --- Context Menu Settings Logic ---
+        this.setupContextMenuSettings().catch(error => {
+            console.error('Error setting up context menu settings:', error);
+        });
+    }
+
+    async setupContextMenuSettings() {
+        try {
+            // Get select-to-copy toggle
+            const selectToCopyToggle = document.getElementById('select-to-copy-toggle');
+
+            if (!selectToCopyToggle) {
+                console.warn('Select-to-copy toggle not found in DOM');
+                return;
+            }
+
+            // Load current setting
+            const selectToCopyEnabled = await window.go.main.App.GetSelectToCopyEnabled();
+
+            // Set initial toggle state
+            selectToCopyToggle.checked = selectToCopyEnabled;
+
+            // Add event listener
+            selectToCopyToggle.addEventListener('change', async (event) => {
+                try {
+                    const enabled = event.target.checked;
+                    await window.go.main.App.SetSelectToCopyEnabled(enabled);
+                    showNotification(`Select-to-copy ${enabled ? 'enabled' : 'disabled'}`, 'info');
+                    
+                    // Notify context menu manager about the change
+                    if (window.contextMenuManager) {
+                        window.contextMenuManager.updateContextMenuSettings();
+                    }
+                } catch (error) {
+                    console.error('Error updating select-to-copy setting:', error);
+                    showNotification(`Failed to update select-to-copy setting: ${error.message}`, 'error');
+                    // Revert the toggle on error
+                    event.target.checked = !event.target.checked;
+                }
+            });
+
+        } catch (error) {
+            console.error('Error in setupContextMenuSettings:', error);
+        }
     }
 
     async loadAndPopulateShellSelector() {

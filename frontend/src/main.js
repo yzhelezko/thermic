@@ -121,7 +121,7 @@ class ThermicTerminal {
 
             // Initialize context menu
             console.log('Initializing context menu manager...');
-            this.contextMenuManager.init();
+            await this.contextMenuManager.init();
 
             // Initialize window controls (Wails handles dragging natively via CSS)
             console.log('Initializing window controls manager...');
