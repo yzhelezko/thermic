@@ -459,39 +459,6 @@ func (a *App) sendSuccessMessage(tab *Tab) {
 	})
 }
 
-// getSSHErrorHints provides helpful troubleshooting tips based on error type
-func (a *App) getSSHErrorHints(errorMsg string) string {
-	errorLower := strings.ToLower(errorMsg)
-
-	if strings.Contains(errorLower, "authentication failed") || strings.Contains(errorLower, "unable to authenticate") {
-		return "\033[33m│\033[0m • Check your username and password\r\n\033[33m│\033[0m • Verify SSH key permissions (chmod 600)\r\n\033[33m│\033[0m • Try using password authentication\r\n"
-	}
-
-	if strings.Contains(errorLower, "connection refused") {
-		return "\033[33m│\033[0m • SSH server may not be running\r\n\033[33m│\033[0m • Check if port 22 (or custom port) is open\r\n\033[33m│\033[0m • Verify firewall settings\r\n"
-	}
-
-	if strings.Contains(errorLower, "timeout") || strings.Contains(errorLower, "could not reach") {
-		return "\033[33m│\033[0m • Check network connectivity\r\n\033[33m│\033[0m • Verify the hostname/IP address\r\n\033[33m│\033[0m • Check VPN or proxy settings\r\n"
-	}
-
-	if strings.Contains(errorLower, "no route to host") || strings.Contains(errorLower, "not reachable") {
-		return "\033[33m│\033[0m • Host may be down or unreachable\r\n\033[33m│\033[0m • Check network routing\r\n\033[33m│\033[0m • Verify VPN connection if required\r\n"
-	}
-
-	if strings.Contains(errorLower, "host key") {
-		return "\033[33m│\033[0m • Host key has changed or is unknown\r\n\033[33m│\033[0m • Check ~/.ssh/known_hosts file\r\n\033[33m│\033[0m • Use ssh-keyscan to verify host key\r\n"
-	}
-
-	// Generic SSH tips
-	return "\033[33m│\033[0m • Check SSH server configuration\r\n\033[33m│\033[0m • Verify network connectivity\r\n\033[33m│\033[0m • Review SSH logs for details\r\n"
-}
-
-// startSSHSession starts an SSH session for a tab using native SSH implementation
-func (a *App) startSSHSession(tab *Tab) error {
-	return a.startSSHSessionWithSize(tab, 80, 24)
-}
-
 // startSSHSessionWithSize starts an SSH session for a tab with specified terminal dimensions
 func (a *App) startSSHSessionWithSize(tab *Tab, cols, rows int) error {
 	// Create native SSH session with terminal dimensions
