@@ -12,6 +12,7 @@ import { SettingsManager } from './modules/settings.js';
 import { SidebarManager } from './modules/sidebar.js';
 import { StatusManager } from './modules/status.js';
 import { updateStatus } from './modules/utils.js';
+import VersionManager from './components/VersionManager.js';
 
 class ThermicTerminal {
     constructor() {
@@ -25,6 +26,7 @@ class ThermicTerminal {
         this.settingsManager = new SettingsManager();
         this.sidebarManager = new SidebarManager();
         this.statusManager = new StatusManager();
+        this.versionManager = new VersionManager();
         
         this.init();
         this.setupCleanup();
@@ -154,6 +156,9 @@ class ThermicTerminal {
         window.addEventListener('beforeunload', () => {
             if (this.windowControlsManager) {
                 this.windowControlsManager.cleanup();
+            }
+            if (this.versionManager) {
+                this.versionManager.destroy();
             }
         });
 

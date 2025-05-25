@@ -17,4 +17,5 @@
 /* 3. UI components */
 @import 'settings.css';
 @import 'forms.css';
-@import 'context-menu.css'; 
+@import 'context-menu.css';
+@import 'version-manager.css'; 

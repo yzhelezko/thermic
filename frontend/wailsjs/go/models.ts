@@ -294,6 +294,50 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class UpdateInfo {
+	    available: boolean;
+	    latestVersion: string;
+	    currentVersion: string;
+	    downloadUrl: string;
+	    releaseNotes: string;
+	    size: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.available = source["available"];
+	        this.latestVersion = source["latestVersion"];
+	        this.currentVersion = source["currentVersion"];
+	        this.downloadUrl = source["downloadUrl"];
+	        this.releaseNotes = source["releaseNotes"];
+	        this.size = source["size"];
+	    }
+	}
+	export class VersionInfo {
+	    version: string;
+	    gitCommit: string;
+	    buildDate: string;
+	    goVersion: string;
+	    platform: string;
+	    arch: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new VersionInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.gitCommit = source["gitCommit"];
+	        this.buildDate = source["buildDate"];
+	        this.goVersion = source["goVersion"];
+	        this.platform = source["platform"];
+	        this.arch = source["arch"];
+	    }
+	}
 	export class VirtualFilter {
 	    type: string;
 	    value: string;
