@@ -442,6 +442,12 @@ export class TerminalManager {
             return;
         }
         
+        // Reset terminal state for reconnections
+        if (terminalSession.terminal) {
+            console.log(`Resetting terminal state for session: ${sessionId}`);
+            this.resetTerminalState(terminalSession.terminal);
+        }
+        
         // Mark session as connected (global output listener will handle routing)
         terminalSession.isConnected = true;
         console.log(`Session ${sessionId} marked as connected - using global output listener`);
@@ -451,6 +457,26 @@ export class TerminalManager {
         
         // Switch to this session to make it visible
         this.switchToSession(sessionId);
+    }
+
+    resetTerminalState(terminal) {
+        try {
+            // Reset terminal state without clearing the screen (backend will handle that)
+            // This ensures the frontend terminal is in a clean state
+            
+            // Reset cursor and scrolling state
+            terminal.reset();
+            
+            // Clear any selection
+            terminal.clearSelection();
+            
+            // Ensure we're at the bottom of the buffer
+            terminal.scrollToBottom();
+            
+            console.log('Terminal state reset successfully');
+        } catch (error) {
+            console.warn('Error resetting terminal state:', error);
+        }
     }
 
     switchToSession(sessionId) {

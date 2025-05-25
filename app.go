@@ -434,13 +434,28 @@ func (a *App) sendSuccessMessage(tab *Tab) {
 		return
 	}
 
-	// Clear the entire terminal for a clean SSH session
-	clearTerminal := "\033[2J\033[H"
+	// More comprehensive terminal reset sequence
+	// ESC[2J - Clear entire screen
+	// ESC[H - Move cursor to home position
+	// ESC[3J - Clear scrollback buffer (for terminals that support it)
+	// ESC[!p - Soft terminal reset
+	// ESC[?1049l - Exit alternate screen buffer (if in use)
+	// ESC[m - Reset all attributes
+	clearTerminal := "\033[2J\033[H\033[3J\033[!p\033[?1049l\033[m"
 
-	// Just clear terminal, no success messages
+	// Terminal initialization sequence for proper arrow key handling
+	// ESC[?1l - Reset cursor key mode (ensure standard arrow key sequences)
+	// ESC[?25h - Show cursor
+	// ESC[0m - Reset all attributes
+	initSequence := "\033[?1l\033[?25h\033[0m"
+
+	// Combine reset and initialization
+	fullSequence := clearTerminal + initSequence
+
+	// Send terminal reset and initialization
 	wailsRuntime.EventsEmit(a.ctx, "terminal-output", map[string]interface{}{
 		"sessionId": tab.SessionID,
-		"data":      clearTerminal,
+		"data":      fullSequence,
 	})
 }
 
