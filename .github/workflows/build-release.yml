@@ -93,8 +93,13 @@ jobs:
           wails build -platform ${{ matrix.platform.target }} -clean -tags webkit2_41 \
             -ldflags "-X main.Version=${{ steps.version.outputs.version }} -X main.GitCommit=${{ steps.version.outputs.git_commit }} -X main.BuildDate=${{ steps.version.outputs.build_date }}"
 
-      - name: Build application (Windows/macOS)
-        if: matrix.platform.os != 'ubuntu-latest'
+      - name: Build application (Windows)
+        if: matrix.platform.os == 'windows-latest'
+        run: |
+          wails build -platform ${{ matrix.platform.target }} -clean -ldflags "-X main.Version=${{ steps.version.outputs.version }} -X main.GitCommit=${{ steps.version.outputs.git_commit }} -X main.BuildDate=${{ steps.version.outputs.build_date }}"
+
+      - name: Build application (macOS)
+        if: matrix.platform.os == 'macos-latest'
         run: |
           wails build -platform ${{ matrix.platform.target }} -clean \
             -ldflags "-X main.Version=${{ steps.version.outputs.version }} -X main.GitCommit=${{ steps.version.outputs.git_commit }} -X main.BuildDate=${{ steps.version.outputs.build_date }}"
