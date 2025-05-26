@@ -454,12 +454,103 @@ func (a *App) StartTabShellWithSize(tabId string, cols, rows int) error {
 
 // startSSHConnectionAnimation shows animated connecting sequence
 func (a *App) startSSHConnectionAnimation(tab *Tab) {
-	// No more animation messages - just silent status updates
+	if a.ctx == nil {
+		return
+	}
+
+	// Show connecting banner with host info
+	banner := fmt.Sprintf("\r\n\033[36m╭─ SSH Connection\033[0m\r\n\033[36m│\033[0m Host: \033[33m%s:%d\033[0m\r\n\033[36m│\033[0m User: \033[33m%s\033[0m\r\n\033[36m│\033[0m",
+		tab.SSHConfig.Host, tab.SSHConfig.Port, tab.SSHConfig.Username)
+	wailsRuntime.EventsEmit(a.ctx, "terminal-output", map[string]interface{}{
+		"sessionId": tab.SessionID,
+		"data":      banner,
+	})
+
+	// Start animated connection sequence
+	go func() {
+		frames := []string{
+			"\033[36m│\033[0m \033[32m●\033[0m Connecting   ",
+			"\033[36m│\033[0m \033[32m●\033[0m Connecting.  ",
+			"\033[36m│\033[0m \033[32m●\033[0m Connecting.. ",
+			"\033[36m│\033[0m \033[32m●\033[0m Connecting...",
+		}
+		i := 0
+		for {
+			// Check if connection is still in progress
+			a.mutex.RLock()
+			currentStatus := tab.Status
+			a.mutex.RUnlock()
+			if currentStatus != "connecting" {
+				break
+			}
+
+			frame := frames[i%len(frames)]
+
+			// Use carriage return to overwrite the same line
+			wailsRuntime.EventsEmit(a.ctx, "terminal-output", map[string]interface{}{
+				"sessionId": tab.SessionID,
+				"data":      "\r" + frame,
+			})
+
+			time.Sleep(300 * time.Millisecond)
+			i++
+		}
+	}()
+}
+
+// getSSHErrorHints provides helpful troubleshooting tips based on error type
+func (a *App) getSSHErrorHints(errorMsg string) string {
+	errorLower := strings.ToLower(errorMsg)
+	if strings.Contains(errorLower, "authentication failed") || strings.Contains(errorLower, "unable to authenticate") {
+		return "\033[33m│\033[0m • Check your username and password\r\n\033[33m│\033[0m • Verify SSH key permissions (chmod 600)\r\n\033[33m│\033[0m • Try using password authentication\r\n"
+	}
+	if strings.Contains(errorLower, "connection refused") {
+		return "\033[33m│\033[0m • SSH server may not be running\r\n\033[33m│\033[0m • Check if port 22 (or custom port) is open\r\n\033[33m│\033[0m • Verify firewall settings\r\n"
+	}
+	if strings.Contains(errorLower, "timeout") || strings.Contains(errorLower, "could not reach") {
+		return "\033[33m│\033[0m • Check network connectivity\r\n\033[33m│\033[0m • Verify the hostname/IP address\r\n\033[33m│\033[0m • Check VPN or proxy settings\r\n"
+	}
+	if strings.Contains(errorLower, "no route to host") || strings.Contains(errorLower, "not reachable") {
+		return "\033[33m│\033[0m • Host may be down or unreachable\r\n\033[33m│\033[0m • Check network routing\r\n\033[33m│\033[0m • Verify VPN connection if required\r\n"
+	}
+	if strings.Contains(errorLower, "host key") {
+		return "\033[33m│\033[0m • Host key has changed or is unknown\r\n\033[33m│\033[0m • Check ~/.ssh/known_hosts file\r\n\033[33m│\033[0m • Use ssh-keyscan to verify host key\r\n"
+	}
+	// Generic SSH tips
+	return "\033[33m│\033[0m • Check SSH server configuration\r\n\033[33m│\033[0m • Verify network connectivity\r\n\033[33m│\033[0m • Review SSH logs for details\r\n"
 }
 
 // sendFormattedError sends a nicely formatted error message to the terminal
 func (a *App) sendFormattedError(tab *Tab, err error) {
-	// No more error messages in terminal - rely on tab status only
+	if a.ctx == nil {
+		return
+	}
+
+	// Complete the connection banner with failure
+	clearAndComplete := "\r\033[36m│\033[0m \033[31m✗ Connection failed\033[0m\r\n\033[36m╰─\033[0m\r\n"
+
+	// Create formatted error message for SSH
+	errorMsg := clearAndComplete
+
+	// Add error details box
+	errorBox := fmt.Sprintf("\r\n\033[31m╭─ Error Details\033[0m\r\n\033[31m│\033[0m %s\r\n\033[31m╰─\033[0m\r\n", err.Error())
+
+	// Add troubleshooting hints for SSH errors
+	hints := a.getSSHErrorHints(err.Error())
+	if hints != "" {
+		hintBox := fmt.Sprintf("\r\n\033[33m╭─ Troubleshooting Tips\033[0m\r\n%s\033[33m╰─\033[0m\r\n", hints)
+		errorBox += hintBox
+	}
+	fullError := errorMsg + errorBox + "\r\n"
+
+	// Send error message to terminal with a small delay to ensure terminal is ready
+	go func() {
+		time.Sleep(100 * time.Millisecond) // Small delay to ensure terminal session is established
+		wailsRuntime.EventsEmit(a.ctx, "terminal-output", map[string]interface{}{
+			"sessionId": tab.SessionID,
+			"data":      fullError,
+		})
+	}()
 }
 
 // sendSuccessMessage clears the connecting animation and terminal for clean SSH session
