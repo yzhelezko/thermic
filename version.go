@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -135,6 +136,11 @@ func (a *App) DownloadAndInstallUpdate(downloadURL string) error {
 		return fmt.Errorf("download URL is empty")
 	}
 
+	// Handle macOS app bundle updates differently
+	if runtime.GOOS == "darwin" {
+		return a.downloadAndInstallMacOSUpdate(downloadURL)
+	}
+
 	// Get current executable path
 	currentExe, err := os.Executable()
 	if err != nil {
@@ -171,6 +177,38 @@ func (a *App) DownloadAndInstallUpdate(downloadURL string) error {
 
 // RestartApplication restarts the application after update
 func (a *App) RestartApplication() error {
+	if runtime.GOOS == "darwin" {
+		// On macOS, find the app bundle and use 'open' command
+		currentExe, err := os.Executable()
+		if err != nil {
+			return fmt.Errorf("failed to get current executable path: %w", err)
+		}
+
+		// Find the app bundle path
+		appBundlePath := currentExe
+		for {
+			if strings.HasSuffix(appBundlePath, ".app") {
+				break
+			}
+			parent := filepath.Dir(appBundlePath)
+			if parent == appBundlePath {
+				return fmt.Errorf("could not find .app bundle path")
+			}
+			appBundlePath = parent
+		}
+
+		// Use 'open' command to restart the app
+		cmd := exec.Command("open", appBundlePath)
+		if err := cmd.Start(); err != nil {
+			return fmt.Errorf("failed to restart app: %w", err)
+		}
+
+		// Exit current instance
+		os.Exit(0)
+		return nil
+	}
+
+	// For other platforms, use the original logic
 	currentExe, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("failed to get current executable path: %w", err)
@@ -299,9 +337,9 @@ func getAssetNameForPlatform() string {
 		return "thermic-windows-amd64.exe"
 	case "darwin":
 		if runtime.GOARCH == "arm64" {
-			return "thermic-darwin-arm64"
+			return "thermic-darwin-arm64.zip"
 		}
-		return "thermic-darwin-amd64"
+		return "thermic-darwin-amd64.zip"
 	case "linux":
 		return "thermic-linux-amd64"
 	default:
@@ -331,4 +369,152 @@ func isNewerVersion(current, latest string) bool {
 
 	// Compare semantic versions
 	return latestVer.GreaterThan(currentVer)
+}
+
+// downloadAndInstallMacOSUpdate handles macOS app bundle updates
+func (a *App) downloadAndInstallMacOSUpdate(downloadURL string) error {
+	// Get current executable path - this will be inside the app bundle
+	currentExe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to get current executable path: %w", err)
+	}
+
+	// Find the app bundle path (should be something like /Applications/Thermic.app)
+	appBundlePath := currentExe
+	for {
+		if strings.HasSuffix(appBundlePath, ".app") {
+			break
+		}
+		parent := filepath.Dir(appBundlePath)
+		if parent == appBundlePath {
+			return fmt.Errorf("could not find .app bundle path")
+		}
+		appBundlePath = parent
+	}
+
+	// Create temp directory for download
+	tempDir, err := os.MkdirTemp("", "thermic-update-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp directory: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Download the zip file
+	zipPath := filepath.Join(tempDir, "update.zip")
+	if err := a.downloadFile(downloadURL, zipPath); err != nil {
+		return fmt.Errorf("failed to download update: %w", err)
+	}
+
+	// Extract the zip file
+	extractDir := filepath.Join(tempDir, "extracted")
+	if err := a.extractZip(zipPath, extractDir); err != nil {
+		return fmt.Errorf("failed to extract update: %w", err)
+	}
+
+	// Find the new app bundle in the extracted files
+	newAppBundlePath := filepath.Join(extractDir, "Thermic.app")
+	if _, err := os.Stat(newAppBundlePath); os.IsNotExist(err) {
+		return fmt.Errorf("Thermic.app not found in update package")
+	}
+
+	// Replace the app bundle
+	if err := a.replaceAppBundle(appBundlePath, newAppBundlePath); err != nil {
+		return fmt.Errorf("failed to replace app bundle: %w", err)
+	}
+
+	return nil
+}
+
+// extractZip extracts a zip file to the specified directory
+func (a *App) extractZip(src, dest string) error {
+	// Open the zip file for reading
+	r, err := zip.OpenReader(src)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	// Create the destination directory
+	if err := os.MkdirAll(dest, 0755); err != nil {
+		return err
+	}
+
+	// Extract files
+	for _, f := range r.File {
+		// Construct the full path
+		path := filepath.Join(dest, f.Name)
+
+		// Check for directory traversal
+		if !strings.HasPrefix(path, filepath.Clean(dest)+string(os.PathSeparator)) {
+			return fmt.Errorf("invalid file path: %s", f.Name)
+		}
+
+		if f.FileInfo().IsDir() {
+			// Create directory
+			if err := os.MkdirAll(path, f.FileInfo().Mode()); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// Create the directories for this file
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			return err
+		}
+
+		// Open the file in the zip
+		rc, err := f.Open()
+		if err != nil {
+			return err
+		}
+
+		// Create the destination file
+		outFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.FileInfo().Mode())
+		if err != nil {
+			rc.Close()
+			return err
+		}
+
+		// Copy the file contents
+		_, err = io.Copy(outFile, rc)
+		outFile.Close()
+		rc.Close()
+
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// replaceAppBundle replaces the current app bundle with a new one
+func (a *App) replaceAppBundle(currentAppPath, newAppPath string) error {
+	// Create a shell script that replaces the app bundle after the app exits
+	scriptPath := currentAppPath + ".update.sh"
+	scriptContent := fmt.Sprintf(`#!/bin/bash
+sleep 2
+mv "%s" "%s.bak" 2>/dev/null
+mv "%s" "%s"
+if [ $? -ne 0 ]; then
+    mv "%s.bak" "%s" 2>/dev/null
+    echo "Update failed"
+    exit 1
+fi
+rm -rf "%s.bak"
+open "%s"
+rm -f "$0"
+`, currentAppPath, currentAppPath, newAppPath, currentAppPath, currentAppPath, currentAppPath, currentAppPath, currentAppPath)
+
+	if err := os.WriteFile(scriptPath, []byte(scriptContent), 0755); err != nil {
+		return err
+	}
+
+	// Execute the script
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Start()
+
+	// Exit current process
+	os.Exit(0)
+	return nil
 }
