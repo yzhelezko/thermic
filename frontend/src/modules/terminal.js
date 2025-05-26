@@ -42,6 +42,18 @@ export class TerminalManager {
                     const sessionId = data.sessionId;
                     console.log(`Global listener received output for session: ${sessionId}`);
                     
+                    // Track activity for inactive tabs
+                    if (this.tabsManager && sessionId !== this.activeSessionId) {
+                        // Filter out certain types of output that shouldn't trigger activity
+                        if (this.shouldTriggerActivity(data.data)) {
+                            // Find the tab associated with this session
+                            const tabId = this.findTabBySessionId(sessionId);
+                            if (tabId) {
+                                this.tabsManager.markTabActivity(tabId);
+                            }
+                        }
+                    }
+                    
                     // Route output to the correct terminal session
                     const terminalSession = this.terminals.get(sessionId);
                     
@@ -734,6 +746,38 @@ export class TerminalManager {
         } else if (this.terminal) {
             this.terminal.focus();
         }
+    }
+
+    findTabBySessionId(sessionId) {
+        if (!this.tabsManager) return null;
+        
+        for (const [tabId, tab] of this.tabsManager.tabs) {
+            if (tab.sessionId === sessionId) {
+                return tabId;
+            }
+        }
+        return null;
+    }
+
+    shouldTriggerActivity(data) {
+        // Don't trigger activity for certain types of output
+        if (!data || typeof data !== 'string') return false;
+        
+        // Filter out SSH connection animations and status messages
+        if (data.includes('SSH Connection') || 
+            data.includes('Connecting...') ||
+            data.includes('Connected to') ||
+            data.includes('Connection established') ||
+            data.includes('╭─') || data.includes('╰─') || // SSH status borders
+            data.match(/^\033\[[0-9;]*[mK]$/) || // Pure ANSI escape sequences
+            data.trim() === '' || // Empty content
+            data === '\r' || // Just carriage returns
+            data.length < 2) { // Very short content
+            return false;
+        }
+        
+        // Trigger activity for actual content
+        return true;
     }
 
     cleanup() {
