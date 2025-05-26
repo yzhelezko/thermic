@@ -1,0 +1,9 @@
+---
+description: This is wails + golang terminal app
+globs: 
+alwaysApply: true
+---
+If needed update/add only important into rules about code that ai should know before doing any change into file:
+[airules.md](mdc:.cursor/rules/airules.md)
+
+Rules must be short and in the same format is it exists now
