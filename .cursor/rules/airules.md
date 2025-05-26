@@ -1,0 +1,3 @@
+- Always use command "wails dev" to test the app
+- Add there only super important things, and only if user confirm that everthing is working good now it should be super short description here, just append new line if needed
+- Always work with setupGlobalOutputListener() in terminal.js if you need to extend terminal features
