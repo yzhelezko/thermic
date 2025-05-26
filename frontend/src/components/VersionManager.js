@@ -54,9 +54,9 @@ class VersionManager {
     }
 
     addVersionToStatusBar() {
-        const statusRight = document.querySelector('.status-right');
+        const statusVersion = document.querySelector('.status-version');
         
-        if (statusRight) {
+        if (statusVersion) {
             // Check if version container already exists
             const existingContainer = document.getElementById('version-container');
             if (existingContainer) {
@@ -68,13 +68,13 @@ class VersionManager {
             // Add separator
             const separator = document.createElement('span');
             separator.textContent = '•';
-            statusRight.appendChild(separator);
+            statusVersion.appendChild(separator);
             
             // Create version container
             const versionContainer = document.createElement('span');
             versionContainer.id = 'version-container';
             versionContainer.className = 'version-container';
-            statusRight.appendChild(versionContainer);
+            statusVersion.appendChild(versionContainer);
             
             this.versionContainer = versionContainer;
             this.loadVersionInfo();

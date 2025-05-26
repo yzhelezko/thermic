@@ -486,26 +486,36 @@ export class TabsManager {
                 return;
             }
 
-            // If this was the active tab, switch to another first (before disconnecting)
+            // Close backend session first to stop any incoming data
+            try {
+                await CloseTab(tabId);
+                console.log(`Backend session closed for tab ${tabId}`);
+            } catch (error) {
+                console.warn('Backend CloseTab failed, continuing with cleanup:', error);
+            }
+
+            // Wait a moment for backend to fully close
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // If this was the active tab, switch to another first (after backend close)
             if (this.activeTabId === tabId) {
                 const remainingTabs = Array.from(this.tabs.keys()).filter(id => id !== tabId);
                 if (remainingTabs.length > 0) {
-                    await this.switchToTab(remainingTabs[0]);
+                    try {
+                        await this.switchToTab(remainingTabs[0]);
+                        console.log(`Switched to tab ${remainingTabs[0]} before closing ${tabId}`);
+                    } catch (switchError) {
+                        console.warn('Error switching tabs during close:', switchError);
+                    }
                 }
             }
 
-            // Then disconnect the terminal session after switching away
+            // Now safely disconnect the terminal session
             this.terminalManager.disconnectSession(tab.sessionId);
 
-            // Remove from local tabs first (optimistic update)
+            // Remove from local tabs (after all cleanup)
             this.tabs.delete(tabId);
             this.renderTabs();
-
-            // Close on backend asynchronously (don't wait for it)
-            CloseTab(tabId).catch((error) => {
-                console.warn('Backend CloseTab failed:', error);
-                // This is fine, the UI is already updated
-            });
             
             updateStatus('Tab closed');
         } catch (error) {

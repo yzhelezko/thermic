@@ -108,6 +108,9 @@ class ThermicTerminal {
             // Expose tabs manager globally for event handling
             window.tabsManager = this.tabsManager;
             
+            // Expose status manager globally for event handling
+            window.statusManager = this.statusManager;
+            
             // Expose context menu manager globally for tab context menu integration
             window.contextMenuManager = this.contextMenuManager;
 
@@ -118,6 +121,12 @@ class ThermicTerminal {
             // Initialize tabs manager AFTER DOM is ready
             console.log('Initializing tabs manager...');
             this.tabsManager.init();
+
+            // Connect status manager with tabs manager
+            this.statusManager.setTabsManager(this.tabsManager);
+            
+            // Set up tab switch monitoring for status updates
+            this.setupTabSwitchMonitoring();
 
             // Initialize context menu
             console.log('Initializing context menu manager...');
@@ -133,10 +142,11 @@ class ThermicTerminal {
             
             console.log('Component initialization completed successfully');
         } catch (error) {
-            console.error('Error during component initialization:', error);
+            console.error('Critical error during component initialization:', error);
             console.error('Stack trace:', error.stack);
-            updateStatus('Component initialization failed: ' + error.message);
-            throw error;
+            
+            // Show error in status bar
+            updateStatus('Initialization failed: ' + error.message);
         }
 
         // Set up terminal resize and cleanup handlers
@@ -267,6 +277,75 @@ class ThermicTerminal {
                 this.tabsManager.showSSHDialog();
             }
         });
+    }
+
+    setupTabSwitchMonitoring() {
+        // Override the switchToTab method to notify status manager
+        const originalSwitchToTab = this.tabsManager.switchToTab.bind(this.tabsManager);
+        
+        this.tabsManager.switchToTab = async (tabId) => {
+            const result = await originalSwitchToTab(tabId);
+            
+            // Notify status manager of tab switch
+            if (this.statusManager) {
+                this.statusManager.onTabSwitch(tabId);
+            }
+            
+            // Update status bar class for SSH connections
+            this.updateStatusBarClass();
+            
+            return result;
+        };
+        
+        // Also monitor for tab close events
+        const originalCloseTab = this.tabsManager.closeTab.bind(this.tabsManager);
+        
+        this.tabsManager.closeTab = async (tabId) => {
+            const result = await originalCloseTab(tabId);
+            
+            // Update status after tab close
+            if (this.statusManager) {
+                setTimeout(() => {
+                    this.statusManager.onTabSwitch(this.tabsManager.activeTabId);
+                    this.updateStatusBarClass();
+                }, 100);
+            }
+            
+            return result;
+        };
+    }
+
+    updateStatusBarClass() {
+        const statusBar = document.querySelector('.status-bar');
+        if (!statusBar) return;
+        
+        // Get active tab info
+        const activeTab = this.tabsManager.tabs.get(this.tabsManager.activeTabId);
+        
+        // Update status bar class based on connection type
+        statusBar.classList.remove('ssh-active', 'local-active');
+        
+        if (activeTab) {
+            if (activeTab.connectionType === 'ssh') {
+                statusBar.classList.add('ssh-active');
+                // Show additional stats and separators for SSH connections
+                document.querySelectorAll('[data-stat="load"], [data-stat="uptime"]').forEach(el => {
+                    el.style.display = 'inline';
+                });
+                document.querySelectorAll('.separator[data-for="load"], .separator[data-for="uptime"]').forEach(el => {
+                    el.style.display = 'inline';
+                });
+            } else {
+                statusBar.classList.add('local-active');
+                // Hide additional stats and separators for local connections
+                document.querySelectorAll('[data-stat="load"], [data-stat="uptime"]').forEach(el => {
+                    el.style.display = 'none';
+                });
+                document.querySelectorAll('.separator[data-for="load"], .separator[data-for="uptime"]').forEach(el => {
+                    el.style.display = 'none';
+                });
+            }
+        }
     }
 
     async initializeFallbackTerminal() {

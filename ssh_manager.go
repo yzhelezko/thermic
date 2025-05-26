@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -30,6 +31,11 @@ type SSHSession struct {
 	lastActivity time.Time
 	isHanging    bool
 	forceClose   chan bool
+	// Add monitoring session for system stats
+	monitoringClient  *ssh.Client
+	monitoringEnabled bool
+	monitoringCache   map[string]string
+	monitoringMutex   sync.RWMutex
 }
 
 // CreateSSHSession creates a new SSH connection and session
@@ -184,6 +190,11 @@ func (a *App) CreateSSHSessionWithSize(sessionID string, config *SSHConfig, cols
 		lastActivity: time.Now(),
 		isHanging:    false,
 		forceClose:   make(chan bool),
+		// Add monitoring session for system stats
+		monitoringClient:  nil,
+		monitoringEnabled: false,
+		monitoringCache:   make(map[string]string),
+		monitoringMutex:   sync.RWMutex{},
 	}
 
 	return sshSession, nil
@@ -417,6 +428,9 @@ func (a *App) CloseSSHSession(sshSession *SSHSession) error {
 
 	sshSession.cleaning = true
 
+	// Close monitoring session first
+	a.CloseMonitoringSession(sshSession)
+
 	// Close session and client
 	go func() {
 		if sshSession.session != nil {
@@ -517,4 +531,133 @@ func (a *App) ForceDisconnectSSHSession(sessionID string) error {
 
 	// Force close the session
 	return a.CloseSSHSession(sshSession)
+}
+
+// CreateMonitoringSession creates a separate SSH connection for system monitoring
+func (a *App) CreateMonitoringSession(sshSession *SSHSession, config *SSHConfig) error {
+	// Create SSH client configuration (same as main session)
+	sshConfig := &ssh.ClientConfig{
+		User:            config.Username,
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         5 * time.Second, // Shorter timeout for monitoring
+	}
+
+	// Add authentication methods (same as main session)
+	if config.Password != "" {
+		sshConfig.Auth = append(sshConfig.Auth, ssh.Password(config.Password))
+	}
+
+	if config.KeyPath != "" {
+		key, err := a.loadSSHKey(config.KeyPath)
+		if err == nil {
+			sshConfig.Auth = append(sshConfig.Auth, ssh.PublicKeys(key))
+		}
+	}
+
+	// Try SSH agent if no other auth
+	if len(sshConfig.Auth) == 0 {
+		if agentAuth, err := a.getSSHAgentAuth(); err == nil {
+			sshConfig.Auth = append(sshConfig.Auth, agentAuth)
+		}
+	}
+
+	// Connect monitoring client
+	address := fmt.Sprintf("%s:%d", config.Host, config.Port)
+	monitoringClient, err := ssh.Dial("tcp", address, sshConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create monitoring SSH connection: %w", err)
+	}
+
+	// Store monitoring client
+	sshSession.monitoringMutex.Lock()
+	sshSession.monitoringClient = monitoringClient
+	sshSession.monitoringEnabled = true
+	sshSession.monitoringMutex.Unlock()
+
+	fmt.Printf("Created monitoring SSH session for %s\n", sshSession.sessionID)
+	return nil
+}
+
+// ExecuteMonitoringCommand executes a command on the monitoring SSH session
+// Commands are executed in a way that prevents them from being logged to shell history
+func (a *App) ExecuteMonitoringCommand(sshSession *SSHSession, command string) (string, error) {
+	sshSession.monitoringMutex.RLock()
+	monitoringClient := sshSession.monitoringClient
+	enabled := sshSession.monitoringEnabled
+	sshSession.monitoringMutex.RUnlock()
+
+	if !enabled || monitoringClient == nil {
+		return "", fmt.Errorf("monitoring session not available")
+	}
+
+	// Create a new session for this command
+	session, err := monitoringClient.NewSession()
+	if err != nil {
+		return "", fmt.Errorf("failed to create monitoring session: %w", err)
+	}
+	defer session.Close()
+
+	// Set timeout for command execution
+	done := make(chan bool)
+	go func() {
+		time.Sleep(5 * time.Second) // 5 second timeout
+		select {
+		case <-done:
+			return
+		default:
+			session.Close() // Force close on timeout
+		}
+	}()
+
+	// Wrap command to prevent history logging
+	// Method 1: Use HISTFILE=/dev/null for bash/zsh
+	// Method 2: Prefix with space (works if HISTCONTROL=ignorespace)
+	// Method 3: Use a subshell with disabled history
+	wrappedCommand := fmt.Sprintf("HISTFILE=/dev/null bash -c %q", command)
+
+	// Execute command and get output
+	output, err := session.CombinedOutput(wrappedCommand)
+	close(done)
+
+	if err != nil {
+		return "", fmt.Errorf("command execution failed: %w", err)
+	}
+
+	return string(output), nil
+}
+
+// CacheMonitoringResult caches a monitoring result
+func (a *App) CacheMonitoringResult(sshSession *SSHSession, command, result string) {
+	sshSession.monitoringMutex.Lock()
+	defer sshSession.monitoringMutex.Unlock()
+
+	if sshSession.monitoringCache == nil {
+		sshSession.monitoringCache = make(map[string]string)
+	}
+	sshSession.monitoringCache[command] = result
+}
+
+// GetCachedMonitoringResult gets a cached monitoring result
+func (a *App) GetCachedMonitoringResult(sshSession *SSHSession, command string) (string, bool) {
+	sshSession.monitoringMutex.RLock()
+	defer sshSession.monitoringMutex.RUnlock()
+
+	if sshSession.monitoringCache == nil {
+		return "", false
+	}
+	result, exists := sshSession.monitoringCache[command]
+	return result, exists
+}
+
+// CloseMonitoringSession closes the monitoring SSH session
+func (a *App) CloseMonitoringSession(sshSession *SSHSession) {
+	sshSession.monitoringMutex.Lock()
+	defer sshSession.monitoringMutex.Unlock()
+
+	if sshSession.monitoringClient != nil {
+		sshSession.monitoringClient.Close()
+		sshSession.monitoringClient = nil
+		fmt.Printf("Closed monitoring SSH session for %s\n", sshSession.sessionID)
+	}
+	sshSession.monitoringEnabled = false
 }
