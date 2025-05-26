@@ -26,10 +26,10 @@ jobs:
             name: thermic-linux-amd64
           - os: macos-latest
             target: darwin/amd64
-            name: thermic-darwin-amd64
+            name: thermic-darwin-amd64.zip
           - os: macos-latest
             target: darwin/arm64
-            name: thermic-darwin-arm64
+            name: thermic-darwin-arm64.zip
 
     runs-on: ${{ matrix.platform.os }}
 
@@ -116,11 +116,9 @@ jobs:
         shell: bash
         run: |
           mkdir -p artifacts
-          # Find the executable file
-          if [ -f "build/bin/thermic.exe" ]; then
-            cp build/bin/thermic.exe artifacts/${{ matrix.platform.name }}
-          elif [ -f "build/bin/Thermic.exe" ]; then
-            cp "build/bin/Thermic.exe" artifacts/${{ matrix.platform.name }}
+          # Find the executable file (should be Thermic.exe with capital T)
+          if [ -f "build/bin/Thermic.exe" ]; then
+            cp build/bin/Thermic.exe artifacts/${{ matrix.platform.name }}
           else
             echo "Windows executable not found"
             ls -la build/bin/
@@ -131,11 +129,9 @@ jobs:
         if: matrix.platform.os == 'ubuntu-latest'
         run: |
           mkdir -p artifacts
-          # Find the executable file
-          if [ -f "build/bin/thermic" ]; then
-            cp build/bin/thermic artifacts/${{ matrix.platform.name }}
-          elif [ -f "build/bin/Thermic" ]; then
-            cp "build/bin/Thermic" artifacts/${{ matrix.platform.name }}
+          # Find the executable file (should be Thermic with capital T)
+          if [ -f "build/bin/Thermic" ]; then
+            cp build/bin/Thermic artifacts/${{ matrix.platform.name }}
           else
             echo "Linux executable not found"
             ls -la build/bin/
@@ -146,23 +142,16 @@ jobs:
         if: matrix.platform.os == 'macos-latest'
         run: |
           mkdir -p artifacts
-          # On macOS, Wails creates a .app bundle
-          if [ -d "build/bin/thermic.app" ]; then
-            # Extract the executable from the .app bundle
-            cp "build/bin/thermic.app/Contents/MacOS/thermic" artifacts/${{ matrix.platform.name }}
-          elif [ -d "build/bin/Thermic.app" ]; then
-            cp "build/bin/Thermic.app/Contents/MacOS/Thermic" artifacts/${{ matrix.platform.name }}
-          elif [ -f "build/bin/thermic" ]; then
-            # Fallback for non-app builds
-            cp build/bin/thermic artifacts/${{ matrix.platform.name }}
+          # On macOS, Wails creates a .app bundle - we want to preserve the complete bundle
+          if [ -d "build/bin/Thermic.app" ]; then
+            # Create a zip file containing the complete .app bundle
+            cd build/bin
+            zip -r "../../artifacts/${{ matrix.platform.name }}" Thermic.app
+            cd ../..
           else
-            echo "macOS executable not found"
+            echo "macOS app bundle not found"
             echo "Contents of build/bin/:"
             ls -la build/bin/
-            if [ -d "build/bin/thermic.app" ]; then
-              echo "Contents of thermic.app/Contents/MacOS/:"
-              ls -la "build/bin/thermic.app/Contents/MacOS/" || true
-            fi
             exit 1
           fi
 
@@ -332,8 +321,8 @@ jobs:
           ### 📦 Downloads
           - **Windows**: thermic-windows-amd64.exe
           - **Linux**: thermic-linux-amd64  
-          - **macOS Intel**: thermic-darwin-amd64
-          - **macOS Apple Silicon**: thermic-darwin-arm64
+          - **macOS Intel**: thermic-darwin-amd64.zip (contains Thermic.app)
+          - **macOS Apple Silicon**: thermic-darwin-arm64.zip (contains Thermic.app)
           
           ### 🌟 Key Features
           - 🖥️ Cross-platform terminal emulator
@@ -347,9 +336,21 @@ jobs:
           - 🔧 Context-aware right-click menus
           
           ### 🚀 Installation
-          1. Download the appropriate binary for your platform
-          2. Make it executable (Linux/macOS): \`chmod +x thermic-*\`
-          3. Run the application
+          
+          #### Windows
+          1. Download thermic-windows-amd64.exe
+          2. Run the executable
+          
+          #### Linux
+          1. Download thermic-linux-amd64
+          2. Make it executable: \`chmod +x thermic-linux-amd64\`
+          3. Run the application: \`./thermic-linux-amd64\`
+          
+          #### macOS
+          1. Download the appropriate zip file for your Mac (Intel or Apple Silicon)
+          2. Extract the zip file to reveal Thermic.app
+          3. Drag Thermic.app to your Applications folder
+          4. Launch from Applications or Launchpad
           
           ### 🔄 Auto-Update
           The application automatically checks for updates and notifies you through the status bar.
@@ -397,7 +398,7 @@ jobs:
           files: |
             artifacts/thermic-windows-amd64.exe/thermic-windows-amd64.exe
             artifacts/thermic-linux-amd64/thermic-linux-amd64
-            artifacts/thermic-darwin-amd64/thermic-darwin-amd64
-            artifacts/thermic-darwin-arm64/thermic-darwin-arm64
+            artifacts/thermic-darwin-amd64/thermic-darwin-amd64.zip
+            artifacts/thermic-darwin-arm64/thermic-darwin-arm64.zip
           draft: false
           prerelease: false
