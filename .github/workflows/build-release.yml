@@ -145,8 +145,11 @@ jobs:
           # On macOS, Wails creates a .app bundle - we want to preserve the complete bundle
           if [ -d "build/bin/Thermic.app" ]; then
             # Create a zip file containing the complete .app bundle
+            # Remove .zip from matrix name to avoid double extension
+            BASE_NAME="${{ matrix.platform.name }}"
+            BASE_NAME="${BASE_NAME%.zip}"
             cd build/bin
-            zip -r "../../artifacts/${{ matrix.platform.name }}" Thermic.app
+            zip -r "../../artifacts/${BASE_NAME}.zip" Thermic.app
             cd ../..
           else
             echo "macOS app bundle not found"
@@ -179,6 +182,12 @@ jobs:
 
       - name: Display structure of downloaded files
         run: ls -la artifacts/
+
+      - name: Debug artifact structure
+        run: |
+          echo "=== Detailed artifact structure ==="
+          find artifacts/ -type f -exec ls -la {} \;
+          echo "=== End artifact structure ==="
 
       - name: Generate dynamic release notes
         id: release_notes
@@ -398,7 +407,7 @@ jobs:
           files: |
             artifacts/thermic-windows-amd64.exe/thermic-windows-amd64.exe
             artifacts/thermic-linux-amd64/thermic-linux-amd64
-            artifacts/thermic-darwin-amd64/thermic-darwin-amd64.zip
-            artifacts/thermic-darwin-arm64/thermic-darwin-arm64.zip
+            artifacts/thermic-darwin-amd64.zip/thermic-darwin-amd64.zip
+            artifacts/thermic-darwin-arm64.zip/thermic-darwin-arm64.zip
           draft: false
           prerelease: false
