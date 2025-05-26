@@ -1,33 +1,66 @@
 // HTML template functions for UI components
 
 export function createHeaderTemplate() {
+    // Detect platform for correct button order
+    const userAgent = navigator.userAgent.toLowerCase();
+    const isMacOS = userAgent.includes('mac');
+    
+    // Define button order based on platform
+    const windowControlsHTML = isMacOS ? `
+        <!-- macOS order: close, minimize, maximize -->
+        <button class="window-control window-close" id="window-close" title="Close">
+            <span class="window-control-icon">
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+                    <path d="M0.7,0 L5,4.3 L9.3,0 L10,0.7 L5.7,5 L10,9.3 L9.3,10 L5,5.7 L0.7,10 L0,9.3 L4.3,5 L0,0.7 Z"/>
+                </svg>
+            </span>
+        </button>
+        <button class="window-control window-minimize" id="window-minimize" title="Minimize">
+            <span class="window-control-icon">
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+                    <path d="M0,5 L10,5 L10,6 L0,6 Z"/>
+                </svg>
+            </span>
+        </button>
+        <button class="window-control window-maximize" id="window-maximize" title="Maximize">
+            <span class="window-control-icon">
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+                    <path d="M0,0 L0,10 L10,10 L10,0 Z M1,1 L9,1 L9,9 L1,9 Z"/>
+                </svg>
+            </span>
+        </button>
+    ` : `
+        <!-- Windows/Linux order: minimize, maximize, close -->
+        <button class="window-control window-minimize" id="window-minimize" title="Minimize">
+            <span class="window-control-icon">
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+                    <path d="M0,5 L10,5 L10,6 L0,6 Z"/>
+                </svg>
+            </span>
+        </button>
+        <button class="window-control window-maximize" id="window-maximize" title="Maximize">
+            <span class="window-control-icon">
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+                    <path d="M0,0 L0,10 L10,10 L10,0 Z M1,1 L9,1 L9,9 L1,9 Z"/>
+                </svg>
+            </span>
+        </button>
+        <button class="window-control window-close" id="window-close" title="Close">
+            <span class="window-control-icon">
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+                    <path d="M0.7,0 L5,4.3 L9.3,0 L10,0.7 L5.7,5 L10,9.3 L9.3,10 L5,5.7 L0.7,10 L0,9.3 L4.3,5 L0,0.7 Z"/>
+                </svg>
+            </span>
+        </button>
+    `;
+
     return `
         <!-- Custom Window Titlebar -->
         <div class="window-titlebar" id="window-titlebar">
             <div class="window-titlebar-content">
                 <div class="window-title">Thermic</div>
                 <div class="window-controls">
-                    <button class="window-control window-minimize" id="window-minimize" title="Minimize">
-                        <span class="window-control-icon">
-                            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
-                                <path d="M0,5 L10,5 L10,6 L0,6 Z"/>
-                            </svg>
-                        </span>
-                    </button>
-                    <button class="window-control window-maximize" id="window-maximize" title="Maximize">
-                        <span class="window-control-icon">
-                            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
-                                <path d="M0,0 L0,10 L10,10 L10,0 Z M1,1 L9,1 L9,9 L1,9 Z"/>
-                            </svg>
-                        </span>
-                    </button>
-                    <button class="window-control window-close" id="window-close" title="Close">
-                        <span class="window-control-icon">
-                            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
-                                <path d="M0.7,0 L5,4.3 L9.3,0 L10,0.7 L5.7,5 L10,9.3 L9.3,10 L5,5.7 L0.7,10 L0,9.3 L4.3,5 L0,0.7 Z"/>
-                            </svg>
-                        </span>
-                    </button>
+                    ${windowControlsHTML}
                 </div>
             </div>
         </div>
