@@ -118,11 +118,22 @@ export function createStatusBarTemplate() {
             <span id="selected-shell">PowerShell</span>
         </div>
         <div class="status-right">
-            <span id="platform-info">Loading...</span>
-            <span>•</span>
-            <span>CPU: 0%</span>
-            <span>•</span>
-            <span>RAM: 0%</span>
+            <div class="status-monitoring" id="status-monitoring">
+                <span id="platform-info">Loading...</span>
+                <span class="separator">•</span>
+                <span data-stat="cpu">CPU: 0%</span>
+                <span class="separator">•</span>
+                <span data-stat="memory">RAM: 0%</span>
+                <span class="separator">•</span>
+                <span data-stat="network">NET: ↓0 ↑0</span>
+                <span class="separator" data-for="load">•</span>
+                <span data-stat="load" style="display: none;">LOAD: 0.0</span>
+                <span class="separator" data-for="uptime">•</span>
+                <span data-stat="uptime" style="display: none;">UP: N/A</span>
+            </div>
+            <div class="status-version" id="status-version">
+                <!-- Version/upgrade button will be added here by VersionManager -->
+            </div>
         </div>
     `;
 }

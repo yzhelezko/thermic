@@ -33,33 +33,50 @@ export class TerminalManager {
             try {
                 // Set up terminal output listener
                 this.globalOutputListener = EventsOn('terminal-output', (data) => {
-                    console.log(`Global listener received output for session: ${data.sessionId}`);
+                    // Validate data first
+                    if (!data || !data.sessionId) {
+                        console.warn('Invalid terminal output data received:', data);
+                        return;
+                    }
+                    
+                    const sessionId = data.sessionId;
+                    console.log(`Global listener received output for session: ${sessionId}`);
                     
                     // Route output to the correct terminal session
-                    const sessionId = data.sessionId;
                     const terminalSession = this.terminals.get(sessionId);
                     
                     if (terminalSession && terminalSession.isConnected && terminalSession.terminal) {
-                        console.log(`Writing output to terminal session: ${sessionId}`);
-                        
-                        // Check if we're at the bottom before writing
-                        const isAtBottom = terminalSession.terminal.buffer.active.viewportY >= 
-                                          terminalSession.terminal.buffer.active.baseY;
-                        
-                        terminalSession.terminal.write(data.data);
-                        
-                        // Auto-scroll to bottom if we were already at the bottom
-                        if (isAtBottom || terminalSession.terminal.buffer.active.length === 0) {
-                            setTimeout(() => {
-                                if (terminalSession.terminal) { // Check again in case session was closed
-                                    terminalSession.terminal.scrollToBottom();
-                                }
-                            }, 0);
+                        try {
+                            console.log(`Writing output to terminal session: ${sessionId}`);
+                            
+                            // Check if we're at the bottom before writing
+                            const isAtBottom = terminalSession.terminal.buffer.active.viewportY >= 
+                                              terminalSession.terminal.buffer.active.baseY;
+                            
+                            terminalSession.terminal.write(data.data);
+                            
+                            // Auto-scroll to bottom if we were already at the bottom
+                            if (isAtBottom || terminalSession.terminal.buffer.active.length === 0) {
+                                setTimeout(() => {
+                                    // Double-check session still exists and is connected
+                                    const currentSession = this.terminals.get(sessionId);
+                                    if (currentSession && currentSession.terminal && currentSession.isConnected) {
+                                        currentSession.terminal.scrollToBottom();
+                                    }
+                                }, 0);
+                            }
+                        } catch (error) {
+                            console.error(`Error writing to terminal session ${sessionId}:`, error);
+                            // Mark session as problematic to avoid further errors
+                            if (terminalSession) {
+                                terminalSession.isConnected = false;
+                            }
                         }
                     } else if (!terminalSession) {
-                        console.warn(`Received output for unknown session: ${sessionId}, available sessions:`, Array.from(this.terminals.keys()));
+                        // This is expected after closing a tab - backend might still send some final output
+                        console.log(`Ignoring output for closed session: ${sessionId}`);
                     } else if (!terminalSession.isConnected) {
-                        console.warn(`Received output for disconnected session: ${sessionId}`);
+                        console.log(`Ignoring output for disconnected session: ${sessionId}`);
                     } else {
                         console.warn(`Session ${sessionId} exists but terminal is missing:`, terminalSession);
                     }
@@ -74,6 +91,18 @@ export class TerminalManager {
                         window.tabsManager.handleTabStatusUpdate(data);
                     } else {
                         console.warn('TabsManager not available for status update:', data);
+                    }
+                });
+
+                // Set up tab switch listener for status bar updates
+                this.globalTabSwitchListener = EventsOn('tab-switched', (data) => {
+                    console.log('Global listener received tab switch event:', data);
+                    
+                    // Forward to status manager if it exists
+                    if (window.statusManager && typeof window.statusManager.onTabSwitch === 'function') {
+                        window.statusManager.onTabSwitch(data.tabId);
+                    } else {
+                        console.warn('StatusManager not available for tab switch:', data);
                     }
                 });
 
@@ -592,6 +621,21 @@ export class TerminalManager {
                 terminalSession.resizeHandler = null;
             }
             
+            // Properly dispose of the terminal instance to free memory and event listeners
+            if (terminalSession.terminal) {
+                try {
+                    // Clear any selection and reset state
+                    terminalSession.terminal.clearSelection();
+                    
+                    // Dispose of the terminal instance properly
+                    terminalSession.terminal.dispose();
+                    console.log(`Terminal instance disposed for session ${sessionId}`);
+                } catch (error) {
+                    console.warn('Error disposing terminal instance:', error);
+                }
+                terminalSession.terminal = null;
+            }
+            
             // Hide and remove terminal container safely
             if (terminalSession.container) {
                 try {
@@ -603,9 +647,10 @@ export class TerminalManager {
                 terminalSession.container = null;
             }
             
-            // Don't dispose terminal instance - just disconnect it
-            // Disposing can cause issues with other terminals
-            // The terminal will be cleaned up when the container is removed
+            // Clear fitAddon reference
+            if (terminalSession.fitAddon) {
+                terminalSession.fitAddon = null;
+            }
             
             // Remove from sessions
             this.terminals.delete(sessionId);
@@ -628,7 +673,7 @@ export class TerminalManager {
                 }
             }
             
-            console.log(`Session ${sessionId} disconnected successfully`);
+            console.log(`Session ${sessionId} disconnected and cleaned up successfully`);
         } else {
             console.warn(`Session ${sessionId} not found for disconnection`);
         }
@@ -709,6 +754,15 @@ export class TerminalManager {
                 console.warn('Error cleaning up global tab status listener:', error);
             }
             this.globalTabStatusListener = null;
+        }
+
+        if (this.globalTabSwitchListener) {
+            try {
+                this.globalTabSwitchListener();
+            } catch (error) {
+                console.warn('Error cleaning up global tab switch listener:', error);
+            }
+            this.globalTabSwitchListener = null;
         }
 
         // Cleanup all terminal sessions

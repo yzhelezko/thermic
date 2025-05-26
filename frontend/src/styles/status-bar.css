@@ -9,6 +9,7 @@
     align-items: center;
     justify-content: space-between;
     height: 24px;
+    user-select: none;
 }
 
 .status-left {
@@ -21,4 +22,190 @@
     display: flex;
     align-items: center;
     gap: 16px;
+}
+
+.status-monitoring {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.status-version {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Connection status indicators */
+#status-info {
+    font-weight: 500;
+    transition: color 0.3s ease;
+}
+
+#status-info.status-connected {
+    color: #90EE90;
+}
+
+#status-info.status-connecting {
+    color: #FFD700;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+#status-info.status-disconnected {
+    color: #FFB6C1;
+}
+
+#status-info.status-failed {
+    color: #FF6B6B;
+}
+
+#status-info.status-hanging {
+    color: #FFA500;
+    animation: blink 1.5s ease-in-out infinite;
+}
+
+#status-info.status-error {
+    color: #FF6B6B;
+}
+
+#status-info.status-unknown {
+    color: #FFA500;
+}
+
+/* System stats styling */
+.status-monitoring span[data-stat] {
+    cursor: help;
+    transition: all 0.3s ease;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace; /* Monospace for better alignment */
+}
+
+.status-monitoring span[data-stat]:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    transform: scale(1.05);
+}
+
+/* Network stats specific styling */
+.status-monitoring span[data-stat="network"] {
+    min-width: 90px; /* Ensure consistent width for network display */
+    text-align: center;
+}
+
+/* Load average specific styling */
+.status-monitoring span[data-stat="load"] {
+    min-width: 60px;
+    text-align: center;
+}
+
+/* Platform info styling */
+#platform-info {
+    font-weight: 500;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Shell/connection info */
+#selected-shell {
+    font-style: italic;
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Responsive behavior */
+@media (max-width: 1200px) {
+    .status-monitoring span[data-stat="load"],
+    .status-monitoring span[data-stat="uptime"] {
+        display: none !important;
+    }
+    
+    .status-monitoring span.separator[data-for="load"],
+    .status-monitoring span.separator[data-for="uptime"] {
+        display: none !important;
+    }
+}
+
+@media (max-width: 1000px) {
+    .status-monitoring span[data-stat="network"] {
+        display: none !important;
+    }
+    
+    .status-monitoring span[data-stat="network"] + .status-monitoring span.separator {
+        display: none !important;
+    }
+    
+    #platform-info {
+        max-width: 150px;
+    }
+}
+
+@media (max-width: 800px) {
+    .status-left {
+        gap: 8px;
+    }
+    
+    .status-right {
+        gap: 8px;
+    }
+    
+    #selected-shell {
+        max-width: 100px;
+    }
+    
+    #platform-info {
+        max-width: 120px;
+    }
+    
+    .status-monitoring span[data-stat] {
+        min-width: auto; /* Remove fixed width on small screens */
+        font-size: 10px;
+    }
+}
+
+/* Animations */
+@keyframes pulse {
+    0%, 100% { 
+        opacity: 1; 
+    }
+    50% { 
+        opacity: 0.7; 
+    }
+}
+
+@keyframes blink {
+    0%, 50% { 
+        opacity: 1; 
+    }
+    51%, 100% { 
+        opacity: 0.5; 
+    }
+}
+
+/* Show additional stats when connected to SSH */
+.status-bar.ssh-active .status-monitoring span[data-stat="load"],
+.status-bar.ssh-active .status-monitoring span[data-stat="uptime"] {
+    display: inline !important;
+}
+
+.status-bar.ssh-active .status-monitoring span.separator[data-for="load"],
+.status-bar.ssh-active .status-monitoring span.separator[data-for="uptime"] {
+    display: inline !important;
+}
+
+/* Hide separators for hidden elements */
+.status-monitoring span[data-stat][style*="display: none"] + span.separator,
+.status-monitoring span.separator[data-for="load"] {
+    display: none;
+}
+
+.status-monitoring span.separator[data-for="uptime"] {
+    display: none;
+}
+
+.status-monitoring span.separator[data-for="network"] {
+    display: none;
 } 
