@@ -12,6 +12,7 @@ export class TabsManager {
         this.isAvailable = false; // Will be set to true if tabs system works
         this.closingTabs = new Set(); // Track tabs currently being closed
         this.shellFormats = new Map(); // Cache for shell raw value -> formatted name mapping
+        this.tabActivity = new Map(); // Track activity in inactive tabs (tabId -> boolean)
     }
 
     init() {
@@ -445,6 +446,9 @@ export class TabsManager {
             // Update local state immediately (optimistic update)
             this.activeTabId = tabId;
             
+            // Clear activity indicator for this tab
+            this.clearTabActivity(tabId);
+            
             // Switch terminal manager to this session immediately
             this.terminalManager.switchToSession(tab.sessionId);
             
@@ -515,6 +519,10 @@ export class TabsManager {
 
             // Remove from local tabs (after all cleanup)
             this.tabs.delete(tabId);
+            
+            // Clear any activity tracking for this tab
+            this.clearTabActivity(tabId);
+            
             this.renderTabs();
             
             updateStatus('Tab closed');
@@ -551,9 +559,10 @@ export class TabsManager {
         const isActive = tab.id === this.activeTabId;
         const isSSH = tab.connectionType === 'ssh';
         const isLastTab = this.tabs.size <= 1;
+        const hasActivity = this.hasTabActivity(tab.id);
         
         const tabEl = document.createElement('div');
-        tabEl.className = `tab ${isActive ? 'active' : ''} ${isSSH ? 'ssh-tab' : ''}`;
+        tabEl.className = `tab ${isActive ? 'active' : ''} ${isSSH ? 'ssh-tab' : ''} ${hasActivity ? 'has-activity' : ''}`;
         tabEl.dataset.tabId = tab.id;
 
         // Add status class only for SSH connections
@@ -613,8 +622,8 @@ export class TabsManager {
             }
         }
 
-        // Status indicator only for SSH connections
-        const statusIndicatorHtml = isSSH ? '<div class="tab-status-indicator"></div>' : '';
+        // Status indicator for all tabs (SSH status or activity indicator)
+        const statusIndicatorHtml = '<div class="tab-status-indicator"></div>';
 
         // Update tooltip to include status information
         let tooltipText = tab.title || 'Untitled';
@@ -977,5 +986,26 @@ export class TabsManager {
                 this.isAvailable = false; // Tabs system failed completely
             }
         }
+    }
+
+    // Method to mark tab as having new activity
+    markTabActivity(tabId) {
+        if (tabId !== this.activeTabId) {
+            this.tabActivity.set(tabId, true);
+            this.renderTabs(); // Re-render to show blinking dot
+        }
+    }
+
+    // Method to clear tab activity (when tab becomes active)
+    clearTabActivity(tabId) {
+        if (this.tabActivity.has(tabId)) {
+            this.tabActivity.delete(tabId);
+            this.renderTabs(); // Re-render to remove blinking dot
+        }
+    }
+
+    // Method to check if tab has activity
+    hasTabActivity(tabId) {
+        return this.tabActivity.has(tabId) && this.tabActivity.get(tabId);
     }
 } 

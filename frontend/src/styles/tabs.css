@@ -88,7 +88,38 @@
     margin-right: 4px;
     flex-shrink: 0;
     background: transparent;
-    transition: background-color 0.2s ease;
+    transition: background-color 0.2s ease, opacity 0.2s ease;
+}
+
+/* Hide status indicator for local tabs by default */
+.tab:not(.ssh-tab) .tab-status-indicator {
+    opacity: 0;
+}
+
+/* Show status indicator for local tabs when they have activity */
+.tab.has-activity:not(.ssh-tab) .tab-status-indicator {
+    opacity: 1;
+}
+
+/* Activity indicator for inactive tabs with new output */
+.tab.has-activity:not(.active) .tab-status-indicator {
+    background: var(--success-color);
+    animation: activity-blink 1.5s ease-in-out infinite;
+}
+
+/* Override activity blinking for SSH connections with specific status */
+.tab.has-activity:not(.active).connecting .tab-status-indicator,
+.tab.has-activity:not(.active).failed .tab-status-indicator,
+.tab.has-activity:not(.active).hanging .tab-status-indicator,
+.tab.has-activity:not(.active).disconnected .tab-status-indicator {
+    /* Keep the status-specific animation and color, don't show activity blink */
+    animation: none;
+}
+
+/* For local shells (no SSH status), always show activity blink when inactive */
+.tab.has-activity:not(.active):not(.ssh-tab) .tab-status-indicator {
+    background: var(--success-color);
+    animation: activity-blink 1.5s ease-in-out infinite;
 }
 
 /* Status-based styling */
@@ -303,6 +334,17 @@
 @keyframes blink {
     0%, 50% { opacity: 1; }
     51%, 100% { opacity: 0.3; }
+}
+
+@keyframes activity-blink {
+    0%, 100% { 
+        opacity: 1; 
+        transform: scale(1);
+    }
+    50% { 
+        opacity: 0.3; 
+        transform: scale(0.8);
+    }
 }
 
  
