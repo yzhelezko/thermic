@@ -39,6 +39,7 @@
     display: flex;
     align-items: center;
     height: 100%;
+    gap: 2px;
     position: relative;
     z-index: 10001;
     /* Not draggable - buttons should work */
@@ -95,23 +96,37 @@
 
 /* macOS styling */
 .platform-darwin .window-titlebar {
-    height: 22px;
+    height: 28px;
     background: var(--bg-primary);
-    border-bottom: none;
+    border-bottom: 1px solid var(--border-color);
     /* Still draggable on macOS */
     --wails-draggable: drag;
 }
 
+.platform-darwin .window-titlebar-content {
+    padding: 0 16px;
+    justify-content: center;
+    position: relative;
+}
+
 .platform-darwin .window-controls {
-    order: -1; /* Move to left side */
-    margin-left: 8px;
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    order: unset;
+    margin-left: 0;
+    gap: 8px;
+    padding-left: 0;
     /* Not draggable on macOS either */
     --wails-draggable: no-drag;
 }
 
 .platform-darwin .window-title {
     text-align: center;
-    margin: 0 auto;
+    font-size: 13px;
+    font-weight: 500;
+    flex: 1;
     /* Draggable on macOS */
     --wails-draggable: drag;
 }
@@ -120,31 +135,82 @@
     width: 12px;
     height: 12px;
     border-radius: 50%;
-    margin-right: 8px;
-    background: var(--bg-tertiary);
-    border: 0.5px solid var(--border-color);
+    margin: 0;
+    border: 0.5px solid rgba(0, 0, 0, 0.1);
+    transition: all 0.15s ease;
+    position: relative;
     /* Not draggable on macOS */
     --wails-draggable: no-drag;
 }
 
 .platform-darwin .window-close {
     background: #ff5f57;
+    border-color: #e0443e;
 }
 
 .platform-darwin .window-minimize {
     background: #ffbd2e;
+    border-color: #dea123;
 }
 
 .platform-darwin .window-maximize {
     background: #28ca42;
+    border-color: #1aad29;
 }
 
 .platform-darwin .window-control:hover {
     filter: brightness(1.1);
+    transform: scale(1.05);
+}
+
+.platform-darwin .window-control:active {
+    transform: scale(0.95);
 }
 
 .platform-darwin .window-control-icon {
     display: none; /* Hide icons on macOS, use colored circles */
+}
+
+/* Show symbols on hover for macOS */
+.platform-darwin .window-control:hover .window-control-icon {
+    display: flex;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 8px;
+    height: 8px;
+}
+
+.platform-darwin .window-control:hover .window-control-icon svg {
+    width: 8px;
+    height: 8px;
+    color: rgba(0, 0, 0, 0.8);
+}
+
+/* Custom symbols for macOS buttons on hover */
+.platform-darwin .window-close:hover .window-control-icon {
+    display: flex;
+}
+
+.platform-darwin .window-close:hover .window-control-icon svg {
+    display: block;
+}
+
+.platform-darwin .window-minimize:hover .window-control-icon {
+    display: flex;
+}
+
+.platform-darwin .window-minimize:hover .window-control-icon svg {
+    display: block;
+}
+
+.platform-darwin .window-maximize:hover .window-control-icon {
+    display: flex;
+}
+
+.platform-darwin .window-maximize:hover .window-control-icon svg {
+    display: block;
 }
 
 /* Linux styling */
