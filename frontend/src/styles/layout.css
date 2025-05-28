@@ -7,13 +7,135 @@
     overflow: hidden;
 }
 
-#header {
+.tabs-container {
     flex-shrink: 0;
 }
 
 .main-content {
     flex: 1;
     display: flex;
+    overflow: hidden;
+}
+
+/* Activity Bar (VS Code style) */
+.activity-bar {
+    width: 48px;
+    background-color: var(--bg-tertiary);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    flex-shrink: 0;
+    z-index: 1001;
+}
+
+.activity-bar-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    align-items: center;
+}
+
+.activity-bar-bottom {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    align-items: center;
+    margin-top: auto;
+}
+
+.activity-btn {
+    width: 40px;
+    height: 40px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    position: relative;
+}
+
+.activity-btn:hover {
+    background: var(--bg-quaternary);
+    color: var(--text-secondary);
+}
+
+.activity-btn.active {
+    background: var(--bg-primary);
+    color: var(--accent-color);
+}
+
+.activity-btn.active::before {
+    content: '';
+    position: absolute;
+    left: -1px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 2px;
+    height: 16px;
+    background: var(--accent-color);
+    border-radius: 0 2px 2px 0;
+}
+
+.activity-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* Special styling for theme toggle in activity bar */
+#theme-toggle {
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+#theme-toggle svg {
+    transition: transform 0.3s ease;
+}
+
+#theme-toggle.rotating svg {
+    transform: rotate(180deg);
+}
+
+/* Theme toggle should never show active state border */
+#theme-toggle::before,
+#theme-toggle.active::before,
+#theme-toggle:hover::before {
+    display: none !important;
+}
+
+/* Ensure theme toggle never gets active background styling */
+#theme-toggle.active {
+    background: transparent !important;
+    color: var(--text-tertiary) !important;
+}
+
+#theme-toggle:hover {
+    background: var(--bg-quaternary) !important;
+    color: var(--text-secondary) !important;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 250px;
+    background-color: var(--bg-secondary);
+    border-right: 1px solid var(--border-color);
+    overflow-y: auto;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1000;
+    transition: width 0.2s ease, margin-left 0.2s ease;
+}
+
+.sidebar.collapsed {
+    width: 0;
+    margin-left: -1px; /* Hide the border */
     overflow: hidden;
 }
 
@@ -30,7 +152,7 @@
     flex: 1;
     background-color: var(--bg-primary);
     position: relative;
-    padding: 8px;
+    padding: 0;
     transition: background-color 0.3s ease;
     overflow: hidden;
 }
@@ -61,10 +183,16 @@
     background: transparent;
     cursor: col-resize;
     position: relative;
+    transition: opacity 0.2s ease;
 }
 
 .resize-handle:hover {
     background: var(--accent-color);
+}
+
+.sidebar.collapsed + .resize-handle {
+    opacity: 0;
+    pointer-events: none;
 }
 
 /* Responsive */
@@ -73,7 +201,17 @@
         width: 200px;
     }
     
-    .right-panel {
-        width: 250px;
+    .activity-bar {
+        width: 40px;
+    }
+    
+    .activity-btn {
+        width: 32px;
+        height: 32px;
+    }
+    
+    .activity-btn svg {
+        width: 16px;
+        height: 16px;
     }
 } 

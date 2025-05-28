@@ -40,25 +40,11 @@ export class TabsManager {
             return;
         }
 
-        // Create the tabs bar HTML
+        // Create the tabs bar HTML (new tab buttons will be rendered inline)
         tabsContainer.innerHTML = `
             <div class="tabs-bar">
                 <div class="tabs-list" id="tabs-list">
-                    <!-- Tabs will be inserted here -->
-                </div>
-                <div class="tabs-controls">
-                    <button class="new-tab-btn" id="new-tab-btn" title="New Terminal">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="5" x2="12" y2="19"></line>
-                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                        </svg>
-                    </button>
-                    <button class="new-ssh-tab-btn" id="new-ssh-tab-btn" title="New SSH Connection">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M9 12l2 2 4-4"></path>
-                            <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H5a2 2 0 0 0-2-2z"></path>
-                        </svg>
-                    </button>
+                    <!-- Tabs and new tab buttons will be inserted here -->
                 </div>
             </div>
         `;
@@ -549,10 +535,15 @@ export class TabsManager {
 
         tabsList.innerHTML = '';
 
+        // Render all tabs
         for (const [tabId, tab] of this.tabs) {
             const tabElement = this.createTabElement(tab);
             tabsList.appendChild(tabElement);
         }
+
+        // Add new tab buttons right after the last tab
+        const newTabButtons = this.createNewTabButtons();
+        tabsList.appendChild(newTabButtons);
     }
 
     createTabElement(tab) {
@@ -1056,5 +1047,27 @@ export class TabsManager {
     // Method to check if tab has activity
     hasTabActivity(tabId) {
         return this.tabActivity.has(tabId) && this.tabActivity.get(tabId);
+    }
+
+    createNewTabButtons() {
+        const buttonsContainer = document.createElement('div');
+        buttonsContainer.className = 'new-tab-buttons';
+        
+        buttonsContainer.innerHTML = `
+            <button class="new-tab-btn" id="new-tab-btn" title="New Terminal">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+            </button>
+            <button class="new-ssh-tab-btn" id="new-ssh-tab-btn" title="New SSH Connection">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 12l2 2 4-4"></path>
+                    <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H5a2 2 0 0 0-2-2z"></path>
+                </svg>
+            </button>
+        `;
+
+        return buttonsContainer;
     }
 } 

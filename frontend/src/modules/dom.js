@@ -2,6 +2,7 @@
 import { 
     createHeaderTemplate, 
     createTabsTemplate, 
+    createActivityBarTemplate,
     createSidebarTemplate, 
     createStatusBarTemplate, 
     createSettingsPanelTemplate,
@@ -20,8 +21,8 @@ export class DOMManager {
         if (this.isInitialized) return;
 
         // Populate all the dynamic HTML content
-        this.renderHeader();
-        this.renderTabs(); // Need this for basic tabs structure
+        this.renderTabs(); // Need this for basic tabs structure with integrated titlebar
+        this.renderActivityBar();
         this.renderSidebar();
         this.renderStatusBar();
         this.renderSettingsPanel();
@@ -30,17 +31,17 @@ export class DOMManager {
         this.isInitialized = true;
     }
 
-    renderHeader() {
-        const header = document.getElementById('header');
-        if (header) {
-            header.innerHTML = createHeaderTemplate();
-        }
-    }
-
     renderTabs() {
         const tabsContainer = document.getElementById('tabs-container');
         if (tabsContainer) {
             tabsContainer.innerHTML = createTabsTemplate();
+        }
+    }
+
+    renderActivityBar() {
+        const activityBar = document.getElementById('activity-bar');
+        if (activityBar) {
+            activityBar.innerHTML = createActivityBarTemplate();
         }
     }
 

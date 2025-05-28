@@ -1,8 +1,206 @@
 /* Tabs Component Styles */
 
 .tabs-container {
-    border-bottom: 1px solid var(--border-color);
     background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Integrated titlebar with window controls */
+.tabs-titlebar {
+    height: 32px;
+    background: var(--bg-secondary);
+    display: flex;
+    align-items: center;
+    user-select: none;
+    position: relative;
+    z-index: 1000;
+    /* Wails draggable region */
+    --wails-draggable: drag;
+}
+
+.titlebar-content {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    padding: 0 0 0 8px;
+    /* Inherit draggable from parent */
+}
+
+.window-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    pointer-events: none;
+    user-select: none;
+    /* Inherit draggable from parent */
+}
+
+.titlebar-spacer {
+    flex: 1;
+    /* Draggable spacer */
+    --wails-draggable: drag;
+}
+
+.window-controls-left,
+.window-controls-right {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    gap: 0;
+    position: relative;
+    z-index: 10001;
+    /* Not draggable - buttons should work */
+    --wails-draggable: no-drag;
+}
+
+.window-control {
+    width: 46px;
+    height: 32px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    position: relative;
+    z-index: 10002;
+    /* Explicitly not draggable */
+    --wails-draggable: no-drag;
+}
+
+.window-control:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.window-control-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    pointer-events: auto;
+    /* Explicitly not draggable */
+    --wails-draggable: no-drag;
+}
+
+.window-control-icon svg {
+    width: 10px;
+    height: 10px;
+    /* Explicitly not draggable */
+    --wails-draggable: no-drag;
+}
+
+/* Close button special styling */
+.window-close:hover {
+    background: #e74856;
+    color: #ffffff;
+}
+
+/* Make the close button extend to the very edge */
+.window-close {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    margin-right: 0;
+    padding-right: 8px;
+}
+
+/* For Windows/Linux - ensure close button is the rightmost */
+.window-controls-right .window-close {
+    order: 3; /* Ensure it's last */
+}
+
+/* macOS specific styling */
+@media (max-width: 0px) { /* This will never match, but we'll use JS to add platform classes */ }
+
+/* Platform-specific adjustments will be handled by adding classes via JS */
+.platform-darwin .tabs-titlebar {
+    height: 28px;
+    background: var(--bg-secondary);
+}
+
+.platform-darwin .titlebar-content {
+    padding: 0 8px 0 0;
+    justify-content: flex-start;
+    position: relative;
+}
+
+.platform-darwin .window-controls-left {
+    gap: 8px;
+    margin-right: 16px;
+    margin-left: 0;
+    padding-left: 8px;
+    /* Not draggable on macOS either */
+    --wails-draggable: no-drag;
+}
+
+.platform-darwin .window-title {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    font-size: 13px;
+    font-weight: 500;
+    /* Draggable on macOS */
+    --wails-draggable: drag;
+}
+
+.platform-darwin .window-control {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin: 0;
+    border: none;
+    transition: all 0.15s ease;
+    position: relative;
+    /* Not draggable on macOS */
+    --wails-draggable: no-drag;
+}
+
+.platform-darwin .window-close {
+    background: #ff5f57;
+    margin-left: 0;
+}
+
+.platform-darwin .window-minimize {
+    background: #ffbd2e;
+}
+
+.platform-darwin .window-maximize {
+    background: #28ca42;
+}
+
+.platform-darwin .window-control:hover {
+    filter: brightness(1.1);
+    transform: scale(1.05);
+}
+
+.platform-darwin .window-control:active {
+    transform: scale(0.95);
+}
+
+.platform-darwin .window-control-icon {
+    display: none; /* Hide icons on macOS, use colored circles */
+}
+
+/* Show symbols on hover for macOS */
+.platform-darwin .window-control:hover .window-control-icon {
+    display: flex;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 8px;
+    height: 8px;
+}
+
+.platform-darwin .window-control:hover .window-control-icon svg {
+    width: 8px;
+    height: 8px;
+    color: rgba(0, 0, 0, 0.8);
 }
 
 .tabs-bar {
@@ -10,6 +208,8 @@
     align-items: center;
     height: 32px;
     user-select: none;
+    /* Make tabs bar draggable */
+    --wails-draggable: drag;
 }
 
 .tabs-list {
@@ -19,6 +219,8 @@
     overflow-x: auto;
     scrollbar-width: none;
     -ms-overflow-style: none;
+    /* Inherit draggable from parent */
+    --wails-draggable: drag;
 }
 
 .tabs-list::-webkit-scrollbar {
@@ -31,12 +233,13 @@
     height: 32px;
     min-width: 120px;
     max-width: 200px;
-    border-right: 1px solid var(--border-color);
     background: var(--bg-tertiary);
     color: var(--text-secondary);
     cursor: pointer;
     transition: background-color 0.15s ease;
     position: relative;
+    /* Tabs themselves should not be draggable - they need to be clickable */
+    --wails-draggable: no-drag;
 }
 
 .tab-content {
@@ -238,11 +441,16 @@
     background: linear-gradient(45deg, var(--bg-tertiary), rgba(255, 193, 7, 0.1));
 }
 
-.tabs-controls {
+/* New tab buttons (inline with tabs) */
+.new-tab-buttons {
     display: flex;
     align-items: center;
     padding: 0 8px;
     gap: 4px;
+    height: 32px;
+    background: var(--bg-secondary);
+    /* New tab buttons should not be draggable - they need to be clickable */
+    --wails-draggable: no-drag;
 }
 
 .new-tab-btn,
@@ -257,7 +465,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background-color 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    /* Buttons should not be draggable */
+    --wails-draggable: no-drag;
 }
 
 .new-tab-btn:hover,

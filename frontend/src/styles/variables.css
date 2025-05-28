@@ -1,6 +1,12 @@
 /* CSS Variables and Theme Definitions */
 
 :root {
+    /* Layout dimensions */
+    --tabs-height: 64px; /* Titlebar + tabs height */
+    --status-bar-height: 24px;
+    --sidebar-width: 250px;
+    --activity-bar-width: 48px;
+    
     /* Dark theme (default) */
     --bg-primary: #1e1e1e;
     --bg-secondary: #2d2d30;

@@ -8,10 +8,17 @@
     flex-shrink: 0;
     position: relative;
     z-index: 1000; /* Ensure sidebar is on top of profile panel */
+    transition: width 0.2s ease, margin-left 0.2s ease;
+}
+
+.sidebar.collapsed {
+    width: 0;
+    margin-left: -1px; /* Hide the border */
+    overflow: hidden;
 }
 
 .sidebar-header {
-    padding: 12px 16px;
+    padding: 8px 16px;
     border-bottom: 1px solid var(--border-color);
     background-color: var(--bg-tertiary);
     font-weight: 600;
@@ -19,10 +26,48 @@
     color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.sidebar-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.sidebar-action-btn {
+    width: 20px;
+    height: 20px;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+}
+
+.sidebar-action-btn:hover {
+    background: var(--bg-quaternary);
+    color: var(--text-secondary);
+}
+
+.sidebar-action-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.sidebar-content {
+    height: calc(100% - 45px); /* Subtract header height */
+    overflow-y: auto;
 }
 
 .tree-view {
-    padding: 8px 0;
+    padding: 4px 0;
 }
 
 .tree-group {
@@ -246,8 +291,7 @@
 
 .tree-item[data-type="profile"]:not(.selected):hover .tree-item-content,
 .tree-item[data-type="folder"]:not(.selected):hover .tree-item-content,
-.virtual-profile:not(.selected):hover .tree-item-content,
-.search-result:not(.selected):hover .tree-item-content {
+.virtual-profile:not(.selected):hover .tree-item-content {
     background: var(--bg-quaternary); 
     border: none !important; 
     outline: none !important; 

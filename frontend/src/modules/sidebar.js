@@ -828,48 +828,6 @@ export class SidebarManager {
         `;
     }
 
-    updateSidebarContent(activeButton) {
-        const sidebarHeader = document.querySelector('.sidebar-header');
-        const sidebarContent = document.querySelector('.sidebar-content');
-
-        switch (activeButton) {
-            case 'btn-explorer':
-                sidebarHeader.textContent = 'Profiles';
-                this.renderProfileTree();
-                break;
-            case 'btn-filemanager':
-                sidebarHeader.textContent = 'File Explorer';
-                sidebarContent.innerHTML = this.getFileManagerContent();
-                break;
-            case 'btn-search':
-                sidebarHeader.textContent = 'Search';
-                sidebarContent.innerHTML = this.getSearchContent();
-                break;
-        }
-    }
-
-    getFileManagerContent() {
-        return `
-            <div style="padding: 20px; text-align: center; color: var(--text-tertiary);">
-                <div>📂</div>
-                <div style="margin-top: 8px;">File Explorer</div>
-                <div style="margin-top: 4px; font-size: 11px;">Coming soon...</div>
-            </div>
-        `;
-    }
-
-    getSearchContent() {
-        return `
-            <div style="padding: 8px;">
-                <input type="text" placeholder="Search profiles..." style="width: 100%; padding: 4px 8px; background: var(--bg-quaternary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 12px;">
-            </div>
-            <div class="tree-item">
-                <span class="tree-icon">🔍</span>
-                <span>Search results will appear here</span>
-            </div>
-        `;
-    }
-
     // Profile panel implementation
     async setupProfilePanel() {
         // Import the template functions
@@ -1375,5 +1333,30 @@ export class SidebarManager {
                 await window.go.main.App.UpdateProfile(profile);
             }
         }
+    }
+
+    // New view methods for activity bar integration
+    showProfilesView() {
+        const sidebarContent = document.getElementById('sidebar-content');
+        if (sidebarContent) {
+            this.renderProfileTree();
+        }
+    }
+
+    showFilesView() {
+        const sidebarContent = document.getElementById('sidebar-content');
+        if (sidebarContent) {
+            sidebarContent.innerHTML = this.getFileManagerContent();
+        }
+    }
+
+    getFileManagerContent() {
+        return `
+            <div style="padding: 20px; text-align: center; color: var(--text-tertiary);">
+                <div>📂</div>
+                <div style="margin-top: 8px;">File Explorer</div>
+                <div style="margin-top: 4px; font-size: 11px;">Coming soon...</div>
+            </div>
+        `;
     }
 }

@@ -50,7 +50,8 @@ export class WindowControlsManager {
         }
 
         // Double-click titlebar to maximize (Windows/Linux behavior)
-        const titlebar = document.getElementById('window-titlebar');
+        // Now targeting the integrated titlebar in tabs
+        const titlebar = document.querySelector('.tabs-titlebar');
         if (titlebar && this.platform !== 'darwin') {
             titlebar.addEventListener('dblclick', this.toggleMaximize.bind(this));
         }
