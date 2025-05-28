@@ -115,6 +115,10 @@ export function GetSelectToCopyEnabled():Promise<boolean>;
 
 export function GetShellsForUI():Promise<Array<Record<string, any>>>;
 
+export function GetSidebarCollapsed():Promise<boolean>;
+
+export function GetSidebarWidth():Promise<number>;
+
 export function GetSystemStats():Promise<Record<string, any>>;
 
 export function GetTabStatus(arg1:string):Promise<Record<string, any>>;
@@ -190,6 +194,10 @@ export function SetDefaultShell(arg1:string):Promise<void>;
 export function SetProfilesPath(arg1:string):Promise<void>;
 
 export function SetSelectToCopyEnabled(arg1:boolean):Promise<void>;
+
+export function SetSidebarCollapsed(arg1:boolean):Promise<void>;
+
+export function SetSidebarWidth(arg1:number):Promise<void>;
 
 export function ShowMessageDialog(arg1:string,arg2:string):Promise<void>;
 

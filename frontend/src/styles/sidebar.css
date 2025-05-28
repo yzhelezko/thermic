@@ -12,7 +12,7 @@
 }
 
 .sidebar.collapsed {
-    width: 0;
+    width: 0 !important;
     margin-left: -1px; /* Hide the border */
     overflow: hidden;
 }

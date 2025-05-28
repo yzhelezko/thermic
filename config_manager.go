@@ -321,3 +321,49 @@ func (a *App) SetProfilesPath(path string) error {
 	}
 	return nil
 }
+
+// GetSidebarCollapsed returns whether the sidebar is collapsed
+func (a *App) GetSidebarCollapsed() bool {
+	if a.config == nil {
+		fmt.Println("GetSidebarCollapsed: config is nil, returning default false.")
+		return false
+	}
+	return a.config.SidebarCollapsed
+}
+
+// SetSidebarCollapsed updates the sidebar collapsed state
+func (a *App) SetSidebarCollapsed(collapsed bool) error {
+	if a.config == nil {
+		return fmt.Errorf("config not initialized, cannot set sidebar collapsed state")
+	}
+
+	if a.config.SidebarCollapsed != collapsed {
+		a.config.SidebarCollapsed = collapsed
+		fmt.Printf("Sidebar collapsed state updated to: %t\n", collapsed)
+		a.markConfigDirty()
+	}
+	return nil
+}
+
+// GetSidebarWidth returns the sidebar width
+func (a *App) GetSidebarWidth() int {
+	if a.config == nil {
+		fmt.Println("GetSidebarWidth: config is nil, returning default 250.")
+		return 250
+	}
+	return a.config.SidebarWidth
+}
+
+// SetSidebarWidth updates the sidebar width
+func (a *App) SetSidebarWidth(width int) error {
+	if a.config == nil {
+		return fmt.Errorf("config not initialized, cannot set sidebar width")
+	}
+
+	if a.config.SidebarWidth != width {
+		a.config.SidebarWidth = width
+		fmt.Printf("Sidebar width updated to: %d\n", width)
+		a.markConfigDirty()
+	}
+	return nil
+}

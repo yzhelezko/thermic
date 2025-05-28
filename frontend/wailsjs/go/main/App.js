@@ -226,6 +226,14 @@ export function GetShellsForUI() {
   return window['go']['main']['App']['GetShellsForUI']();
 }
 
+export function GetSidebarCollapsed() {
+  return window['go']['main']['App']['GetSidebarCollapsed']();
+}
+
+export function GetSidebarWidth() {
+  return window['go']['main']['App']['GetSidebarWidth']();
+}
+
 export function GetSystemStats() {
   return window['go']['main']['App']['GetSystemStats']();
 }
@@ -376,6 +384,14 @@ export function SetProfilesPath(arg1) {
 
 export function SetSelectToCopyEnabled(arg1) {
   return window['go']['main']['App']['SetSelectToCopyEnabled'](arg1);
+}
+
+export function SetSidebarCollapsed(arg1) {
+  return window['go']['main']['App']['SetSidebarCollapsed'](arg1);
+}
+
+export function SetSidebarWidth(arg1) {
+  return window['go']['main']['App']['SetSidebarWidth'](arg1);
 }
 
 export function ShowMessageDialog(arg1, arg2) {

@@ -19,6 +19,10 @@ export class ActivityBarManager {
         // Initialize saved sidebar width from UIManager
         if (this.uiManager) {
             this.savedSidebarWidth = this.uiManager.sidebarWidth;
+            this.sidebarCollapsed = this.uiManager.sidebarCollapsed;
+            
+            // Apply initial state to the sidebar
+            this.applySidebarState();
         }
         
         console.log('✅ Activity Bar initialized');
@@ -131,23 +135,25 @@ export class ActivityBarManager {
         this.sidebarCollapsed = true;
         
         // Save current sidebar width before collapsing
+        // Check inline style first (from resizing), then UIManager, then default
+        const currentWidth = sidebar.style.width ? parseInt(sidebar.style.width) : 
+                           (this.uiManager ? this.uiManager.sidebarWidth : 250);
+        this.savedSidebarWidth = currentWidth;
+        
+        // Also update UIManager to keep it in sync
         if (this.uiManager) {
-            this.savedSidebarWidth = this.uiManager.sidebarWidth;
+            this.uiManager.sidebarWidth = currentWidth;
+            this.uiManager.setSidebarCollapsed(true);
         }
+        
+        // Clear inline width style to allow CSS collapse to work
+        sidebar.style.width = '';
         
         // Update CSS variable for collapsed sidebar (width = 0)
         document.documentElement.style.setProperty('--sidebar-width', '0px');
         
         // Update collapse button icon
-        const collapseBtn = document.getElementById('sidebar-collapse');
-        if (collapseBtn) {
-            collapseBtn.innerHTML = `
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/>
-                </svg>
-            `;
-            collapseBtn.title = 'Expand Sidebar';
-        }
+        this.updateCollapseButtonIcon(true);
         
         updateStatus('Sidebar collapsed');
     }
@@ -157,30 +163,23 @@ export class ActivityBarManager {
         sidebar.classList.remove('collapsed');
         this.sidebarCollapsed = false;
         
-        // Restore the saved sidebar width
-        const sidebarWidth = this.savedSidebarWidth;
+        // Restore the saved sidebar width with fallback
+        const sidebarWidth = this.savedSidebarWidth || (this.uiManager ? this.uiManager.sidebarWidth : 250);
         
         // Update the actual sidebar element width
         sidebar.style.width = sidebarWidth + 'px';
         
-        // Update UIManager's width tracking
+        // Update UIManager's width tracking and save state
         if (this.uiManager) {
             this.uiManager.sidebarWidth = sidebarWidth;
+            this.uiManager.setSidebarCollapsed(false);
         }
         
         // Update CSS variable for expanded sidebar
         document.documentElement.style.setProperty('--sidebar-width', sidebarWidth + 'px');
         
         // Update collapse button icon
-        const collapseBtn = document.getElementById('sidebar-collapse');
-        if (collapseBtn) {
-            collapseBtn.innerHTML = `
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
-                </svg>
-            `;
-            collapseBtn.title = 'Collapse Sidebar';
-        }
+        this.updateCollapseButtonIcon(false);
         
         updateStatus('Sidebar expanded');
     }
@@ -250,5 +249,43 @@ export class ActivityBarManager {
 
     isSidebarCollapsed() {
         return this.sidebarCollapsed;
+    }
+
+    applySidebarState() {
+        const sidebar = document.getElementById('sidebar');
+        if (!sidebar) return;
+
+        if (this.sidebarCollapsed) {
+            sidebar.classList.add('collapsed');
+            sidebar.style.width = '';
+            document.documentElement.style.setProperty('--sidebar-width', '0px');
+            this.updateCollapseButtonIcon(true);
+        } else {
+            sidebar.classList.remove('collapsed');
+            sidebar.style.width = this.savedSidebarWidth + 'px';
+            document.documentElement.style.setProperty('--sidebar-width', this.savedSidebarWidth + 'px');
+            this.updateCollapseButtonIcon(false);
+        }
+    }
+
+    updateCollapseButtonIcon(collapsed) {
+        const collapseBtn = document.getElementById('sidebar-collapse');
+        if (!collapseBtn) return;
+
+        if (collapsed) {
+            collapseBtn.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/>
+                </svg>
+            `;
+            collapseBtn.title = 'Expand Sidebar';
+        } else {
+            collapseBtn.innerHTML = `
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+                </svg>
+            `;
+            collapseBtn.title = 'Collapse Sidebar';
+        }
     }
 } 
