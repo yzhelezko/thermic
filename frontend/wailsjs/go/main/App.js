@@ -306,6 +306,14 @@ export function SelectDirectory() {
   return window['go']['main']['App']['SelectDirectory']();
 }
 
+export function SelectFile(arg1, arg2) {
+  return window['go']['main']['App']['SelectFile'](arg1, arg2);
+}
+
+export function SelectSSHPrivateKey() {
+  return window['go']['main']['App']['SelectSSHPrivateKey']();
+}
+
 export function SetActiveTab(arg1) {
   return window['go']['main']['App']['SetActiveTab'](arg1);
 }

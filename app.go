@@ -1915,3 +1915,38 @@ func (a *App) SelectDirectory() (string, error) {
 
 	return selectedPath, nil
 }
+
+// SelectFile opens a file selection dialog and returns the selected file path
+func (a *App) SelectFile(title string, filters []wailsRuntime.FileFilter) (string, error) {
+	if a.ctx == nil {
+		return "", fmt.Errorf("application context not available")
+	}
+
+	// Use Wails runtime to open file selection dialog
+	selectedPath, err := wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+		Title:   title,
+		Filters: filters,
+	})
+
+	if err != nil {
+		return "", fmt.Errorf("failed to open file dialog: %w", err)
+	}
+
+	return selectedPath, nil
+}
+
+// SelectSSHPrivateKey opens a file selection dialog specifically for SSH private keys
+func (a *App) SelectSSHPrivateKey() (string, error) {
+	filters := []wailsRuntime.FileFilter{
+		{
+			DisplayName: "SSH Private Keys",
+			Pattern:     "*",
+		},
+		{
+			DisplayName: "All Files",
+			Pattern:     "*.*",
+		},
+	}
+
+	return a.SelectFile("Select SSH Private Key", filters)
+}

@@ -92,13 +92,13 @@ export class SidebarManager {
             const profileActionButton = e.target.closest('.profile-action-btn');
             const contextMenu = e.target.closest('.context-menu');
             const profilePanel = e.target.closest('.profile-panel');
-            const isProfilePanelButton = ['profile-panel-close', 'profile-save-btn', 'profile-cancel-btn'].includes(e.target.id);
+            const isProfilePanelButton = ['profile-panel-close', 'profile-save', 'profile-cancel'].includes(e.target.id);
 
             // Priority 1: Profile Panel Buttons
             if (isProfilePanelButton) {
-                if (e.target.id === 'profile-panel-close' || e.target.id === 'profile-cancel-btn') {
+                if (e.target.id === 'profile-panel-close' || e.target.id === 'profile-cancel') {
                     this.closeProfilePanel();
-                } else if (e.target.id === 'profile-save-btn') {
+                } else if (e.target.id === 'profile-save') {
                     this.saveProfile();
                 }
                 return; // Explicitly stop further processing for these buttons
@@ -825,163 +825,93 @@ export class SidebarManager {
             const module = await import('./templates.js');
             this.createProfilePanelTemplate = module.createProfilePanelTemplate;
             this.createProfileFormTemplate = module.createProfileFormTemplate;
+            this.createProfileConnectionContent = module.createProfileConnectionContent;
+            this.createProfileSettingsContent = module.createProfileSettingsContent;
         } catch (error) {
             console.error('Failed to load templates module:', error);
         }
 
         // Add profile panel HTML to body if not exists
         if (!document.getElementById('profile-panel-overlay')) {
-            const panelHTML = `
-                <div class="profile-panel-overlay" id="profile-panel-overlay">
-                    <div class="profile-panel">
-                        <div class="profile-panel-header">
-                            <h3 id="profile-panel-title">Create Profile</h3>
-                            <button class="profile-panel-close" id="profile-panel-close">×</button>
-                        </div>
-                        <div class="profile-panel-content">
-                            <div class="profile-form" id="profile-form">
-                                <!-- Form content will be dynamically generated -->
-                            </div>
-                        </div>
-                        <div class="profile-panel-footer">
-                            <button class="btn btn-secondary" id="profile-cancel-btn">Cancel</button>
-                            <button class="btn btn-primary" id="profile-save-btn">Save</button>
-                        </div>
-                    </div>
-                </div>
-            `;
+            const panelHTML = this.createProfilePanelTemplate();
             document.body.insertAdjacentHTML('beforeend', panelHTML);
         }
+
+        // Setup event listeners
+        this.setupProfilePanelEventListeners();
+    }
+
+    setupProfilePanelEventListeners() {
+        // Close button
+        const closeBtn = document.getElementById('profile-panel-close');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => this.closeProfilePanel());
+        }
+
+        // Cancel button
+        const cancelBtn = document.getElementById('profile-cancel');
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', () => this.closeProfilePanel());
+        }
+
+        // Save button
+        const saveBtn = document.getElementById('profile-save');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', () => this.saveProfile());
+        }
+
+        // Close on overlay click
+        const overlay = document.getElementById('profile-panel-overlay');
+        if (overlay) {
+            overlay.addEventListener('click', (e) => {
+                if (e.target.id === 'profile-panel-overlay' && e.target === e.currentTarget) {
+                    this.closeProfilePanel();
+                }
+            });
+        }
+
+        // Close on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const overlay = document.getElementById('profile-panel-overlay');
+                if (overlay && overlay.classList.contains('active')) {
+                    this.closeProfilePanel();
+                }
+            }
+        });
     }
 
     async openProfilePanel(mode, type, parentId = null, data = null) {
         const overlay = document.getElementById('profile-panel-overlay');
-        const title = document.getElementById('profile-panel-title');
         const form = document.getElementById('profile-form');
+        const connectionContent = document.querySelector('.profile-connection-content');
+        const settingsContent = document.querySelector('.profile-settings-content');
 
-        // Set title
-        if (mode === 'edit') {
-            title.textContent = type === 'folder' ? 'Edit Folder' : 'Edit Profile';
-        } else {
-            title.textContent = type === 'folder' ? 'Create Folder' : 'Create Profile';
+        // Populate General tab (existing form)
+        if (form) {
+            form.innerHTML = this.createProfileFormTemplate(mode, type, data);
         }
 
-        // Generate form content
-        form.innerHTML = this.createProfileFormContent(mode, type, data);
-
-        // Load shells for profile forms
-        if (type === 'profile') {
-            await this.loadShellsForForm();
-            this.setupProfileTypeHandling();
+        // Populate Connection tab
+        if (connectionContent) {
+            connectionContent.innerHTML = this.createProfileConnectionContent(type, data);
         }
 
-        // Setup icon selector
+        // Populate Settings tab
+        if (settingsContent) {
+            settingsContent.innerHTML = this.createProfileSettingsContent(type, data);
+        }
+
+        // Setup tab switching
+        this.setupProfileTabs();
+
+        // Setup form functionality
+        this.setupProfileTypeHandling();
         this.setupIconSelector();
+        this.setupProfileFormHandlers(mode, type, parentId, data);
 
-        // Show panel
+        // Show overlay
         overlay.classList.add('active');
-        this.profilePanelOpen = true;
-        this.editingProfile = { mode, type, parentId, data };
-
-        // Focus first input
-        const firstInput = form.querySelector('input, select');
-        if (firstInput) {
-            firstInput.focus();
-        }
-    }
-
-    createProfileFormContent(mode, type, data = null) {
-        const isFolder = type === 'folder';
-        
-        if (isFolder) {
-            return `
-                <div class="form-group">
-                    <label for="folder-name">Folder Name</label>
-                    <input type="text" id="folder-name" class="form-input" value="${data?.name || ''}" placeholder="Enter folder name" required>
-                </div>
-                <div class="form-group">
-                    <label for="folder-icon">Icon</label>
-                    <div class="icon-selector">
-                        <input type="text" id="folder-icon" class="form-input icon-input" value="${data?.icon || '📁'}" placeholder="📁">
-                        <div class="icon-grid">
-                            <span class="icon-option" data-icon="📁">📁</span>
-                            <span class="icon-option" data-icon="📂">📂</span>
-                            <span class="icon-option" data-icon="🗂️">🗂️</span>
-                            <span class="icon-option" data-icon="📋">📋</span>
-                            <span class="icon-option" data-icon="🛠️">🛠️</span>
-                            <span class="icon-option" data-icon="🌐">🌐</span>
-                            <span class="icon-option" data-icon="🔧">🔧</span>
-                            <span class="icon-option" data-icon="⚙️">⚙️</span>
-                        </div>
-                    </div>
-                </div>
-            `;
-        } else {
-            return `
-                <div class="form-group">
-                    <label for="profile-name">Profile Name</label>
-                    <input type="text" id="profile-name" class="form-input" value="${data?.name || ''}" placeholder="Enter profile name" required>
-                </div>
-                <div class="form-group">
-                    <label for="profile-icon">Icon</label>
-                    <div class="icon-selector">
-                        <input type="text" id="profile-icon" class="form-input icon-input" value="${data?.icon || '💻'}" placeholder="💻">
-                        <div class="icon-grid">
-                            <span class="icon-option" data-icon="💻">💻</span>
-                            <span class="icon-option" data-icon="🔷">🔷</span>
-                            <span class="icon-option" data-icon="⚫">⚫</span>
-                            <span class="icon-option" data-icon="🐧">🐧</span>
-                            <span class="icon-option" data-icon="🌐">🌐</span>
-                            <span class="icon-option" data-icon="🐳">🐳</span>
-                            <span class="icon-option" data-icon="⚡">⚡</span>
-                            <span class="icon-option" data-icon="🚀">🚀</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label for="profile-type">Profile Type</label>
-                    <select id="profile-type" class="form-select">
-                        <option value="local" ${data?.type === 'local' || !data?.type ? 'selected' : ''}>Local Shell</option>
-                        <option value="ssh" ${data?.type === 'ssh' ? 'selected' : ''}>SSH Connection</option>
-                        <option value="custom" ${data?.type === 'custom' ? 'selected' : ''}>Custom Command</option>
-                    </select>
-                </div>
-                <div class="form-group local-shell-group" style="display: ${data?.type === 'local' || !data?.type ? 'block' : 'none'}">
-                    <label for="profile-shell">Shell Command</label>
-                    <select id="profile-shell" class="form-select">
-                        <option value="">Loading shells...</option>
-                    </select>
-                </div>
-                <div class="form-group ssh-group" style="display: ${data?.type === 'ssh' ? 'block' : 'none'}">
-                    <label for="ssh-host">SSH Host</label>
-                    <input type="text" id="ssh-host" class="form-input" value="${data?.sshConfig?.host || ''}" placeholder="hostname or IP">
-                </div>
-                <div class="form-group ssh-group" style="display: ${data?.type === 'ssh' ? 'block' : 'none'}">
-                    <label for="ssh-port">SSH Port</label>
-                    <input type="number" id="ssh-port" class="form-input" value="${data?.sshConfig?.port || 22}" placeholder="22">
-                </div>
-                <div class="form-group ssh-group" style="display: ${data?.type === 'ssh' ? 'block' : 'none'}">
-                    <label for="ssh-username">Username</label>
-                    <input type="text" id="ssh-username" class="form-input" value="${data?.sshConfig?.username || ''}" placeholder="username">
-                </div>
-                <div class="form-group ssh-group" style="display: ${data?.type === 'ssh' ? 'block' : 'none'}">
-                    <label for="ssh-password">Password (optional)</label>
-                    <input type="password" id="ssh-password" class="form-input" value="${data?.sshConfig?.password || ''}" placeholder="password">
-                </div>
-                <div class="form-group ssh-group" style="display: ${data?.type === 'ssh' ? 'block' : 'none'}">
-                    <label for="ssh-keypath">Private Key Path (optional)</label>
-                    <input type="text" id="ssh-keypath" class="form-input" value="${data?.sshConfig?.keyPath || ''}" placeholder="/path/to/private/key">
-                </div>
-                <div class="form-group custom-group" style="display: ${data?.type === 'custom' ? 'block' : 'none'}">
-                    <label for="custom-command">Custom Command</label>
-                    <input type="text" id="custom-command" class="form-input" value="${data?.shell || ''}" placeholder="Enter custom command">
-                </div>
-                <div class="form-group">
-                    <label for="profile-workdir">Working Directory (optional)</label>
-                    <input type="text" id="profile-workdir" class="form-input" value="${data?.workingDir || ''}" placeholder="Enter working directory">
-                </div>
-            `;
-        }
     }
 
     setupIconSelector() {
@@ -1001,12 +931,17 @@ export class SidebarManager {
         typeSelect.addEventListener('change', (e) => {
             const selectedType = e.target.value;
             
-            // Hide all type-specific groups
+            // Hide all type-specific groups and sections
             document.querySelectorAll('.local-shell-group, .ssh-group, .custom-group').forEach(group => {
                 group.style.display = 'none';
             });
 
-            // Show relevant group
+            // Hide SSH section entirely
+            document.querySelectorAll('.profile-form-section.ssh-group').forEach(section => {
+                section.style.display = 'none';
+            });
+
+            // Show relevant groups and sections
             if (selectedType === 'local') {
                 document.querySelectorAll('.local-shell-group').forEach(group => {
                     group.style.display = 'block';
@@ -1014,6 +949,9 @@ export class SidebarManager {
             } else if (selectedType === 'ssh') {
                 document.querySelectorAll('.ssh-group').forEach(group => {
                     group.style.display = 'block';
+                });
+                document.querySelectorAll('.profile-form-section.ssh-group').forEach(section => {
+                    section.style.display = 'block';
                 });
             } else if (selectedType === 'custom') {
                 document.querySelectorAll('.custom-group').forEach(group => {
@@ -1068,7 +1006,7 @@ export class SidebarManager {
             showNotification(`${type === 'folder' ? 'Folder' : 'Profile'} ${mode === 'edit' ? 'updated' : 'created'} successfully`, 'success');
         } catch (error) {
             console.error('Failed to save:', error);
-            showNotification(`Failed to ${mode === 'edit' ? 'update' : 'create'} ${type}`, 'error');
+            showNotification(`Failed to ${mode === 'edit' ? 'update' : 'create'} ${type}: ${error.message}`, 'error');
         }
     }
 
@@ -1206,6 +1144,94 @@ export class SidebarManager {
         } catch (error) {
             console.error('Failed to toggle favorite:', error);
             showNotification('Failed to update favorite', 'error');
+        }
+    }
+
+    setupProfileTabs() {
+        const tabs = document.querySelectorAll('.profile-tab');
+        const panes = document.querySelectorAll('.profile-tab-pane');
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const targetTab = tab.dataset.tab;
+
+                // Remove active class from all tabs and panes
+                tabs.forEach(t => t.classList.remove('active'));
+                panes.forEach(p => p.classList.remove('active'));
+
+                // Add active class to clicked tab and corresponding pane
+                tab.classList.add('active');
+                const targetPane = document.getElementById(`profile-tab-${targetTab}`);
+                if (targetPane) {
+                    targetPane.classList.add('active');
+                }
+            });
+        });
+    }
+
+    setupProfileFormHandlers(mode, type, parentId, data) {
+        // Load shells for profile forms
+        if (type === 'profile') {
+            this.loadShellsForForm();
+        }
+
+        // Setup save/cancel handlers
+        const saveBtn = document.getElementById('profile-save');
+        const cancelBtn = document.getElementById('profile-cancel');
+
+        if (saveBtn) {
+            saveBtn.onclick = () => this.handleProfileSave(mode, type, parentId, data);
+        }
+
+        if (cancelBtn) {
+            cancelBtn.onclick = () => this.closeProfilePanel();
+        }
+
+        // Setup SSH key browse button
+        const browseSSHKeyBtn = document.getElementById('browse-ssh-key');
+        if (browseSSHKeyBtn) {
+            browseSSHKeyBtn.addEventListener('click', async () => {
+                try {
+                    const selectedPath = await window.go.main.App.SelectSSHPrivateKey();
+                    if (selectedPath) {
+                        const sshKeyInput = document.getElementById('ssh-keypath');
+                        if (sshKeyInput) {
+                            sshKeyInput.value = selectedPath;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error selecting SSH private key:', error);
+                    showNotification(`Failed to open file selector: ${error.message}`, 'error');
+                }
+            });
+        }
+
+        // Set editing state
+        this.profilePanelOpen = true;
+        this.editingProfile = { mode, type, parentId, data };
+
+        // Focus first input
+        const firstInput = document.querySelector('#profile-form input, #profile-form select');
+        if (firstInput) {
+            firstInput.focus();
+        }
+    }
+
+    async handleProfileSave(mode, type, parentId, data) {
+        try {
+            if (type === 'folder') {
+                await this.saveFolderData(mode, data);
+            } else {
+                await this.saveProfileData(mode, data);
+            }
+
+            this.closeProfilePanel();
+            await this.loadProfileTree();
+            this.renderProfileTree();
+            showNotification(`${type === 'folder' ? 'Folder' : 'Profile'} ${mode === 'edit' ? 'updated' : 'created'} successfully`, 'success');
+        } catch (error) {
+            console.error('Failed to save:', error);
+            showNotification(`Failed to ${mode === 'edit' ? 'update' : 'create'} ${type}: ${error.message}`, 'error');
         }
     }
 }

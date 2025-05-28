@@ -719,7 +719,10 @@ export class TabsManager {
                         </div>
                         <div class="form-group">
                             <label for="ssh-keypath">Private Key Path (optional):</label>
-                            <input type="text" id="ssh-keypath" placeholder="/path/to/private/key">
+                            <div class="ssh-key-path-container">
+                                <input type="text" id="ssh-keypath" placeholder="/path/to/private/key">
+                                <button type="button" class="ssh-browse-key-btn">📂 Browse</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -744,6 +747,8 @@ export class TabsManager {
                 document.body.removeChild(dialog);
             } else if (e.target.closest('.ssh-connect-btn')) {
                 this.handleSSHConnect(dialog);
+            } else if (e.target.closest('.ssh-browse-key-btn')) {
+                this.handleSSHKeyBrowse();
             }
         });
 
@@ -755,6 +760,21 @@ export class TabsManager {
                 document.body.removeChild(dialog);
             }
         });
+    }
+
+    async handleSSHKeyBrowse() {
+        try {
+            const selectedPath = await window.go.main.App.SelectSSHPrivateKey();
+            if (selectedPath) {
+                const sshKeyInput = document.getElementById('ssh-keypath');
+                if (sshKeyInput) {
+                    sshKeyInput.value = selectedPath;
+                }
+            }
+        } catch (error) {
+            console.error('Error selecting SSH private key:', error);
+            alert(`Failed to open file selector: ${error.message}`);
+        }
     }
 
     async handleSSHConnect(dialog) {
@@ -866,6 +886,35 @@ export class TabsManager {
             .ssh-form .form-group input:focus {
                 outline: none;
                 border-color: var(--accent-color);
+            }
+
+            .ssh-key-path-container {
+                display: flex;
+                gap: 8px;
+                align-items: center;
+                width: 100%;
+            }
+
+            .ssh-key-path-container input {
+                flex: 1;
+                min-width: 0;
+            }
+
+            .ssh-browse-key-btn {
+                background: var(--bg-quaternary);
+                color: var(--text-primary);
+                border: 1px solid var(--border-color);
+                padding: 8px 12px;
+                border-radius: 4px;
+                font-size: 12px;
+                cursor: pointer;
+                transition: background-color 0.15s ease;
+                white-space: nowrap;
+                flex-shrink: 0;
+            }
+
+            .ssh-browse-key-btn:hover {
+                background: var(--bg-tertiary);
             }
 
             .ssh-dialog-footer {
