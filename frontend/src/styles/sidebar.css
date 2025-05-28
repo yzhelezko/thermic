@@ -6,6 +6,8 @@
     border-right: 1px solid var(--border-color);
     overflow-y: auto;
     flex-shrink: 0;
+    position: relative;
+    z-index: 1000; /* Ensure sidebar is on top of profile panel */
 }
 
 .sidebar-header {
@@ -302,95 +304,7 @@
 
 /* Context menu styles are handled in context-menu.css */
 
-/* Profile Panel Styles */
-.profile-panel-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 2000;
-    display: none;
-    align-items: center;
-    justify-content: center;
-}
-
-.profile-panel-overlay.active {
-    display: flex;
-}
-
-.profile-panel {
-    background: var(--bg-primary);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-    width: 90%;
-    max-width: 500px;
-    max-height: 80vh;
-    overflow: hidden;
-    animation: slideInFromLeft 0.3s ease-out;
-}
-
-@keyframes slideInFromLeft {
-    from {
-        transform: translateX(-100px);
-        opacity: 0;
-    }
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
-}
-
-.profile-panel-header {
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border-color);
-    background: var(--bg-secondary);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-
-.profile-panel-header h3 {
-    margin: 0;
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text-primary);
-}
-
-.profile-panel-close {
-    background: none;
-    border: none;
-    font-size: 20px;
-    color: var(--text-tertiary);
-    cursor: pointer;
-    padding: 4px;
-    border-radius: 4px;
-    transition: all 0.15s ease;
-}
-
-.profile-panel-close:hover {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-}
-
-.profile-panel-content {
-    padding: 20px;
-    max-height: 60vh;
-    overflow-y: auto;
-}
-
-.profile-panel-footer {
-    padding: 16px 20px;
-    border-top: 1px solid var(--border-color);
-    background: var(--bg-secondary);
-    display: flex;
-    gap: 12px;
-    justify-content: flex-end;
-}
-
-/* Icon Selector Styles */
+/* Icon Selector Styles for Profile Panel */
 .icon-selector {
     position: relative;
 }

@@ -25,6 +25,9 @@ export class UIManager {
         this.setupResizablePanels();
         this.setupAccountButton();
         this.setupSettingsButton();
+        
+        // Initialize CSS custom property for sidebar width
+        document.documentElement.style.setProperty('--sidebar-width', this.sidebarWidth + 'px');
     }
 
     setupThemeToggle() {
@@ -63,6 +66,11 @@ export class UIManager {
         this.setupResize('sidebar-resize', 'left');
     }
 
+    updateProfilePanelPosition() {
+        // Update CSS custom property for profile panel positioning
+        document.documentElement.style.setProperty('--sidebar-width', this.sidebarWidth + 'px');
+    }
+
     setupResize(handleId, direction) {
         const handle = document.getElementById(handleId);
         if (!handle) return;
@@ -82,8 +90,12 @@ export class UIManager {
             if (direction === 'left') {
                 const newWidth = e.clientX;
                 if (newWidth >= 200 && newWidth <= 400) {
-                    document.querySelector('.sidebar').style.width = newWidth + 'px';
+                    const sidebar = document.querySelector('.sidebar');
+                    sidebar.style.width = newWidth + 'px';
                     this.sidebarWidth = newWidth;
+                    
+                    // Update profile panel positioning
+                    this.updateProfilePanelPosition();
                 }
             }
 

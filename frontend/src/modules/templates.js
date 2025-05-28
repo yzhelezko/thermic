@@ -1254,17 +1254,42 @@ export function createProfilePanelTemplate() {
         <div class="profile-panel-overlay" id="profile-panel-overlay">
             <div class="profile-panel">
                 <div class="profile-panel-header">
-                    <h3 id="profile-panel-title">Create Profile</h3>
+                    <div class="profile-tabs-container">
+                        <button class="profile-tab active" data-tab="general">
+                            <span class="profile-tab-icon">📝</span>
+                            General
+                        </button>
+                        <button class="profile-tab" data-tab="connection">
+                            <span class="profile-tab-icon">🔗</span>
+                            Connection
+                        </button>
+                        <button class="profile-tab" data-tab="settings">
+                            <span class="profile-tab-icon">⚙️</span>
+                            Settings
+                        </button>
+                    </div>
                     <button class="profile-panel-close" id="profile-panel-close">×</button>
                 </div>
                 <div class="profile-panel-content">
-                    <div class="profile-form" id="profile-form">
-                        <!-- Form content will be dynamically generated -->
+                    <div class="profile-tab-pane active" id="profile-tab-general">
+                        <div class="profile-form" id="profile-form">
+                            <!-- Form content will be dynamically generated -->
+                        </div>
+                    </div>
+                    <div class="profile-tab-pane" id="profile-tab-connection">
+                        <div class="profile-connection-content">
+                            <!-- Connection settings will be here -->
+                        </div>
+                    </div>
+                    <div class="profile-tab-pane" id="profile-tab-settings">
+                        <div class="profile-settings-content">
+                            <!-- Profile-specific settings will be here -->
+                        </div>
                     </div>
                 </div>
                 <div class="profile-panel-footer">
-                    <button class="btn btn-secondary" id="profile-cancel-btn">Cancel</button>
-                    <button class="btn btn-primary" id="profile-save-btn">Save</button>
+                    <button class="btn btn-secondary" id="profile-cancel">Cancel</button>
+                    <button class="btn btn-primary" id="profile-save">Save</button>
                 </div>
             </div>
         </div>
@@ -1277,91 +1302,324 @@ export function createProfileFormTemplate(mode, type, data = null) {
     
     if (isFolder) {
         return `
-            <div class="form-group">
-                <label for="folder-name">Folder Name</label>
-                <input type="text" id="folder-name" class="form-input" value="${data?.name || ''}" placeholder="Enter folder name" required>
-            </div>
-            <div class="form-group">
-                <label for="folder-icon">Icon</label>
-                <div class="icon-selector">
-                    <input type="text" id="folder-icon" class="form-input icon-input" value="${data?.icon || '📁'}" placeholder="📁">
-                    <div class="icon-grid">
-                        <span class="icon-option" data-icon="📁">📁</span>
-                        <span class="icon-option" data-icon="📂">📂</span>
-                        <span class="icon-option" data-icon="🗂️">🗂️</span>
-                        <span class="icon-option" data-icon="📋">📋</span>
-                        <span class="icon-option" data-icon="🛠️">🛠️</span>
-                        <span class="icon-option" data-icon="🌐">🌐</span>
-                        <span class="icon-option" data-icon="🔧">🔧</span>
-                        <span class="icon-option" data-icon="⚙️">⚙️</span>
+            <div class="profile-form-section">
+                <div class="profile-form-section-title">
+                    <span class="profile-form-section-icon">📁</span>
+                    Folder Information
+                </div>
+                <div class="form-group">
+                    <label for="folder-name">Folder Name</label>
+                    <input type="text" id="folder-name" class="form-input" value="${data?.name || ''}" placeholder="Enter folder name" required>
+                </div>
+                <div class="form-group">
+                    <label for="folder-icon">Icon</label>
+                    <div class="icon-selector">
+                        <input type="text" id="folder-icon" class="form-input icon-input" value="${data?.icon || '📁'}" placeholder="📁">
+                        <div class="icon-grid">
+                            <span class="icon-option" data-icon="📁">📁</span>
+                            <span class="icon-option" data-icon="📂">📂</span>
+                            <span class="icon-option" data-icon="🗂️">🗂️</span>
+                            <span class="icon-option" data-icon="📋">📋</span>
+                            <span class="icon-option" data-icon="🛠️">🛠️</span>
+                            <span class="icon-option" data-icon="🌐">🌐</span>
+                            <span class="icon-option" data-icon="🔧">🔧</span>
+                            <span class="icon-option" data-icon="⚙️">⚙️</span>
+                        </div>
                     </div>
                 </div>
             </div>
         `;
     } else {
         return `
-            <div class="form-group">
-                <label for="profile-name">Profile Name</label>
-                <input type="text" id="profile-name" class="form-input" value="${data?.name || ''}" placeholder="Enter profile name" required>
-            </div>
-            <div class="form-group">
-                <label for="profile-icon">Icon</label>
-                <div class="icon-selector">
-                    <input type="text" id="profile-icon" class="form-input icon-input" value="${data?.icon || '💻'}" placeholder="💻">
-                    <div class="icon-grid">
-                        <span class="icon-option" data-icon="💻">💻</span>
-                        <span class="icon-option" data-icon="🔷">🔷</span>
-                        <span class="icon-option" data-icon="⚫">⚫</span>
-                        <span class="icon-option" data-icon="🐧">🐧</span>
-                        <span class="icon-option" data-icon="🌐">🌐</span>
-                        <span class="icon-option" data-icon="🐳">🐳</span>
-                        <span class="icon-option" data-icon="⚡">⚡</span>
-                        <span class="icon-option" data-icon="🚀">🚀</span>
+            <div class="profile-form-section">
+                <div class="profile-form-section-title">
+                    <span class="profile-form-section-icon">ℹ️</span>
+                    Basic Information
+                </div>
+                <div class="form-group">
+                    <label for="profile-name">Profile Name</label>
+                    <input type="text" id="profile-name" class="form-input" value="${data?.name || ''}" placeholder="Enter profile name" required>
+                </div>
+                <div class="form-group">
+                    <label for="profile-icon">Icon</label>
+                    <div class="icon-selector">
+                        <input type="text" id="profile-icon" class="form-input icon-input" value="${data?.icon || '💻'}" placeholder="💻">
+                        <div class="icon-grid">
+                            <span class="icon-option" data-icon="💻">💻</span>
+                            <span class="icon-option" data-icon="🔷">🔷</span>
+                            <span class="icon-option" data-icon="⚫">⚫</span>
+                            <span class="icon-option" data-icon="🐧">🐧</span>
+                            <span class="icon-option" data-icon="🌐">🌐</span>
+                            <span class="icon-option" data-icon="🐳">🐳</span>
+                            <span class="icon-option" data-icon="⚡">⚡</span>
+                            <span class="icon-option" data-icon="🚀">🚀</span>
+                        </div>
                     </div>
                 </div>
             </div>
-            <div class="form-group">
-                <label for="profile-type">Profile Type</label>
-                <select id="profile-type" class="form-select">
-                    <option value="local" ${data?.type === 'local' ? 'selected' : ''}>Local Shell</option>
-                    <option value="ssh" ${data?.type === 'ssh' ? 'selected' : ''}>SSH Connection</option>
-                    <option value="custom" ${data?.type === 'custom' ? 'selected' : ''}>Custom Command</option>
-                </select>
+
+            <div class="profile-form-section">
+                <div class="profile-form-section-title">
+                    <span class="profile-form-section-icon">🔧</span>
+                    Connection Settings
+                </div>
+                <div class="form-group">
+                    <label for="profile-type">Profile Type</label>
+                    <select id="profile-type" class="form-select">
+                        <option value="local" ${data?.type === 'local' ? 'selected' : ''}>Local Shell</option>
+                        <option value="ssh" ${data?.type === 'ssh' ? 'selected' : ''}>SSH Connection</option>
+                        <option value="custom" ${data?.type === 'custom' ? 'selected' : ''}>Custom Command</option>
+                    </select>
+                </div>
+                <div class="form-group local-shell-group" style="display: ${data?.type === 'local' || !data?.type ? 'block' : 'none'}">
+                    <label for="profile-shell">Shell Command</label>
+                    <select id="profile-shell" class="form-select">
+                        <option value="">Loading shells...</option>
+                    </select>
+                </div>
+                <div class="form-group custom-group" style="display: ${data?.type === 'custom' ? 'block' : 'none'}">
+                    <label for="custom-command">Custom Command</label>
+                    <input type="text" id="custom-command" class="form-input" value="${data?.shell || ''}" placeholder="Enter custom command">
+                </div>
+                <div class="form-group">
+                    <label for="profile-workdir">Working Directory (optional)</label>
+                    <input type="text" id="profile-workdir" class="form-input" value="${data?.workingDir || ''}" placeholder="Enter working directory">
+                </div>
             </div>
-            <div class="form-group local-shell-group" style="display: ${data?.type === 'local' || !data?.type ? 'block' : 'none'}">
-                <label for="profile-shell">Shell Command</label>
-                <select id="profile-shell" class="form-select">
-                    <option value="">Loading shells...</option>
-                </select>
-            </div>
-            <div class="form-group ssh-group" style="display: ${data?.type === 'ssh' ? 'block' : 'none'}">
-                <label for="ssh-host">SSH Host</label>
-                <input type="text" id="ssh-host" class="form-input" value="${data?.sshConfig?.host || ''}" placeholder="hostname or IP">
-            </div>
-            <div class="form-group ssh-group" style="display: ${data?.type === 'ssh' ? 'block' : 'none'}">
-                <label for="ssh-port">SSH Port</label>
-                <input type="number" id="ssh-port" class="form-input" value="${data?.sshConfig?.port || 22}" placeholder="22">
-            </div>
-            <div class="form-group ssh-group" style="display: ${data?.type === 'ssh' ? 'block' : 'none'}">
-                <label for="ssh-username">Username</label>
-                <input type="text" id="ssh-username" class="form-input" value="${data?.sshConfig?.username || ''}" placeholder="username">
-            </div>
-            <div class="form-group ssh-group" style="display: ${data?.type === 'ssh' ? 'block' : 'none'}">
-                <label for="ssh-password">Password (optional)</label>
-                <input type="password" id="ssh-password" class="form-input" value="${data?.sshConfig?.password || ''}" placeholder="password">
-            </div>
-            <div class="form-group ssh-group" style="display: ${data?.type === 'ssh' ? 'block' : 'none'}">
-                <label for="ssh-keypath">Private Key Path (optional)</label>
-                <input type="text" id="ssh-keypath" class="form-input" value="${data?.sshConfig?.keyPath || ''}" placeholder="/path/to/private/key">
-            </div>
-            <div class="form-group custom-group" style="display: ${data?.type === 'custom' ? 'block' : 'none'}">
-                <label for="custom-command">Custom Command</label>
-                <input type="text" id="custom-command" class="form-input" value="${data?.shell || ''}" placeholder="Enter custom command">
-            </div>
-            <div class="form-group">
-                <label for="profile-workdir">Working Directory (optional)</label>
-                <input type="text" id="profile-workdir" class="form-input" value="${data?.workingDir || ''}" placeholder="Enter working directory">
+
+            <div class="profile-form-section ssh-group" style="display: ${data?.type === 'ssh' ? 'block' : 'none'}">
+                <div class="profile-form-section-title">
+                    <span class="profile-form-section-icon">🔐</span>
+                    SSH Configuration
+                </div>
+                <div class="form-group">
+                    <label for="ssh-host">SSH Host</label>
+                    <input type="text" id="ssh-host" class="form-input" value="${data?.sshConfig?.host || ''}" placeholder="hostname or IP address">
+                </div>
+                <div class="form-group">
+                    <label for="ssh-port">SSH Port</label>
+                    <input type="number" id="ssh-port" class="form-input" value="${data?.sshConfig?.port || 22}" placeholder="22">
+                </div>
+                <div class="form-group">
+                    <label for="ssh-username">Username</label>
+                    <input type="text" id="ssh-username" class="form-input" value="${data?.sshConfig?.username || ''}" placeholder="username">
+                </div>
+                <div class="form-group">
+                    <label for="ssh-password">Password (optional)</label>
+                    <input type="password" id="ssh-password" class="form-input" value="${data?.sshConfig?.password || ''}" placeholder="password">
+                </div>
+                <div class="form-group">
+                    <label for="ssh-keypath">Private Key Path (optional)</label>
+                    <div class="ssh-key-path-container">
+                        <input type="text" id="ssh-keypath" class="form-input" value="${data?.sshConfig?.keyPath || ''}" placeholder="/path/to/private/key">
+                        <button type="button" class="modern-button secondary" id="browse-ssh-key">📂 Browse</button>
+                    </div>
+                </div>
             </div>
         `;
     }
+}
+
+export function createProfileConnectionContent(type, data = null) {
+    if (type === 'folder') {
+        return `
+            <div class="profile-form-section">
+                <div class="profile-form-section-title">
+                    <span class="profile-form-section-icon">🔗</span>
+                    Connection Settings
+                </div>
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Auto-connect profiles</div>
+                            <div class="setting-item-description">Automatically connect to profiles in this folder when opened</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <label class="modern-toggle">
+                                <input type="checkbox" id="folder-auto-connect">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    return `
+        <div class="profile-form-section">
+            <div class="profile-form-section-title">
+                <span class="profile-form-section-icon">🔗</span>
+                Connection Settings
+            </div>
+            <div class="setting-item">
+                <div class="setting-item-content">
+                    <div class="setting-item-info">
+                        <div class="setting-item-title">Auto-connect on startup</div>
+                        <div class="setting-item-description">Automatically connect to this profile when application starts</div>
+                    </div>
+                    <div class="setting-item-control">
+                        <label class="modern-toggle">
+                            <input type="checkbox" id="profile-auto-connect">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="setting-item">
+                <div class="setting-item-content">
+                    <div class="setting-item-info">
+                        <div class="setting-item-title">Connection timeout</div>
+                        <div class="setting-item-description">Timeout for establishing connection (seconds)</div>
+                    </div>
+                    <div class="setting-item-control">
+                        <select class="modern-select" id="connection-timeout">
+                            <option value="10">10 seconds</option>
+                            <option value="30" selected>30 seconds</option>
+                            <option value="60">60 seconds</option>
+                            <option value="120">2 minutes</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="setting-item">
+                <div class="setting-item-content">
+                    <div class="setting-item-info">
+                        <div class="setting-item-title">Keep alive interval</div>
+                        <div class="setting-item-description">Send keep-alive packets every N seconds</div>
+                    </div>
+                    <div class="setting-item-control">
+                        <select class="modern-select" id="keep-alive">
+                            <option value="0">Disabled</option>
+                            <option value="30" selected>30 seconds</option>
+                            <option value="60">60 seconds</option>
+                            <option value="300">5 minutes</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+export function createProfileSettingsContent(type, data = null) {
+    if (type === 'folder') {
+        return `
+            <div class="profile-form-section">
+                <div class="profile-form-section-title">
+                    <span class="profile-form-section-icon">⚙️</span>
+                    Folder Settings
+                </div>
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Sort profiles</div>
+                            <div class="setting-item-description">How to sort profiles within this folder</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <select class="modern-select" id="folder-sort">
+                                <option value="name">By name</option>
+                                <option value="recent">Recently used</option>
+                                <option value="created">Date created</option>
+                                <option value="manual">Manual order</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Show in favorites</div>
+                            <div class="setting-item-description">Display this folder in the favorites section</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <label class="modern-toggle">
+                                <input type="checkbox" id="folder-favorite">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    return `
+        <div class="profile-form-section">
+            <div class="profile-form-section-title">
+                <span class="profile-form-section-icon">⚙️</span>
+                Profile Settings
+            </div>
+            <div class="setting-item">
+                <div class="setting-item-content">
+                    <div class="setting-item-info">
+                        <div class="setting-item-title">Add to favorites</div>
+                        <div class="setting-item-description">Show this profile in the favorites section</div>
+                    </div>
+                    <div class="setting-item-control">
+                        <label class="modern-toggle">
+                            <input type="checkbox" id="profile-favorite">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="setting-item">
+                <div class="setting-item-content">
+                    <div class="setting-item-info">
+                        <div class="setting-item-title">Terminal theme</div>
+                        <div class="setting-item-description">Override global theme for this profile</div>
+                    </div>
+                    <div class="setting-item-control">
+                        <select class="modern-select" id="profile-theme">
+                            <option value="">Use global theme</option>
+                            <option value="dark">Dark</option>
+                            <option value="light">Light</option>
+                            <option value="auto">Auto</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="setting-item">
+                <div class="setting-item-content">
+                    <div class="setting-item-info">
+                        <div class="setting-item-title">Font size</div>
+                        <div class="setting-item-description">Override global font size for this profile</div>
+                    </div>
+                    <div class="setting-item-control">
+                        <select class="modern-select" id="profile-font-size">
+                            <option value="">Use global size</option>
+                            <option value="12">12px</option>
+                            <option value="14">14px</option>
+                            <option value="16">16px</option>
+                            <option value="18">18px</option>
+                            <option value="20">20px</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="setting-item">
+                <div class="setting-item-content">
+                    <div class="setting-item-info">
+                        <div class="setting-item-title">Working directory</div>
+                        <div class="setting-item-description">Default directory when opening this profile</div>
+                    </div>
+                    <div class="setting-item-control">
+                        <input type="text" class="modern-input" id="profile-working-dir" placeholder="Leave empty for default">
+                    </div>
+                </div>
+            </div>
+            <div class="setting-item">
+                <div class="setting-item-content">
+                    <div class="setting-item-info">
+                        <div class="setting-item-title">Environment variables</div>
+                        <div class="setting-item-description">Custom environment variables for this profile</div>
+                    </div>
+                    <div class="setting-item-control">
+                        <button class="modern-button secondary" id="edit-env-vars">Edit Variables</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
 } 
