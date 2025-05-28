@@ -198,6 +198,98 @@ func (a *App) LoadProfileFolder(filePath string) (*ProfileFolder, error) {
 	return &folder, nil
 }
 
+// findProfileFile finds the existing file for a profile by ID
+func (a *App) findProfileFile(profileID string) (string, error) {
+	profilesDir, err := a.GetProfilesDirectory()
+	if err != nil {
+		return "", err
+	}
+
+	// Walk through all files in profiles directory to find the one with matching ID
+	var foundFile string
+	err = filepath.WalkDir(profilesDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip directories and non-yaml files
+		if d.IsDir() || !strings.HasSuffix(strings.ToLower(d.Name()), ".yaml") {
+			return nil
+		}
+
+		name := d.Name()
+		// Skip metrics file and folder files
+		if name == "metrics.yaml" || strings.HasPrefix(name, "folder-") {
+			return nil
+		}
+
+		// Check if this is a profile file with the matching ID
+		// Profile files are in format: Name-ID.yaml
+		parts := strings.Split(name, "-")
+		if len(parts) >= 2 {
+			id := strings.TrimSuffix(parts[len(parts)-1], ".yaml")
+			if id == profileID {
+				foundFile = path
+				return filepath.SkipAll // Stop walking once found
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	return foundFile, nil
+}
+
+// findFolderFile finds the existing file for a folder by ID
+func (a *App) findFolderFile(folderID string) (string, error) {
+	profilesDir, err := a.GetProfilesDirectory()
+	if err != nil {
+		return "", err
+	}
+
+	// Walk through all files in profiles directory to find the one with matching ID
+	var foundFile string
+	err = filepath.WalkDir(profilesDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip directories and non-yaml files
+		if d.IsDir() || !strings.HasSuffix(strings.ToLower(d.Name()), ".yaml") {
+			return nil
+		}
+
+		name := d.Name()
+		// Skip metrics file and non-folder files
+		if name == "metrics.yaml" || !strings.HasPrefix(name, "folder-") {
+			return nil
+		}
+
+		// Check if this is a folder file with the matching ID
+		// Folder files are in format: folder-Name-ID.yaml
+		parts := strings.Split(name, "-")
+		if len(parts) >= 3 { // folder-Name-ID.yaml has at least 3 parts
+			id := strings.TrimSuffix(parts[len(parts)-1], ".yaml")
+			if id == folderID {
+				foundFile = path
+				return filepath.SkipAll // Stop walking once found
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	return foundFile, nil
+}
+
 // saveProfileInternal saves a profile to file without mutex locking (internal use)
 func (a *App) saveProfileInternal(profile *Profile) error {
 	profilesDir, err := a.GetProfilesDirectory()
@@ -222,6 +314,15 @@ func (a *App) saveProfileInternal(profile *Profile) error {
 	wasWatcherRunning := a.profileWatcher != nil
 	if wasWatcherRunning {
 		a.StopProfileWatcher()
+	}
+
+	// Find and delete any existing file for this profile ID (handles renames)
+	existingFile, err := a.findProfileFile(profile.ID)
+	if err == nil && existingFile != "" && existingFile != filePath {
+		// Only delete if it's a different file (different name)
+		if deleteErr := os.Remove(existingFile); deleteErr != nil && !os.IsNotExist(deleteErr) {
+			fmt.Printf("Warning: Failed to delete old profile file %s: %v\n", existingFile, deleteErr)
+		}
 	}
 
 	if err := os.WriteFile(filePath, data, ConfigFileMode); err != nil {
@@ -282,6 +383,15 @@ func (a *App) saveProfileFolderInternal(folder *ProfileFolder) error {
 	wasWatcherRunning := a.profileWatcher != nil
 	if wasWatcherRunning {
 		a.StopProfileWatcher()
+	}
+
+	// Find and delete any existing file for this folder ID (handles renames)
+	existingFile, err := a.findFolderFile(folder.ID)
+	if err == nil && existingFile != "" && existingFile != filePath {
+		// Only delete if it's a different file (different name)
+		if deleteErr := os.Remove(existingFile); deleteErr != nil && !os.IsNotExist(deleteErr) {
+			fmt.Printf("Warning: Failed to delete old folder file %s: %v\n", existingFile, deleteErr)
+		}
 	}
 
 	if err := os.WriteFile(filePath, data, ConfigFileMode); err != nil {
