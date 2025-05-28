@@ -24,6 +24,12 @@
     --wails-draggable: drag;
 }
 
+/* Platform-specific titlebar adjustments */
+.platform-darwin .tabs-titlebar {
+    height: 28px;
+    background: var(--bg-primary);
+}
+
 .titlebar-content {
     display: flex;
     align-items: center;
@@ -118,6 +124,8 @@
 
 .platform-darwin .window-controls-left {
     order: 1;
+    padding-left: 8px;
+    gap: 6px;
 }
 
 .platform-darwin .window-controls-right {
@@ -135,28 +143,38 @@
 
 /* macOS traffic light buttons */
 .platform-darwin .window-control {
-    width: 20px;
-    height: 20px;
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
-    margin: 0 4px;
+    margin: 0;
     position: relative;
-    border: 1px solid rgba(0, 0, 0, 0.1);
+    border: 0.5px solid rgba(0, 0, 0, 0.15);
+    transition: all 0.2s ease;
 }
 
 .platform-darwin .window-control-close {
     background: #ff5f57;
+    border-color: #e0443e;
 }
 
 .platform-darwin .window-control-minimize {
     background: #ffbd2e;
+    border-color: #dea123;
 }
 
 .platform-darwin .window-control-maximize {
     background: #28ca42;
+    border-color: #1aad29;
 }
 
 .platform-darwin .window-control:hover {
     filter: brightness(0.9);
+    transform: scale(1.1);
+}
+
+.platform-darwin .window-control:active {
+    transform: scale(0.9);
+    filter: brightness(0.8);
 }
 
 .platform-darwin .window-control-icon {
@@ -165,8 +183,8 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
 }
 
 /* Show symbols on hover for macOS */
@@ -176,14 +194,15 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
 }
 
 .platform-darwin .window-control:hover .window-control-icon svg {
-    width: 8px;
-    height: 8px;
-    color: rgba(0, 0, 0, 0.8);
+    width: 6px;
+    height: 6px;
+    color: rgba(0, 0, 0, 0.7);
+    stroke-width: 2;
 }
 
 .tabs-bar {
@@ -562,21 +581,21 @@
 }
 
 /* Special styling for close button on Windows/Linux */
-.platform-windows .window-control-close:hover,
-.platform-linux .window-control-close:hover {
+.platform-windows .window-close:hover,
+.platform-linux .window-close:hover {
     background: #e81123 !important;
     color: white !important;
 }
 
 /* Ensure close button is always visible and red on hover */
-.window-control-close:hover {
+.window-close:hover {
     background: #e81123 !important;
     color: white !important;
 }
 
 /* Make the close button extend to the very edge of the screen */
-.platform-windows .window-control-close,
-.platform-linux .window-control-close {
+.platform-windows .window-close,
+.platform-linux .window-close {
     border-top-right-radius: 0;
     border-bottom-right-radius: 0;
 }

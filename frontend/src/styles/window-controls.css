@@ -111,12 +111,12 @@
 
 .platform-darwin .window-controls {
     position: absolute;
-    left: 12px;
+    left: 8px;
     top: 50%;
     transform: translateY(-50%);
     order: unset;
     margin-left: 0;
-    gap: 8px;
+    gap: 6px;
     padding-left: 0;
     /* Not draggable on macOS either */
     --wails-draggable: no-drag;
@@ -136,8 +136,8 @@
     height: 12px;
     border-radius: 50%;
     margin: 0;
-    border: 0.5px solid rgba(0, 0, 0, 0.1);
-    transition: all 0.15s ease;
+    border: 0.5px solid rgba(0, 0, 0, 0.15);
+    transition: all 0.2s ease;
     position: relative;
     /* Not draggable on macOS */
     --wails-draggable: no-drag;
@@ -159,12 +159,13 @@
 }
 
 .platform-darwin .window-control:hover {
-    filter: brightness(1.1);
-    transform: scale(1.05);
+    filter: brightness(0.9);
+    transform: scale(1.1);
 }
 
 .platform-darwin .window-control:active {
-    transform: scale(0.95);
+    transform: scale(0.9);
+    filter: brightness(0.8);
 }
 
 .platform-darwin .window-control-icon {
@@ -178,14 +179,15 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
 }
 
 .platform-darwin .window-control:hover .window-control-icon svg {
-    width: 8px;
-    height: 8px;
-    color: rgba(0, 0, 0, 0.8);
+    width: 6px;
+    height: 6px;
+    color: rgba(0, 0, 0, 0.7);
+    stroke-width: 2;
 }
 
 /* Custom symbols for macOS buttons on hover */
