@@ -51,6 +51,21 @@ export class SidebarManager {
             // Load regular profile tree
             this.profileTree = await window.go.main.App.GetProfileTreeAPI();
             console.log('Loaded profile tree:', this.profileTree);
+
+            // Populate expandedFolders set based on loaded tree
+            this.expandedFolders.clear(); // Clear existing state
+            const populateExpanded = (nodes) => {
+                for (const node of nodes) {
+                    if (node.type === 'folder' && node.expanded) {
+                        this.expandedFolders.add(node.id);
+                    }
+                    if (node.children) {
+                        populateExpanded(node.children);
+                    }
+                }
+            };
+            populateExpanded(this.profileTree);
+            console.log('Initialized expanded folders:', Array.from(this.expandedFolders));
             
             // Load virtual folders
             this.virtualFolders = await window.go.main.App.GetVirtualFoldersAPI();
@@ -66,43 +81,48 @@ export class SidebarManager {
             this.profileTree = [];
             this.virtualFolders = [];
             this.metrics = {};
+            this.expandedFolders.clear(); // Ensure consistent state on error
         }
     }
 
     setupSidebarInteractions() {
-        // Profile tree interactions
+        // Main document click listener for handling various interactions
         document.addEventListener('click', (e) => {
-            if (e.target.closest('.tree-item')) {
-                this.handleTreeItemClick(e);
-            }
-            
-            if (e.target.closest('.tree-folder-toggle')) {
-                this.handleFolderToggle(e);
-            }
+            const treeItem = e.target.closest('.tree-item');
+            const profileActionButton = e.target.closest('.profile-action-btn');
+            const contextMenu = e.target.closest('.context-menu');
+            const profilePanel = e.target.closest('.profile-panel');
+            const isProfilePanelButton = ['profile-panel-close', 'profile-save-btn', 'profile-cancel-btn'].includes(e.target.id);
 
-            if (e.target.closest('.profile-action-btn')) {
-                this.handleProfileAction(e);
-            }
-        });
-
-        // Single-click to connect profiles (in addition to double-click)
-        document.addEventListener('click', (e) => {
-            // Check if this is a profile item (not a folder)
-            const profileItem = e.target.closest('.tree-item[data-type="profile"]') || 
-                               e.target.closest('.virtual-profile[data-type="profile"]') ||
-                               e.target.closest('.search-result[data-type="profile"]');
-            
-            if (profileItem && !e.target.closest('.tree-folder-toggle') && !e.target.closest('.profile-action-btn')) {
-                // Avoid conflicts with folder toggles and action buttons
-                if (!e.detail || e.detail === 1) { // Single click (detail is 2 for double-click)
-                    // Small delay to differentiate from double-click
-                    setTimeout(() => {
-                        if (!this.doubleClickHandled) {
-                            this.handleProfileSingleClick(e, profileItem);
-                        }
-                        this.doubleClickHandled = false;
-                    }, 250);
+            // Priority 1: Profile Panel Buttons
+            if (isProfilePanelButton) {
+                if (e.target.id === 'profile-panel-close' || e.target.id === 'profile-cancel-btn') {
+                    this.closeProfilePanel();
+                } else if (e.target.id === 'profile-save-btn') {
+                    this.saveProfile();
                 }
+                return; // Explicitly stop further processing for these buttons
+            }
+            
+            // Priority 2: Profile Action Buttons (could be inside a treeItem)
+            if (profileActionButton) {
+                this.handleProfileAction(e); // Assuming this method exists and handles its own logic
+                // If the action button is part of a tree item, we might not want to deselect the item.
+                // Let handleProfileAction manage selection if necessary.
+                return; // Stop further processing if an action button was clicked
+            } 
+            
+            // Priority 3: Tree Items (folders or profiles)
+            if (treeItem) {
+                this.handleTreeItemClick(e, treeItem);
+                return; // Stop further processing if a tree item was clicked
+            } 
+            
+            // Priority 4: Click outside of any interactive sidebar elements
+            // (and not inside a context menu or profile panel, which are handled by their own logic or ignored here)
+            if (!contextMenu && !profilePanel) {
+                document.querySelectorAll('.tree-item.selected').forEach(el => el.classList.remove('selected'));
+                this.selectedItem = null;
             }
         });
 
@@ -132,18 +152,7 @@ export class SidebarManager {
             }
         });
 
-        // Profile panel controls
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'profile-panel-close') {
-                this.closeProfilePanel();
-            }
-            if (e.target.id === 'profile-save-btn') {
-                this.saveProfile();
-            }
-            if (e.target.id === 'profile-cancel-btn') {
-                this.closeProfilePanel();
-            }
-        });
+        // The profile panel button clicks are now handled in the main document click listener above.
     }
 
     setupDragAndDrop() {
@@ -170,19 +179,27 @@ export class SidebarManager {
         });
     }
 
-    handleTreeItemClick(e) {
+    handleTreeItemClick(e, item) {
         e.preventDefault();
         e.stopPropagation();
 
-        const item = e.target.closest('.tree-item');
         const itemId = item.dataset.id;
         const itemType = item.dataset.type;
-        
-        // Handle folder expansion/collapse FIRST (prioritize over selection)
+        const isToggleClick = e.target.closest('.tree-folder-toggle');
+
+        // Ensure any previously selected item is deselected
+        document.querySelectorAll('.tree-item.selected').forEach(el => el.classList.remove('selected'));
+        this.selectedItem = { id: itemId, type: itemType }; // Still track selected item internally if needed
+
+        const name = item.querySelector('.tree-item-text')?.textContent;
+        updateStatus(`Selected: ${name}`);
+
         if (itemType === 'folder') {
+            // Toggle folder expansion if clicking on the folder item itself or its toggle icon
             const folderElement = item.closest('.tree-folder');
-            
-            if (this.expandedFolders.has(itemId)) {
+            const isExpanded = this.expandedFolders.has(itemId);
+
+            if (isExpanded) {
                 this.expandedFolders.delete(itemId);
                 folderElement.classList.remove('expanded');
             } else {
@@ -198,58 +215,12 @@ export class SidebarManager {
             if (toggle) {
                 toggle.textContent = this.expandedFolders.has(itemId) ? '▼' : '▶';
             }
-            
-            // For folders, we prioritize toggle over selection
-            // Still update selection for consistency
-            document.querySelectorAll('.tree-item').forEach(el => el.classList.remove('selected'));
-            item.classList.add('selected');
-            this.selectedItem = { id: itemId, type: itemType };
-            
-            const name = item.querySelector('.tree-item-text').textContent;
             updateStatus(`Toggled: ${name}`);
-            return; // Exit early, don't do profile selection logic
+        } else if (itemType === 'profile' && !isToggleClick) {
+            // Connect to profile on single click, but only if not clicking a folder toggle
+            // This handles both regular tree profiles and virtual/search profiles
+            this.connectToProfile(itemId, item);
         }
-        
-        // For non-folders (profiles), handle selection normally
-        document.querySelectorAll('.tree-item').forEach(el => el.classList.remove('selected'));
-        item.classList.add('selected');
-        this.selectedItem = { id: itemId, type: itemType };
-
-        const name = item.querySelector('.tree-item-text').textContent;
-        updateStatus(`Selected: ${name}`);
-    }
-
-    handleFolderToggle(e) {
-        // This method is now mainly for the arrow icon clicks
-        // But since we're handling folder clicks in handleTreeItemClick,
-        // we just need to prevent the event from bubbling to avoid double-toggle
-        e.preventDefault();
-        e.stopPropagation();
-        
-        // The actual toggle logic is now handled in handleTreeItemClick
-        // This prevents double-toggling when clicking on the arrow icon
-    }
-
-    async handleProfileSingleClick(e, profileItem) {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        const profileId = profileItem.dataset.id;
-        console.log('Single-click on profile:', profileId);
-        
-        if (!profileId) {
-            console.error('No profile ID found for single-click');
-            return;
-        }
-
-        // Visual feedback for single-click
-        profileItem.style.opacity = '0.7';
-        setTimeout(() => {
-            profileItem.style.opacity = '';
-        }, 150);
-
-        // Connect to profile
-        await this.connectToProfile(profileId, profileItem);
     }
 
     async handleProfileDoubleClick(e) {
@@ -388,8 +359,13 @@ export class SidebarManager {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
 
-        // Highlight valid drop targets
-                const item = e.target.closest('.tree-item');
+        // Remove 'drop-target' from all items first
+        document.querySelectorAll('.tree-item.drop-target').forEach(el => {
+            el.classList.remove('drop-target');
+        });
+
+        // Highlight current valid drop target
+        const item = e.target.closest('.tree-item');
         if (item && item.dataset.type === 'folder' && item !== this.draggedItem?.element) {
             item.classList.add('drop-target');
         }
@@ -570,7 +546,6 @@ export class SidebarManager {
         if (this.virtualFolders && this.virtualFolders.length > 0) {
             virtualFoldersHTML = `
                 <div class="virtual-folders-section">
-                    <div class="section-header">🚀 QUICK ACCESS</div>
                     ${this.renderVirtualFolders()}
                 </div>
             `;
@@ -579,7 +554,7 @@ export class SidebarManager {
         sidebarContent.innerHTML = `
             ${virtualFoldersHTML}
             <div class="profile-tree">
-                <div class="section-header">📁 ALL PROFILES</div>
+                <div class="section-header">ROOT FOLDER</div>
                 ${this.renderTreeNodes(this.profileTree)}
             </div>
         `;
@@ -781,7 +756,7 @@ export class SidebarManager {
         return `
             <div class="tree-folder ${isExpanded ? 'expanded' : ''}" data-level="${level}">
                 <div class="tree-item" data-id="${folder.id}" data-type="folder" draggable="true">
-                    <div class="tree-item-content" style="padding-left: ${level * 20}px">
+                <div class="tree-item-content" style="padding-left: ${(level * 16) + 8}px">
                         <span class="tree-folder-toggle" data-folder-id="${folder.id}">
                             ${isExpanded ? '▼' : '▶'}
                         </span>
@@ -803,7 +778,7 @@ export class SidebarManager {
         
         return `
             <div class="tree-item" data-id="${profile.id}" data-type="profile" draggable="true" title="${tooltipText}">
-                <div class="tree-item-content" style="padding-left: ${(level + 1) * 20}px">
+                <div class="tree-item-content" style="padding-left: ${(level + 1) * 16}px">
                     <span class="tree-item-icon">${profile.icon}</span>
                     <span class="tree-item-text">${profile.name}</span>
                     ${favoriteIcon}
@@ -1245,4 +1220,4 @@ export class SidebarManager {
             showNotification('Failed to update favorite', 'error');
         }
     }
-} 
+}
