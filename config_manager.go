@@ -290,3 +290,34 @@ func (a *App) SetSelectToCopyEnabled(enabled bool) error {
 	}
 	return nil
 }
+
+// GetProfilesPath returns the configured profiles directory path
+func (a *App) GetProfilesPath() string {
+	if a.config == nil {
+		fmt.Println("GetProfilesPath: config is nil, returning empty string.")
+		return ""
+	}
+	return a.config.ProfilesPath
+}
+
+// SetProfilesPath updates the profiles directory path in the configuration and marks it dirty
+func (a *App) SetProfilesPath(path string) error {
+	if a.config == nil {
+		return fmt.Errorf("config not initialized, cannot set profiles path")
+	}
+
+	if a.config.ProfilesPath != path {
+		a.config.ProfilesPath = path
+		fmt.Printf("Profiles path updated to: %s\n", path)
+		a.markConfigDirty()
+
+		// Reload profiles from the new directory
+		if err := a.LoadProfiles(); err != nil {
+			fmt.Printf("Warning: Failed to reload profiles from new path: %v\n", err)
+			// Don't return error here as the config update was successful
+		} else {
+			fmt.Println("Profiles reloaded from new directory")
+		}
+	}
+	return nil
+}

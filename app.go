@@ -1869,3 +1869,21 @@ func (a *App) GetActiveTabInfo() map[string]interface{} {
 		}
 	}
 }
+
+// SelectDirectory opens a directory selection dialog and returns the selected path
+func (a *App) SelectDirectory() (string, error) {
+	if a.ctx == nil {
+		return "", fmt.Errorf("application context not available")
+	}
+
+	// Use Wails runtime to open directory selection dialog
+	selectedPath, err := wailsRuntime.OpenDirectoryDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+		Title: "Select Profiles Directory",
+	})
+
+	if err != nil {
+		return "", fmt.Errorf("failed to open directory dialog: %w", err)
+	}
+
+	return selectedPath, nil
+}
