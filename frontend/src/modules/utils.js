@@ -84,38 +84,44 @@ export function formatShellName(shell) {
 }
 
 export function showNotification(message, type = 'info', duration = 3000) {
-    const statusInfo = document.getElementById('status-info');
-    if (!statusInfo) return;
-    
-    const originalText = statusInfo.textContent;
-    statusInfo.textContent = message;
-    
-    // Set color based on type
-    let color = '#ffcc02'; // default yellow
-    switch (type) {
-        case 'success':
-            color = '#0dbc79'; // green
-            break;
-        case 'error':
-            color = '#cd3131'; // red
-            break;
-        case 'info':
-            color = '#2472c8'; // blue
-            break;
-        default:
-            color = '#ffcc02'; // yellow
+    // Use the universal notification component
+    if (window.notification) {
+        return window.notification.showNotification(message, type, duration);
     }
-    statusInfo.style.color = color;
     
-    setTimeout(() => {
-        statusInfo.textContent = originalText;
-        statusInfo.style.color = '';
-    }, duration);
+    // If notification component not available, just log to console
+    console.log(`Notification: ${message} (${type})`);
 }
 
 export function updateStatus(message) {
     const statusInfo = document.getElementById('status-info');
     if (statusInfo) {
         statusInfo.textContent = message;
+    }
+}
+
+export function setPermanentStatus(message, color = '') {
+    if (window.notification) {
+        window.notification.setPermanentStatus(message, color);
+    } else {
+        // Fallback to direct DOM manipulation
+        const statusInfo = document.getElementById('status-info');
+        if (statusInfo) {
+            statusInfo.textContent = message;
+            statusInfo.style.color = color;
+        }
+    }
+}
+
+export function clearPermanentStatus() {
+    if (window.notification) {
+        window.notification.clearPermanentStatus();
+    } else {
+        // Fallback to direct DOM manipulation
+        const statusInfo = document.getElementById('status-info');
+        if (statusInfo) {
+            statusInfo.textContent = 'Ready';
+            statusInfo.style.color = '';
+        }
     }
 } 

@@ -120,10 +120,6 @@ export class StatusManager {
                 statusInfo.className = 'status-connected';
                 selectedShell.textContent = tab.title || 'Terminal';
             }
-        } else {
-            statusInfo.textContent = 'No Active Tab';
-            statusInfo.className = 'status-disconnected';
-            selectedShell.textContent = 'N/A';
         }
     }
 

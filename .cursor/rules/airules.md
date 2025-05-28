@@ -3,3 +3,5 @@
 - Always work with setupGlobalOutputListener() in terminal.js if you need to extend terminal features
 - Profiles and folders now use ID-based references (FolderID, ParentFolderID)
 - Sidebar save button uses only handleProfileSave() method - avoid duplicate event handlers to prevent multiple API calls
+- Use universal Modal component (components/Modal.js) for all dialogs - modal.confirm(), modal.confirmDelete(), modal.info(), modal.error()
+- Use universal Notification component (components/Notification.js) for all notifications - notification.success(), notification.error(), notification.info(), notification.warning()
