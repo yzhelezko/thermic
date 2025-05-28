@@ -155,51 +155,52 @@ export class SettingsManager {
         // --- Shell Selector Logic ---
         const shellSelector = document.getElementById('shell-selector');
         if (!shellSelector) {
-            console.error("Shell selector dropdown not found in the DOM.");
-        } else {
-            // Load shell options
-            this.loadAndPopulateShellSelector().catch(error => {
-                console.error('Error loading shell selector:', error);
-            });
-            
-            // Add delayed retry to ensure it works
-            setTimeout(async () => {
-                try {
-                    const currentOptions = document.getElementById('shell-selector')?.options.length || 0;
-                    if (currentOptions <= 1) { // Only default option
-                        await this.loadAndPopulateShellSelector();
-                    }
-                } catch (error) {
-                    console.error('Error in delayed shell selector check:', error);
-                }
-            }, 500);
-
-            // Add event listener for changes
-            shellSelector.addEventListener('change', async (event) => {
-                const newShell = event.target.value;
-                
-                try {
-                    // Get OS info for more specific messaging
-                    const osInfo = await window.go.main.App.GetOSInfo();
-                    const osName = this.getOSDisplayName(osInfo.os);
-                    
-                    await window.go.main.App.SetDefaultShell(newShell);
-                    
-                    const displayValue = newShell ? this.formatShellName(newShell) : `System Default (${this.formatShellName(osInfo.defaultShell || 'auto')})`;
-                    showNotification(`Default shell for ${osName} updated to: ${displayValue}. New tabs will use this shell.`, 'info');
-                } catch (error) {
-                    console.error("Error updating default shell preference:", error);
-                    showNotification(`Failed to update default shell preference: ${error.message}`, 'error');
-                    
-                    // Re-fetch to show actual stored state on error
-                    try {
-                        await this.loadAndPopulateShellSelector();
-                    } catch (reloadError) {
-                        console.error("Error reloading shell selector after failure:", reloadError);
-                    }
-                }
-            });
+            console.error("Shell selector dropdown not found for loading.");
+            return;
         }
+        
+        // Load shell options
+        this.loadAndPopulateShellSelector().catch(error => {
+            console.error('Error loading shell selector:', error);
+        });
+        
+        // Add delayed retry to ensure it works
+        setTimeout(async () => {
+            try {
+                const currentOptions = document.getElementById('shell-selector')?.options.length || 0;
+                if (currentOptions <= 1) { // Only default option
+                    await this.loadAndPopulateShellSelector();
+                }
+            } catch (error) {
+                console.error('Error in delayed shell selector check:', error);
+            }
+        }, 500);
+
+        // Add event listener for changes
+        shellSelector.addEventListener('change', async (event) => {
+            const newShell = event.target.value;
+            
+            try {
+                // Get OS info for more specific messaging
+                const osInfo = await window.go.main.App.GetOSInfo();
+                const osName = this.getOSDisplayName(osInfo.os);
+                
+                await window.go.main.App.SetDefaultShell(newShell);
+                
+                const displayValue = newShell ? this.formatShellName(newShell) : `System Default (${this.formatShellName(osInfo.defaultShell || 'auto')})`;
+                showNotification(`Default shell for ${osName} updated to: ${displayValue}. New tabs will use this shell.`, 'info');
+            } catch (error) {
+                console.error("Error updating default shell preference:", error);
+                showNotification(`Failed to update default shell preference: ${error.message}`, 'error');
+                
+                // Re-fetch to show actual stored state on error
+                try {
+                    await this.loadAndPopulateShellSelector();
+                } catch (reloadError) {
+                    console.error("Error reloading shell selector after failure:", reloadError);
+                }
+            }
+        });
 
         // --- Context Menu Settings Logic ---
         this.setupContextMenuSettings().catch(error => {
@@ -251,7 +252,6 @@ export class SettingsManager {
         const shellSelector = document.getElementById('shell-selector');
         if (!shellSelector) {
             console.error("Shell selector dropdown not found for loading.");
-            console.log("Current DOM state - available elements:", document.querySelectorAll('select, .shell-selector, #shell-selector').length);
             return;
         }
 
