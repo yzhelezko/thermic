@@ -13,6 +13,7 @@ export class TabsManager {
         this.closingTabs = new Set(); // Track tabs currently being closed
         this.shellFormats = new Map(); // Cache for shell raw value -> formatted name mapping
         this.tabActivity = new Map(); // Track activity in inactive tabs (tabId -> boolean)
+        this.draggedTabId = null;
     }
 
     init() {
@@ -129,6 +130,52 @@ export class TabsManager {
                 e.preventDefault();
                 e.stopPropagation();
                 this.handleTabContextMenu(tab, e);
+            }
+        });
+
+        // Drag and drop events for tab reordering - use more specific event delegation
+        document.addEventListener('dragstart', (e) => {
+            const tab = e.target.closest('.tab');
+            if (tab && tab.draggable && tab.dataset.tabId) {
+                console.log('Drag start for tab:', tab.dataset.tabId);
+                this.handleDragStart(e, tab);
+            }
+        });
+
+        document.addEventListener('dragover', (e) => {
+            const tab = e.target.closest('.tab');
+            if (tab && tab.dataset.tabId && this.draggedTabId) {
+                this.handleDragOver(e, tab);
+            }
+        });
+
+        document.addEventListener('dragenter', (e) => {
+            const tab = e.target.closest('.tab');
+            if (tab && tab.dataset.tabId && this.draggedTabId) {
+                this.handleDragEnter(e, tab);
+            }
+        });
+
+        document.addEventListener('dragleave', (e) => {
+            const tab = e.target.closest('.tab');
+            if (tab && tab.dataset.tabId && this.draggedTabId) {
+                this.handleDragLeave(e, tab);
+            }
+        });
+
+        document.addEventListener('drop', (e) => {
+            const tab = e.target.closest('.tab');
+            if (tab && tab.dataset.tabId && this.draggedTabId) {
+                console.log('Drop on tab:', tab.dataset.tabId);
+                this.handleDrop(e, tab);
+            }
+        });
+
+        document.addEventListener('dragend', (e) => {
+            const tab = e.target.closest('.tab');
+            if (tab && tab.dataset.tabId) {
+                console.log('Drag end for tab:', tab.dataset.tabId);
+                this.handleDragEnd(e, tab);
             }
         });
 
@@ -535,8 +582,15 @@ export class TabsManager {
 
         tabsList.innerHTML = '';
 
-        // Render all tabs
-        for (const [tabId, tab] of this.tabs) {
+        // Get tabs and sort them by creation time (which reflects the backend order)
+        const sortedTabs = Array.from(this.tabs.values()).sort((a, b) => {
+            const timeA = new Date(a.created || 0).getTime();
+            const timeB = new Date(b.created || 0).getTime();
+            return timeA - timeB;
+        });
+
+        // Render all tabs in sorted order
+        for (const tab of sortedTabs) {
             const tabElement = this.createTabElement(tab);
             tabsList.appendChild(tabElement);
         }
@@ -555,6 +609,16 @@ export class TabsManager {
         const tabEl = document.createElement('div');
         tabEl.className = `tab ${isActive ? 'active' : ''} ${isSSH ? 'ssh-tab' : ''} ${hasActivity ? 'has-activity' : ''}`;
         tabEl.dataset.tabId = tab.id;
+        
+        // Make tabs draggable only if there are multiple tabs
+        const isDraggable = this.tabs.size > 1;
+        if (isDraggable) {
+            tabEl.draggable = true;
+            console.log('Tab', tab.id, 'is draggable (total tabs:', this.tabs.size, ')');
+        } else {
+            tabEl.draggable = false;
+            console.log('Tab', tab.id, 'is NOT draggable (total tabs:', this.tabs.size, ')');
+        }
 
         // Add status class only for SSH connections
         if (tab.status && isSSH) {
@@ -1069,5 +1133,219 @@ export class TabsManager {
         `;
 
         return buttonsContainer;
+    }
+
+    // Drag and drop handlers
+    handleDragStart(e, tab) {
+        // Only allow dragging if there are multiple tabs
+        if (this.tabs.size <= 1) {
+            console.log('Preventing drag - only one tab');
+            e.preventDefault();
+            return;
+        }
+
+        console.log('Starting drag for tab:', tab.dataset.tabId);
+        this.draggedTabId = tab.dataset.tabId;
+        tab.classList.add('dragging');
+        
+        // Add visual feedback to tabs list
+        const tabsList = document.getElementById('tabs-list');
+        if (tabsList) {
+            tabsList.classList.add('drag-active');
+        }
+
+        // Set drag data
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', tab.dataset.tabId);
+        
+        // Create a custom drag image (optional)
+        const dragImage = tab.cloneNode(true);
+        dragImage.style.opacity = '0.8';
+        dragImage.style.transform = 'scale(0.9)';
+        dragImage.style.position = 'absolute';
+        dragImage.style.top = '-1000px';
+        document.body.appendChild(dragImage);
+        e.dataTransfer.setDragImage(dragImage, 60, 16);
+        
+        // Remove the drag image after a short delay
+        setTimeout(() => {
+            if (document.body.contains(dragImage)) {
+                document.body.removeChild(dragImage);
+            }
+        }, 100);
+    }
+
+    handleDragOver(e, tab) {
+        if (!this.draggedTabId || tab.dataset.tabId === this.draggedTabId) {
+            return;
+        }
+
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+    }
+
+    handleDragEnter(e, tab) {
+        if (!this.draggedTabId || tab.dataset.tabId === this.draggedTabId) {
+            return;
+        }
+
+        e.preventDefault();
+        
+        // Clear previous drag over states
+        this.clearDragOverStates();
+        
+        // Determine drop position based on mouse position
+        const rect = tab.getBoundingClientRect();
+        const midpoint = rect.left + rect.width / 2;
+        const isRightSide = e.clientX > midpoint;
+        
+        console.log('Drag enter on tab:', tab.dataset.tabId, 'right side:', isRightSide);
+        
+        if (isRightSide) {
+            tab.classList.add('drag-over-right');
+        } else {
+            tab.classList.add('drag-over');
+        }
+    }
+
+    handleDragLeave(e, tab) {
+        // Only clear if we're actually leaving the tab element
+        if (!tab.contains(e.relatedTarget)) {
+            tab.classList.remove('drag-over', 'drag-over-right');
+        }
+    }
+
+    handleDrop(e, tab) {
+        e.preventDefault();
+        
+        if (!this.draggedTabId || tab.dataset.tabId === this.draggedTabId) {
+            console.log('Invalid drop - same tab or no dragged tab');
+            return;
+        }
+
+        const targetTabId = tab.dataset.tabId;
+        
+        // Determine drop position
+        const rect = tab.getBoundingClientRect();
+        const midpoint = rect.left + rect.width / 2;
+        const isRightSide = e.clientX > midpoint;
+        
+        console.log('Dropping tab', this.draggedTabId, 'on', targetTabId, 'right side:', isRightSide);
+        
+        // Perform the reorder
+        this.reorderTab(this.draggedTabId, targetTabId, isRightSide);
+        
+        // Clear drag states
+        this.clearDragOverStates();
+    }
+
+    handleDragEnd(e, tab) {
+        console.log('Drag end for tab:', tab.dataset.tabId);
+        
+        // Clean up all drag states thoroughly
+        tab.classList.remove('dragging');
+        this.clearDragOverStates();
+        
+        // Always remove drag-active class from tabs list
+        const tabsList = document.getElementById('tabs-list');
+        if (tabsList) {
+            tabsList.classList.remove('drag-active');
+        }
+        
+        // Clear dragged tab ID
+        this.draggedTabId = null;
+        
+        // Additional cleanup - remove any lingering drag states from all tabs
+        const allTabs = document.querySelectorAll('.tab');
+        allTabs.forEach(tabEl => {
+            tabEl.classList.remove('dragging', 'drag-over', 'drag-over-right');
+        });
+    }
+
+    clearDragOverStates() {
+        const tabs = document.querySelectorAll('.tab');
+        tabs.forEach(tab => {
+            tab.classList.remove('drag-over', 'drag-over-right');
+        });
+        
+        // Also ensure tabs list doesn't have drag-active class
+        const tabsList = document.getElementById('tabs-list');
+        if (tabsList) {
+            tabsList.classList.remove('drag-active');
+        }
+    }
+
+    async reorderTab(draggedTabId, targetTabId, insertAfter = false) {
+        try {
+            console.log('Reordering tab', draggedTabId, 'relative to', targetTabId, 'insertAfter:', insertAfter);
+            
+            // Get current tab order based on creation time
+            const sortedTabs = Array.from(this.tabs.values()).sort((a, b) => {
+                const timeA = new Date(a.created || 0).getTime();
+                const timeB = new Date(b.created || 0).getTime();
+                return timeA - timeB;
+            });
+            
+            const currentOrder = sortedTabs.map(tab => tab.id);
+            console.log('Current order:', currentOrder);
+            
+            // Remove dragged tab from current position
+            const draggedIndex = currentOrder.indexOf(draggedTabId);
+            if (draggedIndex === -1) {
+                console.log('Dragged tab not found in current order');
+                return;
+            }
+            
+            currentOrder.splice(draggedIndex, 1);
+            
+            // Find target position
+            const targetIndex = currentOrder.indexOf(targetTabId);
+            if (targetIndex === -1) {
+                console.log('Target tab not found in current order');
+                return;
+            }
+            
+            // Insert at new position
+            const insertIndex = insertAfter ? targetIndex + 1 : targetIndex;
+            currentOrder.splice(insertIndex, 0, draggedTabId);
+            
+            console.log('New order:', currentOrder);
+            
+            // Update local tab creation times immediately for instant UI feedback
+            const baseTime = new Date();
+            currentOrder.forEach((tabId, index) => {
+                const tab = this.tabs.get(tabId);
+                if (tab) {
+                    // Set creation time to maintain the desired order
+                    tab.created = new Date(baseTime.getTime() + index).toISOString();
+                }
+            });
+            
+            // Clear all drag states before re-rendering
+            this.clearDragOverStates();
+            
+            // Re-render tabs immediately to show the new order
+            this.renderTabs();
+            
+            // Update backend with new order (async, don't block UI)
+            this.updateTabOrder(currentOrder).catch(error => {
+                console.error('Failed to update backend tab order:', error);
+                // Could revert the local changes here if needed
+            });
+            
+        } catch (error) {
+            console.error('Failed to reorder tabs:', error);
+        }
+    }
+
+    async updateTabOrder(tabIds) {
+        try {
+            // Import the ReorderTabs function
+            const { ReorderTabs } = await import('../../wailsjs/go/main/App.js');
+            await ReorderTabs(tabIds);
+        } catch (error) {
+            console.error('Failed to update tab order in backend:', error);
+            throw error;
+        }
     }
 } 
