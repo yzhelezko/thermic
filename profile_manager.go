@@ -18,6 +18,13 @@ import (
 
 // GetProfilesDirectory returns the full path to the profiles directory
 func (a *App) GetProfilesDirectory() (string, error) {
+	// Check if a custom profiles path is configured
+	if a.config != nil && a.config.ProfilesPath != "" {
+		// Use the configured custom path
+		return a.config.ProfilesPath, nil
+	}
+
+	// Fall back to default path
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get user config directory: %w", err)

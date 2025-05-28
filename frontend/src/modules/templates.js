@@ -187,7 +187,7 @@ export function createSettingsPanelTemplate() {
                     ${createTerminalSettingsCard()}
                 </div>
                 <div class="settings-tab-pane" id="settings-tab-general">
-                    <p style="padding: 20px; text-align: center; color: var(--text-tertiary);">General settings will be here.</p>
+                    ${createGeneralSettingsCard()}
                 </div>
                 <div class="settings-tab-pane" id="settings-tab-packing">
                     <p style="padding: 20px; text-align: center; color: var(--text-tertiary);">Packing settings will be here.</p>
@@ -516,4 +516,31 @@ export function createProfileFormTemplate(mode, type, data = null) {
             </div>
         `;
     }
+}
+
+export function createGeneralSettingsCard() {
+    return `
+        <div class="settings-card">
+            <div class="settings-card-header">
+                <div class="settings-card-icon">📁</div>
+                <div class="settings-card-title">Profiles Configuration</div>
+            </div>
+            <div class="settings-card-content">
+                <div class="setting-row">
+                    <div class="setting-label">Profiles Directory</div>
+                    <div class="setting-control">
+                        <input type="text" class="setting-input" id="profiles-path-input" placeholder="Leave empty for default location">
+                        <button class="setting-button" id="browse-profiles-path">📂</button>
+                        <button class="setting-button" id="save-profiles-path">✓</button>
+                    </div>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-label">Current Path</div>
+                    <div class="setting-control">
+                        <span class="setting-info" id="current-profiles-path">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
 } 

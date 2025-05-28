@@ -206,6 +206,11 @@ export class SettingsManager {
         this.setupContextMenuSettings().catch(error => {
             console.error('Error setting up context menu settings:', error);
         });
+
+        // --- Profiles Path Settings Logic ---
+        this.setupProfilesPathSettings().catch(error => {
+            console.error('Error setting up profiles path settings:', error);
+        });
     }
 
     async setupContextMenuSettings() {
@@ -245,6 +250,102 @@ export class SettingsManager {
 
         } catch (error) {
             console.error('Error in setupContextMenuSettings:', error);
+        }
+    }
+
+    async setupProfilesPathSettings() {
+        try {
+            // Get profiles path elements
+            const profilesPathInput = document.getElementById('profiles-path-input');
+            const browseProfilesPathBtn = document.getElementById('browse-profiles-path');
+            const saveProfilesPathBtn = document.getElementById('save-profiles-path');
+            const currentProfilesPath = document.getElementById('current-profiles-path');
+
+            if (!profilesPathInput || !browseProfilesPathBtn || !saveProfilesPathBtn || !currentProfilesPath) {
+                console.warn('Profiles path settings elements not found in DOM');
+                return;
+            }
+
+            // Load current profiles path setting
+            await this.loadCurrentProfilesPath();
+
+            // Browse button functionality
+            browseProfilesPathBtn.addEventListener('click', async () => {
+                try {
+                    // Use Wails dialog to select directory
+                    const selectedPath = await window.go.main.App.SelectDirectory();
+                    if (selectedPath) {
+                        profilesPathInput.value = selectedPath;
+                    }
+                } catch (error) {
+                    console.error('Error selecting directory:', error);
+                    showNotification(`Failed to open directory selector: ${error.message}`, 'error');
+                }
+            });
+
+            // Save button functionality
+            saveProfilesPathBtn.addEventListener('click', async () => {
+                try {
+                    const newPath = profilesPathInput.value.trim();
+                    await window.go.main.App.SetProfilesPath(newPath);
+                    await this.loadCurrentProfilesPath(); // Refresh current path display
+                    
+                    // Refresh the sidebar to reflect the new profiles directory
+                    if (window.sidebarManager) {
+                        await window.sidebarManager.loadProfileTree();
+                        window.sidebarManager.renderProfileTree();
+                        console.log('Sidebar refreshed after profiles path update');
+                    }
+                    
+                    showNotification('Profiles path updated successfully', 'info');
+                } catch (error) {
+                    console.error('Error updating profiles path:', error);
+                    showNotification(`Failed to update profiles path: ${error.message}`, 'error');
+                }
+            });
+
+            // Enter key to save
+            profilesPathInput.addEventListener('keypress', async (event) => {
+                if (event.key === 'Enter') {
+                    // Trigger the save button click which already includes sidebar refresh
+                    saveProfilesPathBtn.click();
+                }
+            });
+
+        } catch (error) {
+            console.error('Error in setupProfilesPathSettings:', error);
+        }
+    }
+
+    async loadCurrentProfilesPath() {
+        try {
+            const currentProfilesPath = document.getElementById('current-profiles-path');
+            const profilesPathInput = document.getElementById('profiles-path-input');
+            
+            if (!currentProfilesPath || !profilesPathInput) {
+                return;
+            }
+
+            // Get current configured path and actual directory
+            const configuredPath = await window.go.main.App.GetProfilesPath();
+            const actualDirectory = await window.go.main.App.GetProfilesDirectory();
+
+            // Update input with configured path
+            profilesPathInput.value = configuredPath || '';
+
+            // Show actual directory being used
+            if (configuredPath) {
+                currentProfilesPath.textContent = actualDirectory;
+            } else {
+                currentProfilesPath.textContent = `${actualDirectory} (default)`;
+            }
+
+        } catch (error) {
+            console.error('Error loading current profiles path:', error);
+            const currentProfilesPath = document.getElementById('current-profiles-path');
+            if (currentProfilesPath) {
+                currentProfilesPath.textContent = 'Error loading path';
+            }
         }
     }
 

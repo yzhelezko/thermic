@@ -178,6 +178,10 @@ export function GetProfilesDirectory() {
   return window['go']['main']['App']['GetProfilesDirectory']();
 }
 
+export function GetProfilesPath() {
+  return window['go']['main']['App']['GetProfilesPath']();
+}
+
 export function GetRemoteSystemStats(arg1) {
   return window['go']['main']['App']['GetRemoteSystemStats'](arg1);
 }
@@ -298,12 +302,20 @@ export function SearchProfilesAPI(arg1, arg2) {
   return window['go']['main']['App']['SearchProfilesAPI'](arg1, arg2);
 }
 
+export function SelectDirectory() {
+  return window['go']['main']['App']['SelectDirectory']();
+}
+
 export function SetActiveTab(arg1) {
   return window['go']['main']['App']['SetActiveTab'](arg1);
 }
 
 export function SetDefaultShell(arg1) {
   return window['go']['main']['App']['SetDefaultShell'](arg1);
+}
+
+export function SetProfilesPath(arg1) {
+  return window['go']['main']['App']['SetProfilesPath'](arg1);
 }
 
 export function SetSelectToCopyEnabled(arg1) {

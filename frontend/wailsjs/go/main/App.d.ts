@@ -90,6 +90,8 @@ export function GetProfileTreeAPI():Promise<Array<main.ProfileTreeNode>>;
 
 export function GetProfilesDirectory():Promise<string>;
 
+export function GetProfilesPath():Promise<string>;
+
 export function GetRemoteSystemStats(arg1:string):Promise<Record<string, any>>;
 
 export function GetSelectToCopyEnabled():Promise<boolean>;
@@ -150,9 +152,13 @@ export function SaveProfileFolder(arg1:main.ProfileFolder):Promise<void>;
 
 export function SearchProfilesAPI(arg1:string,arg2:Array<string>):Promise<Array<main.Profile>>;
 
+export function SelectDirectory():Promise<string>;
+
 export function SetActiveTab(arg1:string):Promise<void>;
 
 export function SetDefaultShell(arg1:string):Promise<void>;
+
+export function SetProfilesPath(arg1:string):Promise<void>;
 
 export function SetSelectToCopyEnabled(arg1:boolean):Promise<void>;
 
