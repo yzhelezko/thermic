@@ -732,27 +732,97 @@
     color: var(--text-tertiary);
 }
 
-/* Icon Selector */
-.icon-selector {
-    position: relative;
-}
-
-.icon-input {
-    padding-right: 50px;
-}
-
-.icon-grid {
-    display: grid;
-    grid-template-columns: repeat(8, 1fr);
+/* Icon Selector - Compact Design */
+.name-icon-container {
+    display: flex;
     gap: 8px;
-    margin-top: 8px;
-    padding: 12px;
-    background: var(--bg-tertiary);
+    align-items: center;
+    width: 100%;
+}
+
+.name-icon-container .form-input {
+    flex: 1;
+    min-width: 0;
+}
+
+.icon-selector-compact {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.icon-selector-button {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 12px;
+    background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 14px;
+    min-width: 60px;
+    justify-content: center;
 }
 
-.icon-option {
+.icon-selector-button:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--accent-color);
+}
+
+.icon-selector-button.active {
+    background: var(--accent-color);
+    color: white;
+    border-color: var(--accent-color);
+}
+
+.current-icon {
+    font-size: 16px;
+    line-height: 1;
+}
+
+.icon-selector-arrow {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    transition: transform 0.2s ease;
+}
+
+.icon-selector-button.active .icon-selector-arrow {
+    transform: rotate(180deg);
+    color: white;
+}
+
+.icon-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    z-index: 1000;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-8px);
+    transition: all 0.2s ease;
+    margin-top: 4px;
+}
+
+.icon-dropdown.active {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.icon-grid-compact {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    padding: 8px;
+    min-width: 160px;
+}
+
+.icon-grid-compact .icon-option {
     width: 32px;
     height: 32px;
     display: flex;
@@ -762,14 +832,21 @@
     cursor: pointer;
     border-radius: 6px;
     transition: all 0.2s ease;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
+    background: var(--bg-primary);
+    border: 1px solid transparent;
 }
 
-.icon-option:hover {
+.icon-grid-compact .icon-option:hover {
     background: var(--accent-color);
     color: white;
     transform: scale(1.1);
+    border-color: var(--accent-color);
+}
+
+/* Legacy Icon Selector - Keep for backward compatibility but hide by default */
+.icon-selector {
+    position: relative;
+    display: none; /* Hide the old selector */
 }
 
 /* Form Buttons */
@@ -842,32 +919,75 @@
     
     .profile-panel-footer .btn {
         padding: 8px 16px; /* Consistent button size on mobile */
-        min-width: 80px;
+        min-width: 70px; /* Smaller minimum width on mobile */
+    }
+    
+    /* Compact icon selector responsive adjustments */
+    .name-icon-container {
+        flex-direction: column;
+        gap: 12px;
+        align-items: stretch;
+    }
+    
+    .icon-selector-compact {
+        align-self: flex-start;
+    }
+    
+    .icon-dropdown {
+        right: auto;
+        left: 0;
+        min-width: 200px;
+    }
+    
+    .icon-grid-compact {
+        grid-template-columns: repeat(6, 1fr);
+        min-width: 200px;
     }
 }
 
 @media (max-width: 600px) {
     .profile-panel {
         width: 100vw;
-        left: -100vw; /* Hide completely off screen */
+        left: -100vw;
         top: 0;
-        height: 100vh; /* Full screen height on small devices */
+        height: 100vh;
         border-radius: 0;
     }
     
     .profile-panel-overlay.active .profile-panel {
-        left: 0; /* Slide to cover entire screen */
+        left: 0;
     }
     
     .profile-panel-footer {
-        padding: 12px 16px; /* Slightly more padding on very small screens for touch targets */
-        gap: 8px;
+        padding: 12px 16px;
     }
     
     .profile-panel-footer .btn {
-        flex: 1; /* Make buttons take equal width on small screens */
-        min-width: auto;
-        padding: 10px 16px; /* Slightly larger touch targets on mobile */
+        padding: 10px 16px;
+        min-width: 80px;
+    }
+    
+    /* Very small screen adjustments for icon selector */
+    .name-icon-container {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .icon-selector-button {
+        min-width: 80px;
+        padding: 10px 16px;
+    }
+    
+    .icon-grid-compact {
+        grid-template-columns: repeat(5, 1fr);
+        gap: 6px;
+        padding: 12px;
+    }
+    
+    .icon-grid-compact .icon-option {
+        width: 36px;
+        height: 36px;
+        font-size: 18px;
     }
 }
 
