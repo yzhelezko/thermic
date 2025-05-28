@@ -327,23 +327,11 @@ class ThermicTerminal {
         
         if (activeTab) {
             if (activeTab.connectionType === 'ssh') {
-                statusBar.classList.add('ssh-active');
-                // Show additional stats and separators for SSH connections
-                document.querySelectorAll('[data-stat="load"], [data-stat="uptime"]').forEach(el => {
-                    el.style.display = 'inline';
-                });
-                document.querySelectorAll('.separator[data-for="load"], .separator[data-for="uptime"]').forEach(el => {
-                    el.style.display = 'inline';
-                });
+                statusBar.classList.add('ssh-active'); 
+                // Visibility of specific stats like load/uptime is handled by StatusManager based on data availability
             } else {
                 statusBar.classList.add('local-active');
-                // Hide additional stats and separators for local connections
-                document.querySelectorAll('[data-stat="load"], [data-stat="uptime"]').forEach(el => {
-                    el.style.display = 'none';
-                });
-                document.querySelectorAll('.separator[data-for="load"], .separator[data-for="uptime"]').forEach(el => {
-                    el.style.display = 'none';
-                });
+                // Visibility of specific stats like load/uptime is handled by StatusManager
             }
         }
     }

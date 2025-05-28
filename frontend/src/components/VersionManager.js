@@ -77,7 +77,7 @@ class VersionManager {
             statusVersion.appendChild(versionContainer);
             
             this.versionContainer = versionContainer;
-            this.loadVersionInfo();
+            this.updateStatusBarVersion();
         } else {
             // Retry after delay if status bar not ready
             setTimeout(() => this.addVersionToStatusBar(), 1000);

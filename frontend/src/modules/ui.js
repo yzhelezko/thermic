@@ -3,7 +3,7 @@ import { showNotification, updateStatus } from './utils.js';
 
 export class UIManager {
     constructor() {
-        this.isDarkTheme = true;
+        this.isDarkTheme = true; // Default to dark theme, will be synced
         this.tabs = [{ id: 'terminal-1', title: 'Terminal 1', active: true }];
         this.tabCounter = 1;
         this.sidebarWidth = 250;
@@ -58,8 +58,6 @@ export class UIManager {
             }
         });
     }
-
-
 
     setupResizablePanels() {
         this.setupResize('sidebar-resize', 'left');
