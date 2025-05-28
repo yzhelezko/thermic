@@ -7,3 +7,6 @@
 - Use universal Notification component (components/Notification.js) for all notifications - notification.success(), notification.error(), notification.warning(), notification.info()
 - Window controls are integrated into tabs titlebar - no separate header exists
 - Settings panel slides from right, profile/folder panels slide from left, both have sidebar height and start below tabs
+- macOS window controls: 12px size, 6px gap, positioned left with 8px padding, use window-control-close/minimize/maximize classes
+- Windows/Linux controls: 46px width, 32px height, positioned right, use window-close/minimize/maximize classes
+- macOS titlebar height: 28px, Windows/Linux: 32px, proper hover animations with scale(1.1) and brightness(0.9)
