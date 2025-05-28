@@ -1,5 +1,5 @@
-//go:build !darwin
-// +build !darwin
+//go:build darwin
+// +build darwin
 
 package main
 
@@ -17,7 +17,7 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-const isFrameless = true
+const isFrameless = false
 
 func main() {
 	// Create an instance of the app structure
