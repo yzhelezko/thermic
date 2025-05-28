@@ -10,11 +10,31 @@ import { WindowControlsManager } from './modules/window-controls.js';
 import { UIManager } from './modules/ui.js';
 import { SettingsManager } from './modules/settings.js';
 import { SidebarManager } from './modules/sidebar.js';
+import { ActivityBarManager } from './modules/activity-bar.js';
 import { StatusManager } from './modules/status.js';
 import { updateStatus } from './modules/utils.js';
 import VersionManager from './components/VersionManager.js';
 import { modal } from './components/Modal.js';
 import { notification } from './components/Notification.js';
+
+// Platform detection for window controls
+function detectPlatform() {
+    const userAgent = navigator.userAgent.toLowerCase();
+    let platform = 'unknown';
+    
+    if (userAgent.includes('mac')) {
+        platform = 'darwin';
+    } else if (userAgent.includes('win')) {
+        platform = 'windows';
+    } else if (userAgent.includes('linux')) {
+        platform = 'linux';
+    }
+    
+    // Add platform class to body for CSS targeting
+    document.body.classList.add(`platform-${platform}`);
+    
+    return platform;
+}
 
 class ThermicTerminal {
     constructor() {
@@ -31,8 +51,11 @@ class ThermicTerminal {
         this.uiManager = new UIManager();
         this.settingsManager = new SettingsManager();
         this.sidebarManager = new SidebarManager();
+        this.activityBarManager = new ActivityBarManager(this.sidebarManager, this.uiManager);
         this.statusManager = new StatusManager();
         this.versionManager = null; // Initialize later after DOM is ready
+        
+        this.platform = detectPlatform();
         
         this.init();
         this.setupCleanup();
@@ -104,8 +127,14 @@ class ThermicTerminal {
             console.log('Initializing sidebar manager...');
             await this.sidebarManager.initSidebar();
             
+            console.log('Initializing activity bar manager...');
+            this.activityBarManager.init();
+            
             // Expose sidebar manager globally for back buttons
             window.sidebarManager = this.sidebarManager;
+            
+            // Expose activity bar manager globally
+            window.activityBarManager = this.activityBarManager;
             
             // Expose tabs manager globally for event handling
             window.tabsManager = this.tabsManager;
@@ -210,11 +239,6 @@ class ThermicTerminal {
         // Connect UI resize events to terminal
         this.uiManager.setTerminalResizeCallback(() => {
             this.terminalManager.fit();
-        });
-
-        // Connect sidebar changes to sidebar manager
-        this.uiManager.setSidebarChangeCallback((activeButton) => {
-            this.sidebarManager.updateSidebarContent(activeButton);
         });
 
         // Set up shell selector event listener

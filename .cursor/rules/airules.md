@@ -4,4 +4,6 @@
 - Profiles and folders now use ID-based references (FolderID, ParentFolderID)
 - Sidebar save button uses only handleProfileSave() method - avoid duplicate event handlers to prevent multiple API calls
 - Use universal Modal component (components/Modal.js) for all dialogs - modal.confirm(), modal.confirmDelete(), modal.info(), modal.error()
-- Use universal Notification component (components/Notification.js) for all notifications - notification.success(), notification.error(), notification.info(), notification.warning()
+- Use universal Notification component (components/Notification.js) for all notifications - notification.success(), notification.error(), notification.warning(), notification.info()
+- Window controls are integrated into tabs titlebar - no separate header exists
+- Settings panel slides from right, profile/folder panels slide from left, both have sidebar height and start below tabs
