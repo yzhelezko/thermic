@@ -63,29 +63,48 @@
 }
 
 .tree-item {
-    padding: 6px 24px;
     cursor: pointer;
     font-size: 12px;
     color: var(--text-secondary);
     display: flex;
     align-items: center;
-    gap: 8px;
-    transition: background-color 0.15s ease;
+    /* Removed gap to ensure full background coverage */
+    transition: background-color 0.15s ease, border-color 0.15s ease;
     position: relative;
+    padding: 0; /* Remove padding from tree-item */
+    border: none; /* Ensure no default border */
+    border-radius: 4px; /* Apply border-radius to the parent item */
 }
 
 .tree-item:hover {
-    background-color: var(--bg-tertiary);
+    /* Removed background-color to rely on .tree-item-content for hover background */
     color: var(--text-primary);
+    border: none !important; /* Force no border on hover */
+    outline: none !important; /* Force no outline on hover */
+    box-shadow: none !important; /* Force no box-shadow on hover */
 }
 
 .tree-item.selected {
-    background-color: var(--accent-color);
-    color: #ffffff;
+    background-color: var(--accent-color) !important; 
+    color: #ffffff !important; 
 }
 
 .tree-item.selected:hover {
-    background-color: var(--accent-color);
+    background-color: var(--accent-color) !important; /* Keep selected background on hover */
+    color: #ffffff !important; /* Keep selected text color on hover */
+}
+
+/* Ensure that the hover effect on tree-item-content does not override the selected item's background */
+.tree-item.selected .tree-item-content {
+    background-color: transparent !important; /* Make content background transparent when item is selected */
+}
+
+/* Ensure that the hover effect on tree-item-content does not override the selected item's text color */
+.tree-item.selected .tree-item-content .tree-item-text,
+.tree-item.selected .tree-item-content .tree-item-icon,
+.tree-item.selected .tree-item-content .tree-item-type,
+.tree-item.selected .tree-item-content .favorite-indicator {
+    color: #ffffff !important;
 }
 
 .tree-item-icon {
@@ -206,9 +225,11 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 4px 8px;
-    border-radius: 3px;
+    padding: 6px 8px; /* Standardized padding for all tree item content */
+    border-radius: 3px; /* Apply border-radius here for the hover background */
     transition: all 0.15s ease;
+    width: 100%; /* Ensure it takes full width */
+    box-sizing: border-box; /* Include padding in width calculation */
 }
 
 .tree-item[data-type="folder"] .tree-item-content {
@@ -221,10 +242,14 @@
     transition: all 0.15s ease;
 }
 
-.tree-item[data-type="profile"]:hover .tree-item-content {
-    background: var(--bg-quaternary);
-    border-radius: 4px;
-    transform: translateX(2px);
+.tree-item[data-type="profile"]:not(.selected):hover .tree-item-content,
+.tree-item[data-type="folder"]:not(.selected):hover .tree-item-content,
+.virtual-profile:not(.selected):hover .tree-item-content,
+.search-result:not(.selected):hover .tree-item-content {
+    background: var(--bg-quaternary); 
+    border: none !important; 
+    outline: none !important; 
+    box-shadow: none !important; 
 }
 
 .tree-item[data-type="profile"]:active .tree-item-content,
@@ -542,35 +567,34 @@
 .virtual-profile {
     position: relative;
     cursor: pointer;
-    padding: 6px 8px;
+    /* Padding is now handled by .tree-item-content */
     margin: 2px 0;
     border-radius: 4px;
     transition: background-color 0.15s ease;
 }
 
 .virtual-profile:hover {
-    background: var(--bg-quaternary);
+    /* General hover for the .virtual-profile container itself, if needed, but content hover is primary */
+    border-color: transparent !important; 
+    outline: none !important; 
+    box-shadow: none !important; 
 }
 
 .favorite-star {
-    position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
     font-size: 12px;
     color: #ffd700;
+    margin-left: auto; /* Push to the right */
+    flex-shrink: 0;
 }
 
 .usage-count {
-    position: absolute;
-    right: 28px;
-    top: 50%;
-    transform: translateY(-50%);
     font-size: 10px;
     color: var(--text-tertiary);
     background: var(--bg-quaternary);
     padding: 2px 4px;
     border-radius: 8px;
+    margin-left: 4px; /* Add some space from favorite star or text */
+    flex-shrink: 0;
 }
 
 /* Search panel styles */
@@ -656,7 +680,7 @@
 
 .search-result {
     margin-bottom: 8px;
-    padding: 8px;
+    /* Padding is now handled by .tree-item-content */
     background: var(--bg-tertiary);
     border-radius: 6px;
     border: 1px solid transparent;
@@ -664,8 +688,10 @@
 }
 
 .search-result:hover {
-    border-color: var(--border-color);
-    background: var(--bg-quaternary);
+    border-color: transparent !important; 
+    /* General hover for the .search-result container itself, if needed, but content hover is primary */
+    outline: none !important; 
+    box-shadow: none !important; 
 }
 
 .profile-meta {
@@ -698,4 +724,4 @@
 
 .error-state {
     color: #ff6b6b;
-} 
+}
