@@ -17,6 +17,7 @@
     --text-tertiary: #999999;
     --border-color: #3e3e42;
     --accent-color: #007acc;
+    --accent-color-rgb: 0, 122, 204;
     --accent-hover: #1177dd;
     --success-color: #4ec9b0;
     --warning-color: #ffcc02;
@@ -37,6 +38,7 @@
     --text-tertiary: #888888;
     --border-color: #e0e0e0;
     --accent-color: #0078d4;
+    --accent-color-rgb: 0, 120, 212;
     --accent-hover: #106ebe;
     --success-color: #107c10;
     --warning-color: #ff8c00;

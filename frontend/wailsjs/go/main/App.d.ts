@@ -169,6 +169,8 @@ export function ReconnectTab(arg1:string):Promise<void>;
 
 export function RenameTab(arg1:string,arg2:string):Promise<void>;
 
+export function ReorderTabs(arg1:Array<string>):Promise<void>;
+
 export function ResizeSSHSession(arg1:main.SSHSession,arg2:number,arg3:number):Promise<void>;
 
 export function ResizeShell(arg1:string,arg2:number,arg3:number):Promise<void>;

@@ -3,6 +3,9 @@
 .tabs-container {
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-color);
+    width: 100%;
+    margin: 0;
+    padding: 0;
 }
 
 /* Integrated titlebar with window controls */
@@ -14,6 +17,9 @@
     user-select: none;
     position: relative;
     z-index: 1000;
+    width: 100%;
+    margin: 0;
+    padding: 0;
     /* Wails draggable region */
     --wails-draggable: drag;
 }
@@ -24,7 +30,7 @@
     justify-content: space-between;
     width: 100%;
     height: 100%;
-    padding: 0 8px;
+    padding: 0;
     position: relative;
     /* Inherit draggable from parent */
 }
@@ -62,8 +68,8 @@
 }
 
 .window-control {
-    width: 46px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     border: none;
     background: transparent;
     color: var(--text-secondary);
@@ -87,8 +93,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 16px;
-    height: 16px;
+    width: 10px;
+    height: 10px;
     pointer-events: auto;
     /* Explicitly not draggable */
     --wails-draggable: no-drag;
@@ -97,95 +103,70 @@
 .window-control-icon svg {
     width: 10px;
     height: 10px;
-    /* Explicitly not draggable */
-    --wails-draggable: no-drag;
+    stroke-width: 1.5;
 }
 
-/* Close button special styling */
-.window-close:hover {
-    background: #e74856;
-    color: #ffffff;
+/* Platform-specific window controls */
+.platform-windows .window-controls-left {
+    display: none;
 }
 
-/* Make the close button extend to the very edge */
-.window-close {
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-    margin-right: 0;
-    padding-right: 8px;
-}
-
-/* For Windows/Linux - ensure close button is the rightmost */
-.window-controls-right .window-close {
-    order: 3; /* Ensure it's last */
-}
-
-/* macOS specific styling */
-@media (max-width: 0px) { /* This will never match, but we'll use JS to add platform classes */ }
-
-/* Platform-specific adjustments will be handled by adding classes via JS */
-.platform-darwin .tabs-titlebar {
-    height: 28px;
-    background: var(--bg-secondary);
-}
-
-.platform-darwin .titlebar-content {
-    padding: 0 8px 0 0;
-    justify-content: flex-start;
-    position: relative;
+.platform-windows .window-controls-right {
+    order: 3;
+    margin-left: auto;
 }
 
 .platform-darwin .window-controls-left {
-    gap: 8px;
-    margin-right: 16px;
-    margin-left: 0;
-    padding-left: 8px;
-    /* Not draggable on macOS either */
-    --wails-draggable: no-drag;
+    order: 1;
 }
 
-.platform-darwin .window-title {
-    /* Title is now centered consistently across all platforms */
-    /* Draggable on macOS */
-    --wails-draggable: drag;
+.platform-darwin .window-controls-right {
+    display: none;
 }
 
+.platform-linux .window-controls-left {
+    display: none;
+}
+
+.platform-linux .window-controls-right {
+    order: 3;
+    margin-left: auto;
+}
+
+/* macOS traffic light buttons */
 .platform-darwin .window-control {
-    width: 12px;
-    height: 12px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
-    margin: 0;
-    border: none;
-    transition: all 0.15s ease;
+    margin: 0 4px;
     position: relative;
-    /* Not draggable on macOS */
-    --wails-draggable: no-drag;
+    border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
-.platform-darwin .window-close {
+.platform-darwin .window-control-close {
     background: #ff5f57;
-    margin-left: 0;
 }
 
-.platform-darwin .window-minimize {
+.platform-darwin .window-control-minimize {
     background: #ffbd2e;
 }
 
-.platform-darwin .window-maximize {
+.platform-darwin .window-control-maximize {
     background: #28ca42;
 }
 
 .platform-darwin .window-control:hover {
-    filter: brightness(1.1);
-    transform: scale(1.05);
-}
-
-.platform-darwin .window-control:active {
-    transform: scale(0.95);
+    filter: brightness(0.9);
 }
 
 .platform-darwin .window-control-icon {
-    display: none; /* Hide icons on macOS, use colored circles */
+    display: none;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 8px;
+    height: 8px;
 }
 
 /* Show symbols on hover for macOS */
@@ -209,6 +190,7 @@
     display: flex;
     align-items: center;
     height: 32px;
+    background: var(--bg-secondary);
     user-select: none;
     /* Make tabs bar draggable */
     --wails-draggable: drag;
@@ -221,6 +203,7 @@
     overflow-x: auto;
     scrollbar-width: none;
     -ms-overflow-style: none;
+    background: var(--bg-secondary);
     /* Inherit draggable from parent */
     --wails-draggable: drag;
 }
@@ -238,10 +221,34 @@
     background: var(--bg-tertiary);
     color: var(--text-secondary);
     cursor: pointer;
-    transition: background-color 0.15s ease;
+    transition: background-color 0.15s ease, transform 0.15s ease;
     position: relative;
     /* Tabs themselves should not be draggable - they need to be clickable */
     --wails-draggable: no-drag;
+}
+
+/* Drag and drop styles */
+.tab.dragging {
+    opacity: 0.5;
+    transform: scale(0.95);
+    z-index: 1000;
+    pointer-events: none;
+    cursor: grabbing;
+}
+
+.tab.drag-over {
+    border-left: 3px solid var(--accent-color);
+    background: var(--bg-quaternary);
+}
+
+.tab.drag-over-right {
+    border-right: 3px solid var(--accent-color);
+    background: var(--bg-quaternary);
+}
+
+.tabs-list.drag-active {
+    /* Remove visual feedback when dragging is active - it's distracting */
+    /* background: rgba(var(--accent-color-rgb), 0.05); */
 }
 
 .tab-content {
@@ -249,6 +256,7 @@
     align-items: center;
     width: 100%;
     padding: 0 12px;
+    pointer-events: auto;
 }
 
 .tab.active {
@@ -257,7 +265,7 @@
     border-bottom: 2px solid var(--accent-color);
 }
 
-.tab:hover:not(.active) {
+.tab:hover:not(.active):not(.dragging) {
     background: var(--bg-quaternary);
 }
 
@@ -533,9 +541,9 @@
 }
 
 /* Animations */
-@keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+@keyframes activity-blink {
+    0%, 50% { opacity: 1; }
+    25%, 75% { opacity: 0.3; }
 }
 
 @keyframes pulse {
@@ -545,18 +553,38 @@
 
 @keyframes blink {
     0%, 50% { opacity: 1; }
-    51%, 100% { opacity: 0.3; }
+    25%, 75% { opacity: 0.2; }
 }
 
-@keyframes activity-blink {
-    0%, 100% { 
-        opacity: 1; 
-        transform: scale(1);
-    }
-    50% { 
-        opacity: 0.3; 
-        transform: scale(0.8);
-    }
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Special styling for close button on Windows/Linux */
+.platform-windows .window-control-close:hover,
+.platform-linux .window-control-close:hover {
+    background: #e81123 !important;
+    color: white !important;
+}
+
+/* Ensure close button is always visible and red on hover */
+.window-control-close:hover {
+    background: #e81123 !important;
+    color: white !important;
+}
+
+/* Make the close button extend to the very edge of the screen */
+.platform-windows .window-control-close,
+.platform-linux .window-control-close {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+/* Make sure the close button is positioned at the far right */
+.window-controls-right {
+    margin-left: auto;
+    padding-right: 0;
 }
 
  

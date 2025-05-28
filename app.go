@@ -1245,76 +1245,27 @@ func (a *App) ForceDisconnectTab(tabId string) error {
 	return nil
 }
 
-// ReconnectTab attempts to reconnect an SSH tab (works for any status)
+// ReconnectTab reconnects a disconnected SSH tab
 func (a *App) ReconnectTab(tabId string) error {
-	a.mutex.RLock()
+	a.mutex.Lock()
 	tab, exists := a.tabs[tabId]
-	a.mutex.RUnlock()
-
 	if !exists {
+		a.mutex.Unlock()
 		return fmt.Errorf("tab %s not found", tabId)
 	}
 
-	if tab.ConnectionType != "ssh" {
+	// Only allow reconnection for SSH tabs
+	if tab.ConnectionType != "ssh" || tab.SSHConfig == nil {
+		a.mutex.Unlock()
 		return fmt.Errorf("tab %s is not an SSH connection", tabId)
 	}
 
-	fmt.Printf("Reconnecting SSH tab %s (current status: %s)\n", tabId, tab.Status)
-
-	// For any existing connection (hanging, connected, connecting), disconnect first
-	if tab.Status == "hanging" || tab.Status == "connected" || tab.Status == "connecting" {
-		fmt.Printf("Disconnecting existing session before reconnect: %s\n", tabId)
-
-		// Clean up existing SSH session
-		a.mutex.RLock()
-		if existingSession, exists := a.sshSessions[tab.SessionID]; exists {
-			a.mutex.RUnlock()
-			a.CloseSSHSession(existingSession)
-			a.mutex.Lock()
-			delete(a.sshSessions, tab.SessionID)
-			a.mutex.Unlock()
-		} else {
-			a.mutex.RUnlock()
-		}
-
-		// Update status to disconnected temporarily
-		a.mutex.Lock()
-		tab.Status = "disconnected"
-		tab.ErrorMessage = "Reconnecting..."
-		a.mutex.Unlock()
-
-		// Emit disconnect status
-		if a.ctx != nil {
-			wailsRuntime.EventsEmit(a.ctx, "tab-status-update", map[string]interface{}{
-				"tabId":        tabId,
-				"status":       "disconnected",
-				"errorMessage": "Reconnecting...",
-			})
-		}
-
-		// Small delay to allow cleanup
-		time.Sleep(500 * time.Millisecond)
-	}
-
-	// Clean up any remaining SSH session (for failed/disconnected states)
-	a.mutex.RLock()
-	if existingSession, exists := a.sshSessions[tab.SessionID]; exists {
-		a.mutex.RUnlock()
-		a.CloseSSHSession(existingSession)
-		a.mutex.Lock()
-		delete(a.sshSessions, tab.SessionID)
-		a.mutex.Unlock()
-	} else {
-		a.mutex.RUnlock()
-	}
-
-	// Reset tab status and attempt reconnection
-	a.mutex.Lock()
+	// Update status to connecting
 	tab.Status = "connecting"
 	tab.ErrorMessage = ""
 	a.mutex.Unlock()
 
-	// Emit reconnection status
+	// Emit status update
 	if a.ctx != nil {
 		wailsRuntime.EventsEmit(a.ctx, "tab-status-update", map[string]interface{}{
 			"tabId":  tabId,
@@ -1322,8 +1273,85 @@ func (a *App) ReconnectTab(tabId string) error {
 		})
 	}
 
-	// Attempt to start SSH session again
-	return a.StartTabShell(tabId)
+	// Start animated connection sequence
+	if a.ctx != nil {
+		a.startSSHConnectionAnimation(tab)
+	}
+
+	// Get current terminal dimensions from the frontend
+	cols, rows := 80, 24 // default fallback
+
+	// Start SSH session with current dimensions
+	err := a.startSSHSessionWithSize(tab, cols, rows)
+	if err != nil {
+		a.mutex.Lock()
+		tab.Status = "failed"
+		tab.ErrorMessage = err.Error()
+		a.mutex.Unlock()
+
+		// Send formatted error message to terminal
+		a.sendFormattedError(tab, err)
+
+		// Emit status update
+		if a.ctx != nil {
+			wailsRuntime.EventsEmit(a.ctx, "tab-status-update", map[string]interface{}{
+				"tabId":        tabId,
+				"status":       "failed",
+				"errorMessage": err.Error(),
+			})
+		}
+
+		return err
+	}
+
+	// Update status to connected
+	a.mutex.Lock()
+	tab.Status = "connected"
+	tab.ErrorMessage = ""
+	a.mutex.Unlock()
+
+	// Send success message
+	a.sendSuccessMessage(tab)
+
+	// Emit status update
+	if a.ctx != nil {
+		wailsRuntime.EventsEmit(a.ctx, "tab-status-update", map[string]interface{}{
+			"tabId":  tabId,
+			"status": "connected",
+		})
+	}
+
+	return nil
+}
+
+// ReorderTabs reorders tabs based on the provided tab IDs array
+func (a *App) ReorderTabs(tabIds []string) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+
+	// Validate that all provided tab IDs exist
+	for _, tabId := range tabIds {
+		if _, exists := a.tabs[tabId]; !exists {
+			return fmt.Errorf("tab %s not found", tabId)
+		}
+	}
+
+	// Validate that all existing tabs are included in the reorder
+	if len(tabIds) != len(a.tabs) {
+		return fmt.Errorf("tab count mismatch: expected %d, got %d", len(a.tabs), len(tabIds))
+	}
+
+	// Update the creation time of tabs to reflect the new order
+	// We'll use the current time as base and increment by nanoseconds
+	baseTime := time.Now()
+	for i, tabId := range tabIds {
+		if tab, exists := a.tabs[tabId]; exists {
+			// Set creation time to maintain the desired order
+			tab.Created = baseTime.Add(time.Duration(i) * time.Nanosecond)
+		}
+	}
+
+	return nil
 }
 
 // GetSystemStats returns current system statistics
@@ -1575,46 +1603,8 @@ func (a *App) executeRemoteUptimeCommand(sshSession *SSHSession, stats *map[stri
 		}
 		// Clean up the uptime format
 		uptime = strings.TrimSpace(uptime)
-		if uptime != "" && uptime != "up" {
+		if uptime != "" {
 			(*stats)["uptime"] = uptime
-			return
-		}
-	}
-
-	// Fallback to regular uptime and parse it properly
-	output, err = a.ExecuteMonitoringCommand(sshSession, "uptime")
-	if err == nil && strings.TrimSpace(output) != "" {
-		// Parse standard uptime format: " 10:30:15 up 2 days, 13:45,  1 user,  load average: 0.08, 0.02, 0.01"
-		// or " 14:23:45 up 35 days,  5:42,  2 users,  load average: 0.15, 0.05, 0.01"
-		line := strings.TrimSpace(output)
-
-		// Find " up " in the string
-		upIndex := strings.Index(line, " up ")
-		if upIndex != -1 {
-			// Extract everything after " up "
-			uptimePart := line[upIndex+4:]
-
-			// Find the end of uptime (before user count or load average)
-			// Look for patterns like ", 1 user" or ", 2 users" or "load average"
-			endPatterns := []string{", 1 user", ", 2 user", ", 3 user", ", 4 user", ", 5 user",
-				", 6 user", ", 7 user", ", 8 user", ", 9 user", "user", "load average"}
-
-			var uptimeEnd int = len(uptimePart)
-			for _, pattern := range endPatterns {
-				if idx := strings.Index(uptimePart, pattern); idx != -1 {
-					if idx < uptimeEnd {
-						uptimeEnd = idx
-					}
-				}
-			}
-
-			uptime := strings.TrimSpace(uptimePart[:uptimeEnd])
-			uptime = strings.TrimSuffix(uptime, ",")
-			uptime = strings.TrimSpace(uptime)
-
-			if uptime != "" {
-				(*stats)["uptime"] = uptime
-			}
 		}
 	}
 }

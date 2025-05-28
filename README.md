@@ -201,8 +201,30 @@ htop
 - **📏 Dynamic Resize**: Proper terminal resizing
 - **🔗 Clickable Links**: Web and file links detection
 - **⌨️ Keyboard Shortcuts**: Standard terminal key bindings
+- **📑 Multiple Tabs**: Support for multiple terminal sessions with drag-and-drop reordering
+- **🔄 Tab Management**: Create, close, and switch between terminal tabs seamlessly
+- **🖱️ Drag & Drop**: Reorder tabs by dragging them to new positions
 
-## 🛠️ Technology Stack
+## 🎯 Tab Management
+
+### **Tab Features** ✅
+- **➕ Create Tabs**: Multiple terminal sessions in a single window
+- **🖱️ Drag & Drop**: Reorder tabs by dragging them to new positions  
+- **🔄 Easy Switching**: Click tabs or use keyboard shortcuts to switch
+- **❌ Close Tabs**: Close individual tabs while keeping others open
+- **🏷️ Smart Titles**: Automatic tab naming based on shell type
+- **🌐 SSH Support**: Create SSH connection tabs alongside local shells
+
+### **Tab Shortcuts**
+```bash
+# Keyboard shortcuts for tab management
+Ctrl+Shift+T    # Create new tab
+Ctrl+Shift+N    # Create new SSH tab  
+Ctrl+W          # Close current tab
+Ctrl+Tab        # Switch to next tab
+```
+
+## 🎯 Technology Stack
 
 ### **Backend**
 - **Language**: Go 1.24+
@@ -265,9 +287,10 @@ We welcome contributions! Here's how to get started:
 - [x] CI/CD pipeline with automated releases  
 - [x] Cross-platform binary distribution
 - [x] Professional UI with VS Code theming
+- [x] Multiple terminal tabs with drag-and-drop reordering
+- [x] Tab management (create, close, switch, rename)
 
 ### **🚧 In Progress**  
-- [ ] Multiple terminal tabs/sessions
 - [ ] Customizable themes and color schemes
 - [ ] Font size and family configuration
 

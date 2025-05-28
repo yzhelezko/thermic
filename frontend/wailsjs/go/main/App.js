@@ -334,6 +334,10 @@ export function RenameTab(arg1, arg2) {
   return window['go']['main']['App']['RenameTab'](arg1, arg2);
 }
 
+export function ReorderTabs(arg1) {
+  return window['go']['main']['App']['ReorderTabs'](arg1);
+}
+
 export function ResizeSSHSession(arg1, arg2, arg3) {
   return window['go']['main']['App']['ResizeSSHSession'](arg1, arg2, arg3);
 }
