@@ -35,6 +35,12 @@
     overflow: hidden;
 }
 
+/* macOS-specific adjustments for native title bar */
+.platform-darwin .settings-panel {
+    top: 60px; /* 28px titlebar + 32px tabs bar */
+    height: calc(100vh - 60px - var(--status-bar-height, 24px)); /* Match sidebar height exactly */
+}
+
 .settings-overlay.active .settings-panel {
     right: 0;
 }
@@ -567,6 +573,12 @@
     overflow: hidden;
 }
 
+/* macOS-specific adjustments for native title bar */
+.platform-darwin .profile-panel {
+    top: 60px; /* 28px titlebar + 32px tabs bar */
+    height: calc(100vh - 60px - var(--status-bar-height, 24px)); /* Match sidebar height exactly */
+}
+
 .profile-panel-overlay.active .profile-panel {
     left: calc(var(--activity-bar-width, 48px) + var(--sidebar-width, 250px) + 1px); /* Slide out right next to sidebar */
 }
@@ -889,11 +901,17 @@
 
 @media (max-width: 800px) {
     .settings-panel {
-        width: 100%;
-        right: -100%;
-        top: 0;
-        height: 100vh;
+        width: calc(100vw - var(--activity-bar-width, 48px) - var(--sidebar-width, 250px)); /* Take remaining space after sidebar */
+        right: calc(-1 * (100vw - var(--activity-bar-width, 48px) - var(--sidebar-width, 250px))); /* Hide completely off-screen to the right */
+        top: var(--tabs-height, 64px);
+        height: calc(100vh - var(--tabs-height, 64px) - var(--status-bar-height, 24px));
         border-radius: 0;
+    }
+    
+    /* macOS-specific adjustments for native title bar in mobile view */
+    .platform-darwin .settings-panel {
+        top: 60px; /* 28px titlebar + 32px tabs bar */
+        height: calc(100vh - 60px - var(--status-bar-height, 24px));
     }
     
     .profile-panel {
@@ -904,8 +922,10 @@
         border-radius: 0;
     }
     
-    .profile-panel-overlay.active .profile-panel {
-        left: calc(var(--activity-bar-width, 48px) + var(--sidebar-width, 250px) + 1px); /* Slide out right next to sidebar */
+    /* macOS-specific adjustments for native title bar */
+    .platform-darwin .profile-panel {
+        top: 60px; /* 28px titlebar + 32px tabs bar */
+        height: calc(100vh - 60px - var(--status-bar-height, 24px)); /* Match sidebar height exactly */
     }
 
     .settings-tabs-container {
@@ -927,6 +947,12 @@
         border-radius: 0;
     }
     
+    /* macOS-specific adjustments for native title bar in mobile view */
+    .platform-darwin .settings-panel {
+        top: 0; /* Full screen on mobile, native title bar is hidden */
+        height: 100vh;
+    }
+    
     .profile-panel {
         width: 100vw;
         left: -100vw;
@@ -935,8 +961,10 @@
         border-radius: 0;
     }
     
-    .profile-panel-overlay.active .profile-panel {
-        left: 0; /* Full screen on very small devices */
+    /* macOS-specific adjustments for native title bar in mobile view */
+    .platform-darwin .profile-panel {
+        top: 60px; /* 28px titlebar + 32px tabs bar */
+        height: calc(100vh - 60px - var(--status-bar-height, 24px)); /* Match sidebar height exactly */
     }
 
     .profile-panel-footer {
@@ -1011,103 +1039,4 @@
 
 .profile-tab-pane.active {
     display: block;
-}
-
-/* Responsive Design for Sidebar Panels */
-@media (max-width: 1200px) {
-    .settings-panel {
-        width: 600px;
-        right: -600px;
-    }
-    
-    .profile-panel {
-        width: 600px;
-        left: calc(var(--activity-bar-width, 48px) + var(--sidebar-width, 250px) - 600px - 1px); /* Hide smaller panel under sidebar */
-    }
-    
-    .profile-panel-overlay.active .profile-panel {
-        left: calc(var(--activity-bar-width, 48px) + var(--sidebar-width, 250px) + 1px); /* Slide out right next to sidebar */
-    }
-}
-
-@media (max-width: 800px) {
-    .settings-panel {
-        width: 100%;
-        right: -100%;
-        top: 0;
-        height: 100vh;
-        border-radius: 0;
-    }
-    
-    .profile-panel {
-        width: calc(100vw - var(--activity-bar-width, 48px) - var(--sidebar-width, 250px)); /* Take remaining space after sidebar */
-        left: calc(var(--activity-bar-width, 48px) + var(--sidebar-width, 250px) - (100vw - var(--activity-bar-width, 48px) - var(--sidebar-width, 250px)) - 1px); /* Hide completely under sidebar */
-        top: var(--tabs-height, 64px);
-        height: calc(100vh - var(--tabs-height, 64px) - var(--status-bar-height, 24px));
-        border-radius: 0;
-    }
-    
-    .profile-panel-overlay.active .profile-panel {
-        left: calc(var(--activity-bar-width, 48px) + var(--sidebar-width, 250px) + 1px); /* Slide out right next to sidebar */
-    }
-
-    .settings-tabs-container {
-        padding: 0 16px;
-    }
-
-    .settings-tab {
-        padding: 0 16px;
-        font-size: 12px;
-    }
-}
-
-@media (max-width: 600px) {
-    .settings-panel {
-        width: 100%;
-        right: -100%;
-        top: 0;
-        height: 100vh;
-        border-radius: 0;
-    }
-    
-    .profile-panel {
-        width: 100vw;
-        left: -100vw;
-        top: 0;
-        height: 100vh;
-        border-radius: 0;
-    }
-    
-    .profile-panel-overlay.active .profile-panel {
-        left: 0; /* Full screen on very small devices */
-    }
-
-    .profile-panel-footer {
-        padding: 12px 16px;
-    }
-
-    .profile-panel-footer .btn {
-        padding: 8px 12px;
-        font-size: 12px;
-    }
-
-    .name-icon-container {
-        flex-direction: column;
-        gap: 8px;
-    }
-
-    .icon-selector-button {
-        width: 100%;
-        justify-content: center;
-    }
-
-    .icon-grid-compact {
-        grid-template-columns: repeat(6, 1fr);
-    }
-
-    .icon-grid-compact .icon-option {
-        width: 20px;
-        height: 20px;
-        font-size: 12px;
-    }
 } 
