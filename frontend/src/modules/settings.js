@@ -259,9 +259,8 @@ export class SettingsManager {
             const profilesPathInput = document.getElementById('profiles-path-input');
             const browseProfilesPathBtn = document.getElementById('browse-profiles-path');
             const saveProfilesPathBtn = document.getElementById('save-profiles-path');
-            const currentProfilesPath = document.getElementById('current-profiles-path');
 
-            if (!profilesPathInput || !browseProfilesPathBtn || !saveProfilesPathBtn || !currentProfilesPath) {
+            if (!profilesPathInput || !browseProfilesPathBtn || !saveProfilesPathBtn) {
                 console.warn('Profiles path settings elements not found in DOM');
                 return;
             }
@@ -319,32 +318,24 @@ export class SettingsManager {
 
     async loadCurrentProfilesPath() {
         try {
-            const currentProfilesPath = document.getElementById('current-profiles-path');
             const profilesPathInput = document.getElementById('profiles-path-input');
             
-            if (!currentProfilesPath || !profilesPathInput) {
+            if (!profilesPathInput) {
                 return;
             }
 
-            // Get current configured path and actual directory
-            const configuredPath = await window.go.main.App.GetProfilesPath();
+            // Get the actual directory being used (this is what we want to show in the input)
             const actualDirectory = await window.go.main.App.GetProfilesDirectory();
 
-            // Update input with configured path
-            profilesPathInput.value = configuredPath || '';
-
-            // Show actual directory being used
-            if (configuredPath) {
-                currentProfilesPath.textContent = actualDirectory;
-            } else {
-                currentProfilesPath.textContent = `${actualDirectory} (default)`;
-            }
+            // Populate the input field with the current actual directory path
+            profilesPathInput.value = actualDirectory || '';
 
         } catch (error) {
             console.error('Error loading current profiles path:', error);
-            const currentProfilesPath = document.getElementById('current-profiles-path');
-            if (currentProfilesPath) {
-                currentProfilesPath.textContent = 'Error loading path';
+            const profilesPathInput = document.getElementById('profiles-path-input');
+            if (profilesPathInput) {
+                profilesPathInput.value = '';
+                profilesPathInput.placeholder = 'Error loading current path';
             }
         }
     }

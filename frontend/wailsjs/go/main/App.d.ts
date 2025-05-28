@@ -38,8 +38,6 @@ export function CreateTab(arg1:string,arg2:main.SSHConfig):Promise<main.Tab>;
 
 export function CreateTabFromProfile(arg1:string):Promise<main.Tab>;
 
-export function DebugProfileFiles():Promise<Record<string, any>>;
-
 export function DeleteProfile(arg1:string):Promise<void>;
 
 export function DeleteProfileAPI(arg1:string):Promise<void>;
