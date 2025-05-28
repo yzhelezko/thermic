@@ -487,12 +487,14 @@ export class SidebarManager {
 
         try {
             await window.go.main.App.DeleteProfileAPI(profileId);
+            
             await this.loadProfileTree();
             this.renderProfileTree();
             showNotification('Profile deleted', 'success');
+            
         } catch (error) {
             console.error('Failed to delete profile:', error);
-            showNotification('Failed to delete profile', 'error');
+            showNotification('Failed to delete profile: ' + error.message, 'error');
         }
     }
 
@@ -506,35 +508,21 @@ export class SidebarManager {
         }
     }
 
-    async deleteFolder(folderId, deleteContents = false) {
-        let confirmMessage;
-        let actionDescription;
-        
-        if (deleteContents) {
-            confirmMessage = 'Are you sure you want to delete this folder AND ALL PROFILES inside it? This action cannot be undone.';
-            actionDescription = 'permanently deleted with all contents';
-        } else {
-            confirmMessage = 'Are you sure you want to delete this folder? Profiles inside will be moved to root.';
-            actionDescription = 'deleted (profiles moved to root)';
-        }
-        
-        if (!confirm(confirmMessage)) {
+    async deleteFolder(folderId) {
+        if (!confirm('Are you sure you want to delete this folder? All profiles in this folder will be moved to the root.')) {
             return;
         }
 
         try {
-            if (deleteContents) {
-                await window.go.main.App.DeleteProfileFolderWithContentsAPI(folderId);
-            } else {
-                await window.go.main.App.DeleteProfileFolderAPI(folderId);
-            }
+            await window.go.main.App.DeleteProfileFolderAPI(folderId);
             
             await this.loadProfileTree();
             this.renderProfileTree();
-            showNotification(`Folder ${actionDescription}`, 'success');
+            showNotification('Folder deleted', 'success');
+            
         } catch (error) {
             console.error('Failed to delete folder:', error);
-            showNotification('Failed to delete folder', 'error');
+            showNotification('Failed to delete folder: ' + error.message, 'error');
         }
     }
 

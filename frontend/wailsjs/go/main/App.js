@@ -74,6 +74,10 @@ export function CreateTabFromProfile(arg1) {
   return window['go']['main']['App']['CreateTabFromProfile'](arg1);
 }
 
+export function DebugProfileFiles() {
+  return window['go']['main']['App']['DebugProfileFiles']();
+}
+
 export function DeleteProfile(arg1) {
   return window['go']['main']['App']['DeleteProfile'](arg1);
 }

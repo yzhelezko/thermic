@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -15,6 +16,39 @@ import (
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	"gopkg.in/yaml.v2"
 )
+
+// sanitizeFilename ensures a filename is safe for all operating systems
+func sanitizeFilename(filename string) string {
+	// Replace spaces with underscores
+	filename = strings.ReplaceAll(filename, " ", "_")
+
+	// Replace path separators
+	filename = strings.ReplaceAll(filename, "/", "_")
+	filename = strings.ReplaceAll(filename, "\\", "_")
+
+	// Replace other problematic characters for Windows/Unix compatibility
+	filename = strings.ReplaceAll(filename, ":", "_")
+	filename = strings.ReplaceAll(filename, "*", "_")
+	filename = strings.ReplaceAll(filename, "?", "_")
+	filename = strings.ReplaceAll(filename, "\"", "_")
+	filename = strings.ReplaceAll(filename, "<", "_")
+	filename = strings.ReplaceAll(filename, ">", "_")
+	filename = strings.ReplaceAll(filename, "|", "_")
+
+	// Remove any remaining control characters
+	reg := regexp.MustCompile(`[[:cntrl:]]`)
+	filename = reg.ReplaceAllString(filename, "_")
+
+	// Trim dots and spaces from the end (Windows doesn't like these)
+	filename = strings.TrimRight(filename, ". ")
+
+	// Ensure filename isn't empty
+	if filename == "" {
+		filename = "unnamed"
+	}
+
+	return filename
+}
 
 // GetProfilesDirectory returns the full path to the profiles directory
 func (a *App) GetProfilesDirectory() (string, error) {
@@ -180,9 +214,7 @@ func (a *App) SaveProfile(profile *Profile) error {
 
 	filename := fmt.Sprintf("%s-%s.yaml", profile.Name, profile.ID)
 	// Sanitize filename
-	filename = strings.ReplaceAll(filename, " ", "_")
-	filename = strings.ReplaceAll(filename, "/", "_")
-	filename = strings.ReplaceAll(filename, "\\", "_")
+	filename = sanitizeFilename(filename)
 
 	filePath := filepath.Join(profilesDir, filename)
 	if err := os.WriteFile(filePath, data, ConfigFileMode); err != nil {
@@ -211,9 +243,7 @@ func (a *App) SaveProfileFolder(folder *ProfileFolder) error {
 
 	filename := fmt.Sprintf("folder-%s-%s.yaml", folder.Name, folder.ID)
 	// Sanitize filename
-	filename = strings.ReplaceAll(filename, " ", "_")
-	filename = strings.ReplaceAll(filename, "/", "_")
-	filename = strings.ReplaceAll(filename, "\\", "_")
+	filename = sanitizeFilename(filename)
 
 	filePath := filepath.Join(profilesDir, filename)
 	if err := os.WriteFile(filePath, data, ConfigFileMode); err != nil {
@@ -286,9 +316,7 @@ func (a *App) DeleteProfile(id string) error {
 
 	// Find and delete the file
 	filename := fmt.Sprintf("%s-%s.yaml", profile.Name, id)
-	filename = strings.ReplaceAll(filename, " ", "_")
-	filename = strings.ReplaceAll(filename, "/", "_")
-	filename = strings.ReplaceAll(filename, "\\", "_")
+	filename = sanitizeFilename(filename)
 
 	filePath := filepath.Join(profilesDir, filename)
 	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
@@ -315,9 +343,7 @@ func (a *App) DeleteProfileFolder(id string) error {
 
 	// Find and delete the file
 	filename := fmt.Sprintf("folder-%s-%s.yaml", folder.Name, id)
-	filename = strings.ReplaceAll(filename, " ", "_")
-	filename = strings.ReplaceAll(filename, "/", "_")
-	filename = strings.ReplaceAll(filename, "\\", "_")
+	filename = sanitizeFilename(filename)
 
 	filePath := filepath.Join(profilesDir, filename)
 	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {

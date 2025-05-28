@@ -796,19 +796,41 @@ func (a *App) DeleteProfileAPI(id string) error {
 		return err
 	}
 
+	// Temporarily stop the file watcher to prevent conflicts
+	wasWatcherRunning := a.profileWatcher != nil
+	if wasWatcherRunning {
+		a.StopProfileWatcher()
+	}
+
 	// Find and delete the file
 	filename := fmt.Sprintf("%s-%s.yaml", profile.Name, id)
-	filename = strings.ReplaceAll(filename, " ", "_")
-	filename = strings.ReplaceAll(filename, "/", "_")
-	filename = strings.ReplaceAll(filename, "\\", "_")
+	filename = sanitizeFilename(filename)
 
 	filePath := filepath.Join(profilesDir, filename)
+
 	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to delete profile file: %w", err)
+		// Restart watcher before returning error
+		if wasWatcherRunning {
+			go func() {
+				if watchErr := a.StartProfileWatcher(); watchErr != nil {
+					fmt.Printf("Warning: Failed to restart profile watcher: %v\n", watchErr)
+				}
+			}()
+		}
+		return fmt.Errorf("failed to delete profile file %s: %w", filePath, err)
 	}
 
 	// Remove from memory
 	delete(a.profiles, id)
+
+	// Restart the file watcher
+	if wasWatcherRunning {
+		go func() {
+			if watchErr := a.StartProfileWatcher(); watchErr != nil {
+				fmt.Printf("Warning: Failed to restart profile watcher: %v\n", watchErr)
+			}
+		}()
+	}
 
 	return nil
 }
@@ -828,31 +850,41 @@ func (a *App) DeleteProfileFolderAPI(id string) error {
 		return err
 	}
 
-	// Find and delete the file
-	filename := fmt.Sprintf("folder-%s-%s.yaml", folder.Name, id)
-	filename = strings.ReplaceAll(filename, " ", "_")
-	filename = strings.ReplaceAll(filename, "/", "_")
-	filename = strings.ReplaceAll(filename, "\\", "_")
-
-	filePath := filepath.Join(profilesDir, filename)
-	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to delete profile folder file: %w", err)
+	// Temporarily stop the file watcher to prevent conflicts
+	wasWatcherRunning := a.profileWatcher != nil
+	if wasWatcherRunning {
+		a.StopProfileWatcher()
 	}
 
-	// Move any profiles in this folder to root
-	folderPath := a.buildFolderPath(id)
-	for _, profile := range a.profiles {
-		if strings.HasPrefix(profile.FolderPath, folderPath) {
-			// Remove this folder from the path
-			newPath := strings.TrimPrefix(profile.FolderPath, folderPath)
-			newPath = strings.TrimPrefix(newPath, "/")
-			profile.FolderPath = newPath
-			a.SaveProfile(profile)
+	// Find and delete the file
+	filename := fmt.Sprintf("folder-%s-%s.yaml", folder.Name, id)
+	filename = sanitizeFilename(filename)
+
+	filePath := filepath.Join(profilesDir, filename)
+
+	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+		// Restart watcher before returning error
+		if wasWatcherRunning {
+			go func() {
+				if watchErr := a.StartProfileWatcher(); watchErr != nil {
+					fmt.Printf("Warning: Failed to restart profile watcher: %v\n", watchErr)
+				}
+			}()
 		}
+		return fmt.Errorf("failed to delete profile folder file %s: %w", filePath, err)
 	}
 
 	// Remove from memory
 	delete(a.profileFolders, id)
+
+	// Restart the file watcher
+	if wasWatcherRunning {
+		go func() {
+			if watchErr := a.StartProfileWatcher(); watchErr != nil {
+				fmt.Printf("Warning: Failed to restart profile watcher: %v\n", watchErr)
+			}
+		}()
+	}
 
 	return nil
 }
@@ -951,9 +983,7 @@ func (a *App) DeleteProfileFolderWithContentsAPI(id string) error {
 
 		// Delete profile file
 		filename := fmt.Sprintf("%s-%s.yaml", profile.Name, profileID)
-		filename = strings.ReplaceAll(filename, " ", "_")
-		filename = strings.ReplaceAll(filename, "/", "_")
-		filename = strings.ReplaceAll(filename, "\\", "_")
+		filename = sanitizeFilename(filename)
 
 		filePath := filepath.Join(profilesDir, filename)
 		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
@@ -966,9 +996,7 @@ func (a *App) DeleteProfileFolderWithContentsAPI(id string) error {
 
 	// Delete the folder file
 	folderFilename := fmt.Sprintf("folder-%s-%s.yaml", folder.Name, id)
-	folderFilename = strings.ReplaceAll(folderFilename, " ", "_")
-	folderFilename = strings.ReplaceAll(folderFilename, "/", "_")
-	folderFilename = strings.ReplaceAll(folderFilename, "\\", "_")
+	folderFilename = sanitizeFilename(folderFilename)
 
 	folderFilePath := filepath.Join(profilesDir, folderFilename)
 	if err := os.Remove(folderFilePath); err != nil && !os.IsNotExist(err) {
