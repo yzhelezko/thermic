@@ -119,7 +119,7 @@ class ThermicTerminal {
 
             // Initialize UI components
             console.log('Initializing UI manager...');
-            this.uiManager.initUI();
+            await this.uiManager.initUI();
             
             console.log('Initializing settings manager...');
             this.settingsManager.initSettings();

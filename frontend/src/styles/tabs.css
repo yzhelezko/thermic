@@ -21,9 +21,11 @@
 .titlebar-content {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     width: 100%;
     height: 100%;
-    padding: 0 0 0 8px;
+    padding: 0 8px;
+    position: relative;
     /* Inherit draggable from parent */
 }
 
@@ -33,6 +35,11 @@
     color: var(--text-secondary);
     pointer-events: none;
     user-select: none;
+    /* Center the title on all platforms */
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
     /* Inherit draggable from parent */
 }
 
@@ -138,12 +145,7 @@
 }
 
 .platform-darwin .window-title {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    text-align: center;
-    font-size: 13px;
-    font-weight: 500;
+    /* Title is now centered consistently across all platforms */
     /* Draggable on macOS */
     --wails-draggable: drag;
 }

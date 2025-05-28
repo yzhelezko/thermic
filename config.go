@@ -12,6 +12,9 @@ type AppConfig struct {
 	ProfilesPath        string `yaml:"profiles_path,omitempty"` // Custom path for profiles directory
 	// Context menu settings
 	EnableSelectToCopy bool `yaml:"enable_select_to_copy"` // Enable select-to-copy and right-click-to-paste (disables context menu)
+	// Sidebar settings
+	SidebarCollapsed bool `yaml:"sidebar_collapsed"` // Whether the sidebar is collapsed
+	SidebarWidth     int  `yaml:"sidebar_width"`     // Width of the sidebar when expanded
 }
 
 // DefaultConfig returns a new AppConfig with default values
@@ -27,5 +30,8 @@ func DefaultConfig() *AppConfig {
 		ProfilesPath:        "",    // Empty string means use default profiles directory
 		// Default context menu settings
 		EnableSelectToCopy: false, // Default to disabled (standard context menu behavior)
+		// Default sidebar settings
+		SidebarCollapsed: false, // Default to expanded
+		SidebarWidth:     250,   // Default width
 	}
 }
