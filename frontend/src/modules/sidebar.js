@@ -1,5 +1,6 @@
 // Enhanced Sidebar management module with profile tree support
 import { updateStatus, showNotification } from './utils.js';
+import { modal } from '../components/Modal.js';
 
 export class SidebarManager {
     constructor() {
@@ -255,7 +256,8 @@ export class SidebarManager {
             // Get profile data
             const profile = this.getProfileById(profileId);
             if (!profile) {
-                throw new Error('Profile not found');
+                showNotification('Profile not found', 'error');
+                return;
             }
             
             // Get profile name for feedback
@@ -311,7 +313,7 @@ export class SidebarManager {
                 }
             }
             
-            showNotification(`✅ Connected to ${profileName}`, 'success');
+            showNotification(`Connected to ${profileName}`, 'success');
             
             // Update profile usage tracking
             try {
@@ -336,7 +338,6 @@ export class SidebarManager {
             console.error('Failed to connect to profile:', error);
             console.error('Profile ID was:', profileId);
             console.error('Error stack:', error.stack);
-            showNotification('❌ Failed to connect: ' + error.message, 'error');
         }
     }
 
@@ -457,7 +458,7 @@ export class SidebarManager {
         // Create a mock item element for the connectToProfile method
         const profile = this.getProfileById(profileId);
         if (!profile) {
-            showNotification('❌ Profile not found', 'error');
+            showNotification('Profile not found', 'error');
             return;
         }
         
@@ -491,11 +492,18 @@ export class SidebarManager {
     }
 
     async deleteProfile(profileId) {
-        if (!confirm('Are you sure you want to delete this profile?')) {
-            return;
-        }
-
         try {
+            // Get profile name for the confirmation dialog
+            const profile = this.getProfileById(profileId);
+            const profileName = profile ? profile.name : 'this profile';
+            
+            // Use the universal modal for confirmation
+            const result = await modal.confirmDelete(profileName, 'profile');
+            
+            if (result !== 'confirm') {
+                return; // User cancelled
+            }
+
             await window.go.main.App.DeleteProfileAPI(profileId);
             
             await this.loadProfileTree();
@@ -518,17 +526,51 @@ export class SidebarManager {
         }
     }
 
-    async deleteFolder(folderId) {
-        if (!confirm('Are you sure you want to delete this folder? All profiles in this folder will be moved to the root.')) {
-            return;
-        }
-
+    async deleteFolder(folderId, deleteContents = false) {
         try {
-            await window.go.main.App.DeleteProfileFolderAPI(folderId);
+            // Get folder name for the confirmation dialog
+            const folder = await window.go.main.App.GetProfileFolder(folderId);
+            const folderName = folder ? folder.name : 'this folder';
+            
+            // If deleteContents parameter is provided, use it directly (called from context menu)
+            // Otherwise, show the modal to get user choice
+            let shouldDeleteContents = deleteContents;
+            
+            if (arguments.length === 1) {
+                // Called without deleteContents parameter, show modal
+                const result = await modal.show({
+                    title: 'Delete Folder',
+                    message: `What would you like to do with the profiles in "${folderName}"?`,
+                    icon: '🗑️',
+                    buttons: [
+                        { text: 'Cancel', style: 'secondary', action: 'cancel' },
+                        { text: 'Move to Root', style: 'primary', action: 'move' },
+                        { text: 'Delete All', style: 'danger', action: 'delete-all' }
+                    ]
+                });
+                
+                if (result === 'cancel') {
+                    return; // User cancelled
+                }
+                
+                shouldDeleteContents = result === 'delete-all';
+            }
+
+            // Use the appropriate API based on user choice
+            if (shouldDeleteContents) {
+                await window.go.main.App.DeleteProfileFolderWithContentsAPI(folderId);
+            } else {
+                await window.go.main.App.DeleteProfileFolderAPI(folderId);
+            }
             
             await this.loadProfileTree();
             this.renderProfileTree();
-            showNotification('Folder deleted', 'success');
+            
+            if (shouldDeleteContents) {
+                showNotification('Folder and all contents deleted', 'success');
+            } else {
+                showNotification('Folder deleted, profiles moved to root', 'success');
+            }
             
         } catch (error) {
             console.error('Failed to delete folder:', error);

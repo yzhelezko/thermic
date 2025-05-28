@@ -13,6 +13,8 @@ import { SidebarManager } from './modules/sidebar.js';
 import { StatusManager } from './modules/status.js';
 import { updateStatus } from './modules/utils.js';
 import VersionManager from './components/VersionManager.js';
+import { modal } from './components/Modal.js';
+import { notification } from './components/Notification.js';
 
 class ThermicTerminal {
     constructor() {

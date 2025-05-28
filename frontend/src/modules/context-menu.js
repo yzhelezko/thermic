@@ -1,6 +1,7 @@
 // Context menu management module
 import { WriteToShell } from '../../wailsjs/go/main/App';
 import { showNotification } from './utils.js';
+import { modal } from '../components/Modal.js';
 
 export class ContextMenuManager {
     constructor(terminalManager) {
@@ -589,7 +590,6 @@ export class ContextMenuManager {
                     await window.sidebarManager.openProfile(profileId);
                 } catch (error) {
                     console.error('Failed to connect to profile:', error);
-                    showNotification('Failed to connect to profile', 2000);
                 }
             }
             return;
@@ -601,9 +601,9 @@ export class ContextMenuManager {
             if (shellPath && this.terminalManager) {
                 try {
                     await this.terminalManager.startShell(shellPath);
-                    showNotification(`Connected to ${shellPath}`, 2000);
+                    // Removed redundant notification - terminal shows connection status
                 } catch (error) {
-                    showNotification('Failed to connect to shell', 2000);
+                    // Removed redundant notification - terminal output already shows connection failures
                 }
             }
         }
@@ -738,17 +738,26 @@ export class ContextMenuManager {
             const itemText = this.currentTarget.querySelector('.tree-item-text');
             const itemName = itemText ? itemText.textContent : 'folder';
             
-            // Show options for folder deletion
-            const result = confirm(`Delete "${itemName}"?\n\nOK = Move profiles to root\nCancel = Keep folder`);
-            if (result && window.sidebarManager) {
-                try {
-                    // Ask if they want to delete contents too
-                    const deleteContents = confirm(`Delete all profiles inside "${itemName}" too?\n\nOK = Delete all contents\nCancel = Move profiles to root`);
+            try {
+                // Show folder deletion options using the universal modal
+                const result = await modal.show({
+                    title: 'Delete Folder',
+                    message: `What would you like to do with the profiles in "${itemName}"?`,
+                    icon: '🗑️',
+                    buttons: [
+                        { text: 'Cancel', style: 'secondary', action: 'cancel' },
+                        { text: 'Move to Root', style: 'primary', action: 'move' },
+                        { text: 'Delete All', style: 'danger', action: 'delete-all' }
+                    ]
+                });
+                
+                if (result !== 'cancel' && window.sidebarManager) {
+                    const deleteContents = result === 'delete-all';
                     await window.sidebarManager.deleteFolder(folderId, deleteContents);
-                } catch (error) {
-                    console.error('Failed to delete folder:', error);
-                    showNotification('Failed to delete folder', 2000);
                 }
+            } catch (error) {
+                console.error('Failed to delete folder:', error);
+                showNotification('Failed to delete folder', 2000);
             }
             return;
         }
@@ -757,9 +766,15 @@ export class ContextMenuManager {
         const itemText = this.currentTarget.querySelector('.tree-item-text');
         const itemName = itemText ? itemText.textContent : 'item';
         
-        if (confirm(`Are you sure you want to delete "${itemName}"?`)) {
-            this.currentTarget.remove();
-            showNotification('Item deleted', 1500);
+        try {
+            const result = await modal.confirmDelete(itemName, 'item');
+            if (result === 'confirm') {
+                this.currentTarget.remove();
+                showNotification('Item deleted', 1500);
+            }
+        } catch (error) {
+            console.error('Failed to show delete confirmation:', error);
+            showNotification('Failed to delete item', 2000);
         }
     }
 
@@ -836,7 +851,7 @@ export class ContextMenuManager {
             await window.tabsManager.reconnectTab(this.currentTabData.id);
         } catch (error) {
             const errorMessage = error?.message || error?.toString() || 'Unknown error';
-            showNotification(`Reconnection failed: ${errorMessage}`, 3000);
+            // Removed redundant notification - terminal output already shows connection failures
         }
     }
 
