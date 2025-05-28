@@ -164,8 +164,13 @@ class ThermicTerminal {
             await this.contextMenuManager.init();
 
             // Initialize window controls (Wails handles dragging natively via CSS)
-            console.log('Initializing window controls manager...');
-            this.windowControlsManager.init();
+            // Skip on macOS since we use native window controls there
+            if (this.windowControlsManager.platform !== 'darwin') {
+                console.log('Initializing window controls manager...');
+                this.windowControlsManager.init();
+            } else {
+                console.log('Skipping window controls manager on macOS (using native controls)');
+            }
             
             // Initialize version manager AFTER DOM is fully ready
             console.log('Initializing version manager...');
