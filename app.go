@@ -672,37 +672,42 @@ func (a *App) GetProfileTreeAPI() []*ProfileTreeNode {
 			Profile: profile,
 		}
 
-		// Find parent folder
-		if profile.FolderPath == "" {
-			// Root level
-			rootNodes = append(rootNodes, node)
+		// Find parent folder - prioritize ID-based reference over path-based
+		var parentID string
+		if profile.FolderID != "" {
+			// Use new ID-based reference
+			parentID = profile.FolderID
+		} else if profile.FolderPath != "" {
+			// Fall back to path-based reference for backward compatibility
+			parentID = a.findFolderByPath(profile.FolderPath)
+		}
+
+		if parentID != "" && tree[parentID] != nil {
+			tree[parentID].Children = append(tree[parentID].Children, node)
 		} else {
-			// Find parent folder by path
-			parentID := a.findFolderByPath(profile.FolderPath)
-			if parentID != "" && tree[parentID] != nil {
-				tree[parentID].Children = append(tree[parentID].Children, node)
-			} else {
-				// Parent not found, add to root
-				rootNodes = append(rootNodes, node)
-			}
+			// Parent not found or profile is at root level
+			rootNodes = append(rootNodes, node)
 		}
 	}
 
-	// Add folders to their parents or root
+	// Add folders to their parents or root - prioritize ID-based reference over path-based
 	for folderID, folder := range a.profileFolders {
 		node := tree[folderID]
-		if folder.ParentPath == "" {
-			// Root level folder
-			rootNodes = append(rootNodes, node)
+
+		var parentID string
+		if folder.ParentFolderID != "" {
+			// Use new ID-based reference
+			parentID = folder.ParentFolderID
+		} else if folder.ParentPath != "" {
+			// Fall back to path-based reference for backward compatibility
+			parentID = a.findFolderByPath(folder.ParentPath)
+		}
+
+		if parentID != "" && tree[parentID] != nil {
+			tree[parentID].Children = append(tree[parentID].Children, node)
 		} else {
-			// Find parent folder
-			parentID := a.findFolderByPath(folder.ParentPath)
-			if parentID != "" && tree[parentID] != nil {
-				tree[parentID].Children = append(tree[parentID].Children, node)
-			} else {
-				// Parent not found, add to root
-				rootNodes = append(rootNodes, node)
-			}
+			// Parent not found or folder is at root level
+			rootNodes = append(rootNodes, node)
 		}
 	}
 
@@ -717,68 +722,26 @@ func (a *App) GetProfileTreeAPI() []*ProfileTreeNode {
 
 // CreateProfileAPI creates a new profile
 func (a *App) CreateProfileAPI(name, profileType, shell, icon, folderPath string) (*Profile, error) {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
-
-	id := generateID()
-	now := time.Now()
-
-	profile := &Profile{
-		ID:           id,
-		Name:         name,
-		Icon:         icon,
-		Type:         profileType,
-		Shell:        shell,
-		FolderPath:   folderPath,
-		Environment:  make(map[string]string),
-		Created:      now,
-		LastModified: now,
-	}
-
-	if err := a.SaveProfile(profile); err != nil {
-		return nil, err
-	}
-
-	return profile, nil
+	return a.CreateProfile(name, profileType, shell, icon, folderPath)
 }
 
 // CreateProfileFolderAPI creates a new profile folder
 func (a *App) CreateProfileFolderAPI(name, icon, parentPath string) (*ProfileFolder, error) {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
-
-	id := generateID()
-	now := time.Now()
-
-	folder := &ProfileFolder{
-		ID:           id,
-		Name:         name,
-		Icon:         icon,
-		ParentPath:   parentPath,
-		Expanded:     true,
-		Created:      now,
-		LastModified: now,
-	}
-
-	if err := a.SaveProfileFolder(folder); err != nil {
-		return nil, err
-	}
-
-	return folder, nil
+	return a.CreateProfileFolder(name, icon, parentPath)
 }
 
 // UpdateProfile updates an existing profile
 func (a *App) UpdateProfile(profile *Profile) error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
-	return a.SaveProfile(profile)
+	return a.saveProfileInternal(profile)
 }
 
 // UpdateProfileFolder updates an existing profile folder
 func (a *App) UpdateProfileFolder(folder *ProfileFolder) error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
-	return a.SaveProfileFolder(folder)
+	return a.saveProfileFolderInternal(folder)
 }
 
 // DeleteProfileAPI deletes a profile
@@ -923,8 +886,56 @@ func (a *App) MoveProfile(profileID, newFolderPath string) error {
 		return fmt.Errorf("profile not found: %s", profileID)
 	}
 
+	// Update both path and ID references
 	profile.FolderPath = newFolderPath
-	return a.SaveProfile(profile)
+	profile.LastModified = time.Now()
+
+	// If newFolderPath is provided, try to find the corresponding folder ID
+	if newFolderPath != "" {
+		folderID := a.findFolderByPath(newFolderPath)
+		profile.FolderID = folderID
+	} else {
+		// Root level
+		profile.FolderID = ""
+	}
+
+	return a.saveProfileInternal(profile)
+}
+
+// MoveProfileByID moves a profile to a different folder using folder ID
+func (a *App) MoveProfileByID(profileID, targetFolderID string) error {
+	a.mutex.Lock()
+	defer a.mutex.Unlock()
+
+	profile, exists := a.profiles[profileID]
+	if !exists {
+		return fmt.Errorf("profile with ID %s not found", profileID)
+	}
+
+	// Validate target folder exists (empty string means root level)
+	if targetFolderID != "" {
+		if _, exists := a.profileFolders[targetFolderID]; !exists {
+			return fmt.Errorf("target folder with ID %s not found", targetFolderID)
+		}
+	}
+
+	// Update profile's folder reference
+	profile.FolderID = targetFolderID
+	profile.LastModified = time.Now()
+
+	// Update legacy path for backward compatibility
+	if targetFolderID != "" {
+		profile.FolderPath = a.buildFolderPath(targetFolderID)
+	} else {
+		profile.FolderPath = ""
+	}
+
+	// Save the updated profile using internal function to avoid deadlock
+	if err := a.saveProfileInternal(profile); err != nil {
+		return fmt.Errorf("failed to save moved profile: %w", err)
+	}
+
+	return nil
 }
 
 // DuplicateProfile creates a copy of an existing profile
@@ -944,7 +955,7 @@ func (a *App) DuplicateProfile(profileID string) (*Profile, error) {
 	duplicate.Created = time.Now()
 	duplicate.LastModified = time.Now()
 
-	if err := a.SaveProfile(&duplicate); err != nil {
+	if err := a.saveProfileInternal(&duplicate); err != nil {
 		return nil, err
 	}
 
@@ -1061,7 +1072,7 @@ func (a *App) ToggleFavoriteAPI(profileID string) error {
 	}
 
 	profile.IsFavorite = !profile.IsFavorite
-	err := a.SaveProfile(profile)
+	err := a.saveProfileInternal(profile)
 	if err == nil {
 		go a.saveMetrics()
 	}
@@ -1078,7 +1089,7 @@ func (a *App) UpdateProfileTagsAPI(profileID string, tags []string) error {
 	}
 
 	profile.Tags = tags
-	err := a.SaveProfile(profile)
+	err := a.saveProfileInternal(profile)
 	if err == nil {
 		go a.saveMetrics()
 	}
@@ -1949,4 +1960,29 @@ func (a *App) SelectSSHPrivateKey() (string, error) {
 	}
 
 	return a.SelectFile("Select SSH Private Key", filters)
+}
+
+// Enhanced Profile APIs with ID-based references
+func (a *App) CreateProfileWithFolderIDAPI(name, profileType, shell, icon, folderID string) (*Profile, error) {
+	return a.CreateProfileWithFolderID(name, profileType, shell, icon, folderID)
+}
+
+func (a *App) CreateProfileFolderWithParentIDAPI(name, icon, parentFolderID string) (*ProfileFolder, error) {
+	return a.CreateProfileFolderWithParentID(name, icon, parentFolderID)
+}
+
+func (a *App) MoveProfileByIDAPI(profileID, targetFolderID string) error {
+	return a.MoveProfileByID(profileID, targetFolderID)
+}
+
+func (a *App) MoveFolderAPI(folderID, targetParentFolderID string) error {
+	return a.MoveFolder(folderID, targetParentFolderID)
+}
+
+func (a *App) GetFolderByIDAPI(folderID string) (*ProfileFolder, error) {
+	return a.GetFolderByID(folderID)
+}
+
+func (a *App) GetProfileByIDAPI(profileID string) (*Profile, error) {
+	return a.GetProfileByID(profileID)
 }

@@ -71,7 +71,8 @@ type Profile struct {
 	WorkingDir   string            `yaml:"working_dir" json:"workingDir"`
 	Environment  map[string]string `yaml:"environment" json:"environment"`
 	SSHConfig    *SSHConfig        `yaml:"ssh_config,omitempty" json:"sshConfig,omitempty"`
-	FolderPath   string            `yaml:"folder_path" json:"folderPath"` // Path in folder tree (e.g., "Development/Frontend")
+	FolderPath   string            `yaml:"folder_path" json:"folderPath"`                 // Path in folder tree (e.g., "Development/Frontend") - DEPRECATED: use FolderID
+	FolderID     string            `yaml:"folder_id,omitempty" json:"folderId,omitempty"` // Direct reference to parent folder by ID
 	SortOrder    int               `yaml:"sort_order" json:"sortOrder"`
 	Created      time.Time         `yaml:"created" json:"created"`
 	LastModified time.Time         `yaml:"last_modified" json:"lastModified"`
@@ -87,14 +88,15 @@ type Profile struct {
 
 // ProfileFolder represents a folder in the profile tree
 type ProfileFolder struct {
-	ID           string    `yaml:"id" json:"id"`
-	Name         string    `yaml:"name" json:"name"`
-	Icon         string    `yaml:"icon" json:"icon"`
-	ParentPath   string    `yaml:"parent_path" json:"parentPath"` // Path to parent folder
-	SortOrder    int       `yaml:"sort_order" json:"sortOrder"`
-	Expanded     bool      `yaml:"expanded" json:"expanded"`
-	Created      time.Time `yaml:"created" json:"created"`
-	LastModified time.Time `yaml:"last_modified" json:"lastModified"`
+	ID             string    `yaml:"id" json:"id"`
+	Name           string    `yaml:"name" json:"name"`
+	Icon           string    `yaml:"icon" json:"icon"`
+	ParentPath     string    `yaml:"parent_path" json:"parentPath"`                              // Path to parent folder - DEPRECATED: use ParentFolderID
+	ParentFolderID string    `yaml:"parent_folder_id,omitempty" json:"parentFolderId,omitempty"` // Direct reference to parent folder by ID
+	SortOrder      int       `yaml:"sort_order" json:"sortOrder"`
+	Expanded       bool      `yaml:"expanded" json:"expanded"`
+	Created        time.Time `yaml:"created" json:"created"`
+	LastModified   time.Time `yaml:"last_modified" json:"lastModified"`
 	// Enhanced fields
 	Color       string   `yaml:"color,omitempty" json:"color,omitempty"`             // Folder theming
 	SortMethod  string   `yaml:"sort_method,omitempty" json:"sortMethod,omitempty"`  // name, date, usage, manual
