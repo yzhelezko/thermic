@@ -10,6 +10,7 @@ export class SidebarManager {
         this.profilePanelOpen = false;
         this.editingProfile = null;
         this.doubleClickHandled = false;
+        this.iconSelectorListeners = [];
     }
 
     async initSidebar() {
@@ -915,13 +916,117 @@ export class SidebarManager {
     }
 
     setupIconSelector() {
-        document.addEventListener('click', (e) => {
+        // Remove any existing icon selector listeners to avoid duplicates
+        if (this.iconSelectorListeners) {
+            this.iconSelectorListeners.forEach(({ element, event, handler }) => {
+                element.removeEventListener(event, handler);
+            });
+        }
+        this.iconSelectorListeners = [];
+
+        // Handle compact icon selector button clicks
+        const handleButtonClick = (e) => {
+            if (e.target.closest('.icon-selector-button')) {
+                const button = e.target.closest('.icon-selector-button');
+                const dropdown = button.parentElement.querySelector('.icon-dropdown');
+                
+                if (!dropdown) {
+                    console.warn('Icon dropdown not found for button:', button);
+                    return;
+                }
+                
+                // Toggle dropdown
+                const isActive = button.classList.contains('active');
+                
+                // Close all other dropdowns
+                document.querySelectorAll('.icon-selector-button.active').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                document.querySelectorAll('.icon-dropdown.active').forEach(dd => {
+                    dd.classList.remove('active');
+                });
+                
+                if (!isActive) {
+                    button.classList.add('active');
+                    dropdown.classList.add('active');
+                    console.log('Opened icon dropdown for:', button.id);
+                }
+                
+                e.stopPropagation();
+            }
+        };
+
+        // Handle icon option clicks
+        const handleIconClick = (e) => {
             if (e.target.classList.contains('icon-option')) {
                 const icon = e.target.dataset.icon;
-                const iconInput = e.target.closest('.icon-selector').querySelector('.icon-input');
-                iconInput.value = icon;
+                const dropdown = e.target.closest('.icon-dropdown');
+                
+                if (!dropdown) {
+                    console.warn('Icon dropdown not found for option:', e.target);
+                    return;
+                }
+                
+                const button = dropdown.parentElement.querySelector('.icon-selector-button');
+                const currentIconSpan = button.querySelector('.current-icon');
+                
+                // Update the current icon display
+                currentIconSpan.textContent = icon;
+                
+                // Update the hidden input value
+                const isFolder = dropdown.id.includes('folder');
+                const hiddenInput = document.getElementById(isFolder ? 'folder-icon' : 'profile-icon');
+                if (hiddenInput) {
+                    hiddenInput.value = icon;
+                    console.log('Updated icon value:', icon, 'for', isFolder ? 'folder' : 'profile');
+                } else {
+                    console.warn('Hidden input not found for:', isFolder ? 'folder-icon' : 'profile-icon');
+                }
+                
+                // Close dropdown
+                button.classList.remove('active');
+                dropdown.classList.remove('active');
+                
+                e.stopPropagation();
             }
-        });
+        };
+
+        // Close dropdowns when clicking outside
+        const handleOutsideClick = (e) => {
+            if (!e.target.closest('.icon-selector-compact')) {
+                document.querySelectorAll('.icon-selector-button.active').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                document.querySelectorAll('.icon-dropdown.active').forEach(dd => {
+                    dd.classList.remove('active');
+                });
+            }
+        };
+
+        // Add event listeners and track them for cleanup
+        document.addEventListener('click', handleButtonClick);
+        document.addEventListener('click', handleIconClick);
+        document.addEventListener('click', handleOutsideClick);
+        
+        this.iconSelectorListeners = [
+            { element: document, event: 'click', handler: handleButtonClick },
+            { element: document, event: 'click', handler: handleIconClick },
+            { element: document, event: 'click', handler: handleOutsideClick }
+        ];
+
+        // Legacy icon selector support (for backward compatibility)
+        const handleLegacyIconClick = (e) => {
+            if (e.target.classList.contains('icon-option') && !e.target.closest('.icon-grid-compact')) {
+                const icon = e.target.dataset.icon;
+                const iconInput = e.target.closest('.icon-selector')?.querySelector('.icon-input');
+                if (iconInput) {
+                    iconInput.value = icon;
+                }
+            }
+        };
+        
+        document.addEventListener('click', handleLegacyIconClick);
+        this.iconSelectorListeners.push({ element: document, event: 'click', handler: handleLegacyIconClick });
     }
 
     setupProfileTypeHandling() {
@@ -986,6 +1091,14 @@ export class SidebarManager {
         overlay.classList.remove('active');
         this.profilePanelOpen = false;
         this.editingProfile = null;
+        
+        // Clean up icon selector event listeners
+        if (this.iconSelectorListeners) {
+            this.iconSelectorListeners.forEach(({ element, event, handler }) => {
+                element.removeEventListener(event, handler);
+            });
+            this.iconSelectorListeners = [];
+        }
     }
 
     async saveProfile() {

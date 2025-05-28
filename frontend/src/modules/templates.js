@@ -1309,23 +1309,28 @@ export function createProfileFormTemplate(mode, type, data = null) {
                 </div>
                 <div class="form-group">
                     <label for="folder-name">Folder Name</label>
-                    <input type="text" id="folder-name" class="form-input" value="${data?.name || ''}" placeholder="Enter folder name" required>
-                </div>
-                <div class="form-group">
-                    <label for="folder-icon">Icon</label>
-                    <div class="icon-selector">
-                        <input type="text" id="folder-icon" class="form-input icon-input" value="${data?.icon || '📁'}" placeholder="📁">
-                        <div class="icon-grid">
-                            <span class="icon-option" data-icon="📁">📁</span>
-                            <span class="icon-option" data-icon="📂">📂</span>
-                            <span class="icon-option" data-icon="🗂️">🗂️</span>
-                            <span class="icon-option" data-icon="📋">📋</span>
-                            <span class="icon-option" data-icon="🛠️">🛠️</span>
-                            <span class="icon-option" data-icon="🌐">🌐</span>
-                            <span class="icon-option" data-icon="🔧">🔧</span>
-                            <span class="icon-option" data-icon="⚙️">⚙️</span>
+                    <div class="name-icon-container">
+                        <input type="text" id="folder-name" class="form-input" value="${data?.name || ''}" placeholder="Enter folder name" required>
+                        <div class="icon-selector-compact">
+                            <button type="button" class="icon-selector-button" id="folder-icon-btn">
+                                <span class="current-icon" id="folder-current-icon">${data?.icon || '📁'}</span>
+                                <span class="icon-selector-arrow">▼</span>
+                            </button>
+                            <div class="icon-dropdown" id="folder-icon-dropdown">
+                                <div class="icon-grid-compact">
+                                    <span class="icon-option" data-icon="📁">📁</span>
+                                    <span class="icon-option" data-icon="📂">📂</span>
+                                    <span class="icon-option" data-icon="🗂️">🗂️</span>
+                                    <span class="icon-option" data-icon="📋">📋</span>
+                                    <span class="icon-option" data-icon="🛠️">🛠️</span>
+                                    <span class="icon-option" data-icon="🌐">🌐</span>
+                                    <span class="icon-option" data-icon="🔧">🔧</span>
+                                    <span class="icon-option" data-icon="⚙️">⚙️</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
+                    <input type="hidden" id="folder-icon" value="${data?.icon || '📁'}">
                 </div>
             </div>
         `;
@@ -1338,23 +1343,28 @@ export function createProfileFormTemplate(mode, type, data = null) {
                 </div>
                 <div class="form-group">
                     <label for="profile-name">Profile Name</label>
-                    <input type="text" id="profile-name" class="form-input" value="${data?.name || ''}" placeholder="Enter profile name" required>
-                </div>
-                <div class="form-group">
-                    <label for="profile-icon">Icon</label>
-                    <div class="icon-selector">
-                        <input type="text" id="profile-icon" class="form-input icon-input" value="${data?.icon || '💻'}" placeholder="💻">
-                        <div class="icon-grid">
-                            <span class="icon-option" data-icon="💻">💻</span>
-                            <span class="icon-option" data-icon="🔷">🔷</span>
-                            <span class="icon-option" data-icon="⚫">⚫</span>
-                            <span class="icon-option" data-icon="🐧">🐧</span>
-                            <span class="icon-option" data-icon="🌐">🌐</span>
-                            <span class="icon-option" data-icon="🐳">🐳</span>
-                            <span class="icon-option" data-icon="⚡">⚡</span>
-                            <span class="icon-option" data-icon="🚀">🚀</span>
+                    <div class="name-icon-container">
+                        <input type="text" id="profile-name" class="form-input" value="${data?.name || ''}" placeholder="Enter profile name" required>
+                        <div class="icon-selector-compact">
+                            <button type="button" class="icon-selector-button" id="profile-icon-btn">
+                                <span class="current-icon" id="profile-current-icon">${data?.icon || '💻'}</span>
+                                <span class="icon-selector-arrow">▼</span>
+                            </button>
+                            <div class="icon-dropdown" id="profile-icon-dropdown">
+                                <div class="icon-grid-compact">
+                                    <span class="icon-option" data-icon="💻">💻</span>
+                                    <span class="icon-option" data-icon="🔷">🔷</span>
+                                    <span class="icon-option" data-icon="⚫">⚫</span>
+                                    <span class="icon-option" data-icon="🐧">🐧</span>
+                                    <span class="icon-option" data-icon="🌐">🌐</span>
+                                    <span class="icon-option" data-icon="🐳">🐳</span>
+                                    <span class="icon-option" data-icon="⚡">⚡</span>
+                                    <span class="icon-option" data-icon="🚀">🚀</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
+                    <input type="hidden" id="profile-icon" value="${data?.icon || '💻'}">
                 </div>
             </div>
 
