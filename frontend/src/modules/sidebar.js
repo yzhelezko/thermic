@@ -380,33 +380,42 @@ export class SidebarManager {
 
         if (!this.draggedItem) return;
 
-        let newFolderPath = '';
+        let targetFolderID = '';
         
         if (dropTarget && dropTarget.dataset.type === 'folder') {
-            // Dropped on a folder
-            newFolderPath = this.getFolderPath(dropTarget.dataset.id);
+            // Dropped on a folder - use the folder's ID
+            targetFolderID = dropTarget.dataset.id;
         } else if (isRootDrop) {
-            // Dropped on root
-            newFolderPath = '';
+            // Dropped on root - empty string means root level
+            targetFolderID = '';
         } else {
             return; // Invalid drop target
         }
 
+        // Prevent dropping folder into itself or its descendants
+        if (this.draggedItem.type === 'folder' && this.draggedItem.id === targetFolderID) {
+            showNotification('Cannot move folder into itself', 'error');
+            return;
+        }
+
         try {
             if (this.draggedItem.type === 'profile') {
-                await window.go.main.App.MoveProfile(this.draggedItem.id, newFolderPath);
+                // Use new ID-based profile move API
+                await window.go.main.App.MoveProfileByIDAPI(this.draggedItem.id, targetFolderID);
+                showNotification('Profile moved successfully', 'success');
             } else if (this.draggedItem.type === 'folder') {
-                // Move folder logic would go here
-                showNotification('Moving folders not yet implemented', 'info');
-                return;
+                // Use new ID-based folder move API
+                await window.go.main.App.MoveFolderAPI(this.draggedItem.id, targetFolderID);
+                showNotification('Folder moved successfully', 'success');
             }
 
+            // Reload and re-render the tree
             await this.loadProfileTree();
             this.renderProfileTree();
-            showNotification('Item moved successfully', 'success');
+            
         } catch (error) {
             console.error('Failed to move item:', error);
-            showNotification('Failed to move item', 'error');
+            showNotification(`Failed to move item: ${error.message || error}`, 'error');
         }
     }
 
@@ -855,11 +864,7 @@ export class SidebarManager {
             cancelBtn.addEventListener('click', () => this.closeProfilePanel());
         }
 
-        // Save button
-        const saveBtn = document.getElementById('profile-save');
-        if (saveBtn) {
-            saveBtn.addEventListener('click', () => this.saveProfile());
-        }
+        // NOTE: Save button handler is now only set up in setupProfileFormHandlers to avoid duplicates
 
         // Close on overlay click
         const overlay = document.getElementById('profile-panel-overlay');
@@ -1088,118 +1093,20 @@ export class SidebarManager {
 
     closeProfilePanel() {
         const overlay = document.getElementById('profile-panel-overlay');
-        overlay.classList.remove('active');
+        if (overlay) {
+            overlay.classList.remove('active');
+        }
+
+        // Clear editing state
         this.profilePanelOpen = false;
         this.editingProfile = null;
-        
-        // Clean up icon selector event listeners
+
+        // Clean up icon selector listeners
         if (this.iconSelectorListeners) {
             this.iconSelectorListeners.forEach(({ element, event, handler }) => {
                 element.removeEventListener(event, handler);
             });
             this.iconSelectorListeners = [];
-        }
-    }
-
-    async saveProfile() {
-        if (!this.editingProfile) return;
-
-        const { mode, type, parentId, data } = this.editingProfile;
-
-        try {
-            if (type === 'folder') {
-                await this.saveFolderData(mode, data);
-            } else {
-                await this.saveProfileData(mode, data);
-            }
-
-            this.closeProfilePanel();
-            await this.loadProfileTree();
-            this.renderProfileTree();
-            showNotification(`${type === 'folder' ? 'Folder' : 'Profile'} ${mode === 'edit' ? 'updated' : 'created'} successfully`, 'success');
-        } catch (error) {
-            console.error('Failed to save:', error);
-            showNotification(`Failed to ${mode === 'edit' ? 'update' : 'create'} ${type}: ${error.message}`, 'error');
-        }
-    }
-
-    async saveFolderData(mode, existingData) {
-        const name = document.getElementById('folder-name').value.trim();
-        const icon = document.getElementById('folder-icon').value.trim();
-
-        if (!name) {
-            throw new Error('Folder name is required');
-        }
-
-        if (mode === 'edit' && existingData) {
-            // Update existing folder
-            existingData.name = name;
-            existingData.icon = icon;
-            await window.go.main.App.UpdateProfileFolder(existingData);
-        } else {
-            // Create new folder
-            const parentPath = this.editingProfile.parentId ? this.getFolderPath(this.editingProfile.parentId) : '';
-            await window.go.main.App.CreateProfileFolderAPI(name, icon, parentPath);
-        }
-    }
-
-    async saveProfileData(mode, existingData) {
-        const name = document.getElementById('profile-name').value.trim();
-        const icon = document.getElementById('profile-icon').value.trim();
-        const profileType = document.getElementById('profile-type').value;
-        const workingDir = document.getElementById('profile-workdir').value.trim();
-
-        if (!name) {
-            throw new Error('Profile name is required');
-        }
-
-        let shell = '';
-        let sshConfig = null;
-
-        if (profileType === 'local') {
-            shell = document.getElementById('profile-shell').value;
-        } else if (profileType === 'ssh') {
-            const host = document.getElementById('ssh-host').value.trim();
-            const port = parseInt(document.getElementById('ssh-port').value) || 22;
-            const username = document.getElementById('ssh-username').value.trim();
-            const password = document.getElementById('ssh-password').value;
-            const keyPath = document.getElementById('ssh-keypath').value.trim();
-
-            if (!host || !username) {
-                throw new Error('SSH host and username are required');
-            }
-
-            sshConfig = { host, port, username, password, keyPath };
-        } else if (profileType === 'custom') {
-            shell = document.getElementById('custom-command').value.trim();
-            if (!shell) {
-                throw new Error('Custom command is required');
-            }
-        }
-
-        if (mode === 'edit' && existingData) {
-            // Update existing profile
-            existingData.name = name;
-            existingData.icon = icon;
-            existingData.type = profileType;
-            existingData.shell = shell;
-            existingData.workingDir = workingDir;
-            existingData.sshConfig = sshConfig;
-            await window.go.main.App.UpdateProfile(existingData);
-        } else {
-            // Create new profile
-            const folderPath = this.editingProfile.parentId ? this.getFolderPath(this.editingProfile.parentId) : '';
-            const profile = await window.go.main.App.CreateProfileAPI(name, profileType, shell, icon, folderPath);
-            
-            if (sshConfig) {
-                profile.sshConfig = sshConfig;
-                await window.go.main.App.UpdateProfile(profile);
-            }
-            
-            if (workingDir) {
-                profile.workingDir = workingDir;
-                await window.go.main.App.UpdateProfile(profile);
-            }
         }
     }
 
@@ -1345,6 +1252,86 @@ export class SidebarManager {
         } catch (error) {
             console.error('Failed to save:', error);
             showNotification(`Failed to ${mode === 'edit' ? 'update' : 'create'} ${type}: ${error.message}`, 'error');
+        }
+    }
+
+    async saveFolderData(mode, existingData) {
+        const name = document.getElementById('folder-name').value.trim();
+        const icon = document.getElementById('folder-icon').value.trim();
+
+        if (!name) {
+            throw new Error('Folder name is required');
+        }
+
+        if (mode === 'edit' && existingData) {
+            // Update existing folder
+            existingData.name = name;
+            existingData.icon = icon;
+            await window.go.main.App.UpdateProfileFolder(existingData);
+        } else {
+            // Create new folder using ID-based reference instead of path-based
+            const parentFolderId = this.editingProfile.parentId || '';
+            await window.go.main.App.CreateProfileFolderWithParentIDAPI(name, icon, parentFolderId);
+        }
+    }
+
+    async saveProfileData(mode, existingData) {
+        const name = document.getElementById('profile-name').value.trim();
+        const icon = document.getElementById('profile-icon').value.trim();
+        const profileType = document.getElementById('profile-type').value;
+        const workingDir = document.getElementById('profile-workdir').value.trim();
+
+        if (!name) {
+            throw new Error('Profile name is required');
+        }
+
+        let shell = '';
+        let sshConfig = null;
+
+        if (profileType === 'local') {
+            shell = document.getElementById('profile-shell').value;
+        } else if (profileType === 'ssh') {
+            const host = document.getElementById('ssh-host').value.trim();
+            const port = parseInt(document.getElementById('ssh-port').value) || 22;
+            const username = document.getElementById('ssh-username').value.trim();
+            const password = document.getElementById('ssh-password').value;
+            const keyPath = document.getElementById('ssh-keypath').value.trim();
+
+            if (!host || !username) {
+                throw new Error('SSH host and username are required');
+            }
+
+            sshConfig = { host, port, username, password, keyPath };
+        } else if (profileType === 'custom') {
+            shell = document.getElementById('custom-command').value.trim();
+            if (!shell) {
+                throw new Error('Custom command is required');
+            }
+        }
+
+        if (mode === 'edit' && existingData) {
+            // Update existing profile
+            existingData.name = name;
+            existingData.icon = icon;
+            existingData.type = profileType;
+            existingData.shell = shell;
+            existingData.workingDir = workingDir;
+            existingData.sshConfig = sshConfig;
+            await window.go.main.App.UpdateProfile(existingData);
+        } else {
+            // Create new profile using ID-based reference instead of path-based
+            const parentFolderId = this.editingProfile.parentId || '';
+            const profile = await window.go.main.App.CreateProfileWithFolderIDAPI(name, profileType, shell, icon, parentFolderId);
+            
+            if (sshConfig) {
+                profile.sshConfig = sshConfig;
+                await window.go.main.App.UpdateProfile(profile);
+            }
+            
+            if (workingDir) {
+                profile.workingDir = workingDir;
+                await window.go.main.App.UpdateProfile(profile);
+            }
         }
     }
 }

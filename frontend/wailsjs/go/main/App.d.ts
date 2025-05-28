@@ -31,6 +31,14 @@ export function CreateProfileFolder(arg1:string,arg2:string,arg3:string):Promise
 
 export function CreateProfileFolderAPI(arg1:string,arg2:string,arg3:string):Promise<main.ProfileFolder>;
 
+export function CreateProfileFolderWithParentID(arg1:string,arg2:string,arg3:string):Promise<main.ProfileFolder>;
+
+export function CreateProfileFolderWithParentIDAPI(arg1:string,arg2:string,arg3:string):Promise<main.ProfileFolder>;
+
+export function CreateProfileWithFolderID(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<main.Profile>;
+
+export function CreateProfileWithFolderIDAPI(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<main.Profile>;
+
 export function CreateSSHSession(arg1:string,arg2:main.SSHConfig):Promise<main.SSHSession>;
 
 export function CreateSSHSessionWithSize(arg1:string,arg2:main.SSHConfig,arg3:number,arg4:number):Promise<main.SSHSession>;
@@ -73,6 +81,10 @@ export function GetCurrentDefaultShellSetting():Promise<string>;
 
 export function GetDefaultShell():Promise<string>;
 
+export function GetFolderByID(arg1:string):Promise<main.ProfileFolder>;
+
+export function GetFolderByIDAPI(arg1:string):Promise<main.ProfileFolder>;
+
 export function GetMetricsAPI():Promise<main.ProfileMetrics>;
 
 export function GetOSInfo():Promise<Record<string, any>>;
@@ -82,6 +94,10 @@ export function GetPlatformInfo():Promise<Record<string, any>>;
 export function GetPopularTagsAPI():Promise<Array<string>>;
 
 export function GetProfile(arg1:string):Promise<main.Profile>;
+
+export function GetProfileByID(arg1:string):Promise<main.Profile>;
+
+export function GetProfileByIDAPI(arg1:string):Promise<main.Profile>;
 
 export function GetProfileFolder(arg1:string):Promise<main.ProfileFolder>;
 
@@ -135,7 +151,15 @@ export function MaximizeWindow():Promise<void>;
 
 export function MinimizeWindow():Promise<void>;
 
+export function MoveFolder(arg1:string,arg2:string):Promise<void>;
+
+export function MoveFolderAPI(arg1:string,arg2:string):Promise<void>;
+
 export function MoveProfile(arg1:string,arg2:string):Promise<void>;
+
+export function MoveProfileByID(arg1:string,arg2:string):Promise<void>;
+
+export function MoveProfileByIDAPI(arg1:string,arg2:string):Promise<void>;
 
 export function ReconnectTab(arg1:string):Promise<void>;
 

@@ -58,6 +58,22 @@ export function CreateProfileFolderAPI(arg1, arg2, arg3) {
   return window['go']['main']['App']['CreateProfileFolderAPI'](arg1, arg2, arg3);
 }
 
+export function CreateProfileFolderWithParentID(arg1, arg2, arg3) {
+  return window['go']['main']['App']['CreateProfileFolderWithParentID'](arg1, arg2, arg3);
+}
+
+export function CreateProfileFolderWithParentIDAPI(arg1, arg2, arg3) {
+  return window['go']['main']['App']['CreateProfileFolderWithParentIDAPI'](arg1, arg2, arg3);
+}
+
+export function CreateProfileWithFolderID(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['CreateProfileWithFolderID'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function CreateProfileWithFolderIDAPI(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['CreateProfileWithFolderIDAPI'](arg1, arg2, arg3, arg4, arg5);
+}
+
 export function CreateSSHSession(arg1, arg2) {
   return window['go']['main']['App']['CreateSSHSession'](arg1, arg2);
 }
@@ -142,6 +158,14 @@ export function GetDefaultShell() {
   return window['go']['main']['App']['GetDefaultShell']();
 }
 
+export function GetFolderByID(arg1) {
+  return window['go']['main']['App']['GetFolderByID'](arg1);
+}
+
+export function GetFolderByIDAPI(arg1) {
+  return window['go']['main']['App']['GetFolderByIDAPI'](arg1);
+}
+
 export function GetMetricsAPI() {
   return window['go']['main']['App']['GetMetricsAPI']();
 }
@@ -160,6 +184,14 @@ export function GetPopularTagsAPI() {
 
 export function GetProfile(arg1) {
   return window['go']['main']['App']['GetProfile'](arg1);
+}
+
+export function GetProfileByID(arg1) {
+  return window['go']['main']['App']['GetProfileByID'](arg1);
+}
+
+export function GetProfileByIDAPI(arg1) {
+  return window['go']['main']['App']['GetProfileByIDAPI'](arg1);
 }
 
 export function GetProfileFolder(arg1) {
@@ -266,8 +298,24 @@ export function MinimizeWindow() {
   return window['go']['main']['App']['MinimizeWindow']();
 }
 
+export function MoveFolder(arg1, arg2) {
+  return window['go']['main']['App']['MoveFolder'](arg1, arg2);
+}
+
+export function MoveFolderAPI(arg1, arg2) {
+  return window['go']['main']['App']['MoveFolderAPI'](arg1, arg2);
+}
+
 export function MoveProfile(arg1, arg2) {
   return window['go']['main']['App']['MoveProfile'](arg1, arg2);
+}
+
+export function MoveProfileByID(arg1, arg2) {
+  return window['go']['main']['App']['MoveProfileByID'](arg1, arg2);
+}
+
+export function MoveProfileByIDAPI(arg1, arg2) {
+  return window['go']['main']['App']['MoveProfileByIDAPI'](arg1, arg2);
 }
 
 export function ReconnectTab(arg1) {
