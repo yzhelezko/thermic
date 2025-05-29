@@ -1352,9 +1352,9 @@ export function createProfileFormTemplate(mode, type, data = null) {
                         </div>
                         <div class="setting-item-control">
                             <select class="modern-select" id="profile-type">
-                                <option value="local">Local Shell</option>
-                                <option value="ssh">SSH Connection</option>
-                                <option value="custom">Custom Command</option>
+                               <option value="local"${data?.type === 'local' || !data?.type ? ' selected' : ''}>Local Shell</option>
+                               <option value="ssh"${data?.type === 'ssh' ? ' selected' : ''}>SSH Connection</option>
+                               <option value="custom"${data?.type === 'custom' ? ' selected' : ''}>Custom Command</option>
                             </select>
                         </div>
                     </div>
