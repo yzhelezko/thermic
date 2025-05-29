@@ -122,16 +122,16 @@ class ThemeManager {
 
     async updateThemeIcons() {
         try {
-            // Update theme toggle button icon
+            // Update theme toggle button icon with explicit theme state
             const themeToggleBtn = document.getElementById('theme-toggle');
             if (themeToggleBtn) {
-                await updateThemeToggleIcon(themeToggleBtn);
+                await updateThemeToggleIcon(themeToggleBtn, this.currentTheme === 'dark');
             }
 
-            // Update any other theme-aware icons
+            // Update any other theme-aware icons with explicit theme state
             const themeIcons = document.querySelectorAll('.theme-toggle-icon');
             for (const icon of themeIcons) {
-                await updateThemeToggleIcon(icon);
+                await updateThemeToggleIcon(icon, this.currentTheme === 'dark');
             }
             
             // Update all other icons to inline SVGs for proper theme support

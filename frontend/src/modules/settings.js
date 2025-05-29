@@ -203,14 +203,26 @@ export class SettingsManager {
                             document.documentElement.setAttribute('data-theme', newTheme);
                             document.body.setAttribute('data-theme', newTheme);
                             
-                            // Update theme toggle icon in activity bar
+                            // Update theme toggle icon in activity bar with explicit theme state
                             const themeToggle = document.getElementById('theme-toggle');
                             if (themeToggle) {
-                                await updateThemeToggleIcon(themeToggle);
+                                await updateThemeToggleIcon(themeToggle, isDarkMode);
                             }
                             
                             // Update all icons to inline SVGs for proper theme support
                             await updateAllIconsToInline();
+                            
+                            // Update terminal theme (fix for terminal output window not updating)
+                            if (window.thermicApp?.terminalManager) {
+                                window.thermicApp.terminalManager.updateTheme(isDarkMode);
+                                console.log('Updated terminal theme from settings panel');
+                            }
+                            
+                            // Trigger UI manager theme change callback if available
+                            if (window.thermicApp?.uiManager?.onThemeChange) {
+                                window.thermicApp.uiManager.onThemeChange(isDarkMode);
+                                console.log('Triggered UI manager theme change callback');
+                            }
                             
                             // Sync with activity bar manager if available
                             if (window.thermicApp?.activityBarManager) {

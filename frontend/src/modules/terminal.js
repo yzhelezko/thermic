@@ -475,20 +475,37 @@ export class TerminalManager {
         this.isDarkTheme = isDarkTheme;
         const newTheme = isDarkTheme ? THEMES.DARK : THEMES.LIGHT;
         
+        console.log(`Updating terminal theme to: ${isDarkTheme ? 'dark' : 'light'}`);
+        
         // Update all terminal sessions, not just the active one
         for (const [sessionId, terminalSession] of this.terminals) {
             if (terminalSession.terminal) {
+                // Update the theme
                 terminalSession.terminal.options.theme = newTheme;
-                console.log(`Updated theme for session ${sessionId}`);
+                
+                // Force a refresh to apply the new theme immediately
+                try {
+                    terminalSession.terminal.refresh(0, terminalSession.terminal.rows - 1);
+                    console.log(`Updated and refreshed theme for session ${sessionId}`);
+                } catch (error) {
+                    console.warn(`Error refreshing terminal session ${sessionId}:`, error);
+                }
             }
         }
         
         // Also update the legacy terminal instance for backward compatibility
         if (this.terminal) {
             this.terminal.options.theme = newTheme;
+            try {
+                this.terminal.refresh(0, this.terminal.rows - 1);
+                console.log('Updated and refreshed theme for legacy terminal instance');
+            } catch (error) {
+                console.warn('Error refreshing legacy terminal:', error);
+            }
         }
         
         this.updateTerminalContainer();
+        console.log('Terminal theme update completed');
     }
 
     updateTerminalContainer() {

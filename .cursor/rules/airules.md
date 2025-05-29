@@ -13,3 +13,5 @@
 - Windows/Linux controls: 46px width, 32px height, positioned right, use window-close/minimize/maximize classes
 - macOS titlebar height: 28px, Windows/Linux: 32px, proper hover animations with scale(1.1) and brightness(0.9)
 - Profile/folder renaming: saveProfileInternal/saveProfileFolderInternal automatically clean up old files to prevent duplicates with same ID
+- Theme toggle icon: always pass explicit isDark parameter to updateThemeToggleIcon() to avoid race conditions in production builds
+- Settings panel theme changes: must call terminalManager.updateTheme() and uiManager.onThemeChange() to update terminal output window
