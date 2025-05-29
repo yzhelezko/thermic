@@ -310,3 +310,38 @@ func findShellExecutable(shell string) (string, error) {
 
 	return exec.LookPath(shell)
 }
+
+// getDefaultSSHKeyPaths returns default SSH key paths for Windows
+func (a *App) getDefaultSSHKeyPaths() []string {
+	// Get user home directory (handles Windows profile correctly)
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		// Fallback to USERPROFILE environment variable
+		homeDir = os.Getenv("USERPROFILE")
+		if homeDir == "" {
+			return []string{} // No default paths available
+		}
+	}
+
+	sshDir := filepath.Join(homeDir, ".ssh")
+
+	// First try to scan the entire .ssh directory for valid private keys
+	discoveredKeys := a.scanSSHDirectory(sshDir)
+	if len(discoveredKeys) > 0 {
+		// Limit to first 10 keys to avoid excessive authentication attempts
+		if len(discoveredKeys) > 10 {
+			discoveredKeys = discoveredKeys[:10]
+		}
+		fmt.Printf("Using %d discovered SSH keys from %s\n", len(discoveredKeys), sshDir)
+		return discoveredKeys
+	}
+
+	// Fallback to common key names if directory scan didn't find anything
+	fmt.Printf("No SSH keys discovered, falling back to common key names in %s\n", sshDir)
+	return []string{
+		filepath.Join(sshDir, "id_rsa"),
+		filepath.Join(sshDir, "id_ed25519"),
+		filepath.Join(sshDir, "id_ecdsa"),
+		filepath.Join(sshDir, "id_dsa"), // Legacy key type
+	}
+}
