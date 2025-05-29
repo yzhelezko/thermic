@@ -158,18 +158,23 @@ export class TerminalManager {
         terminal.loadAddon(fitAddon);
         terminal.loadAddon(new WebLinksAddon());
 
-        // Create terminal container div
+        // Create terminal container div with wrapper for proper padding
         const terminalContainer = document.createElement('div');
         terminalContainer.className = 'terminal-instance';
         terminalContainer.dataset.sessionId = sessionId;
         terminalContainer.style.display = 'none'; // Initially hidden
 
+        // Create wrapper div for padding
+        const terminalWrapper = document.createElement('div');
+        terminalWrapper.className = 'terminal-wrapper';
+        terminalContainer.appendChild(terminalWrapper);
+
         // Add to main terminal container
         const mainContainer = document.getElementById('terminal');
         mainContainer.appendChild(terminalContainer);
 
-        // Open terminal in the container
-        terminal.open(terminalContainer);
+        // Open terminal in the wrapper (not the container)
+        terminal.open(terminalWrapper);
 
         // Delay fit to ensure container is properly sized
         setTimeout(() => {
@@ -257,17 +262,72 @@ export class TerminalManager {
     }
 
     setupTerminalResize(sessionId) {
-        // Handle resize for specific terminal
+        // Handle resize for specific terminal with debouncing and proper dimension calculation
+        let resizeTimeout;
         const resizeHandler = () => {
-            const terminalSession = this.terminals.get(sessionId);
-            if (terminalSession && sessionId === this.activeSessionId) {
-                terminalSession.fitAddon.fit();
-                if (terminalSession.isConnected) {
-                    const cols = terminalSession.terminal.cols;
-                    const rows = terminalSession.terminal.rows;
-                    ResizeShell(sessionId, cols, rows);
-                }
+            // Clear previous timeout to debounce rapid resize events
+            if (resizeTimeout) {
+                clearTimeout(resizeTimeout);
             }
+            
+            resizeTimeout = setTimeout(() => {
+                const terminalSession = this.terminals.get(sessionId);
+                if (terminalSession && sessionId === this.activeSessionId) {
+                    try {
+                        // Force a reflow to ensure accurate measurements
+                        terminalSession.container.offsetHeight;
+                        
+                        // Use proposeDimensions to get exact dimensions that fit properly
+                        const proposedDimensions = terminalSession.fitAddon.proposeDimensions();
+                        
+                        if (proposedDimensions && proposedDimensions.cols > 0 && proposedDimensions.rows > 0) {
+                            // Use the proposed dimensions to ensure exact fit
+                            terminalSession.terminal.resize(proposedDimensions.cols, proposedDimensions.rows);
+                            
+                            // Additional fit after resize to ensure proper layout
+                            setTimeout(() => {
+                                if (terminalSession.fitAddon && this.terminals.has(sessionId)) {
+                                    terminalSession.fitAddon.fit();
+                                    
+                                    // Update shell size if connected
+                                    if (terminalSession.isConnected) {
+                                        const cols = terminalSession.terminal.cols;
+                                        const rows = terminalSession.terminal.rows;
+                                        ResizeShell(sessionId, cols, rows).catch(error => {
+                                            console.warn('Error resizing shell during window resize:', error);
+                                        });
+                                    }
+                                }
+                            }, 10);
+                        } else {
+                            // Fallback to regular fit if proposeDimensions fails
+                            terminalSession.fitAddon.fit();
+                            
+                            setTimeout(() => {
+                                if (terminalSession.fitAddon && this.terminals.has(sessionId)) {
+                                    terminalSession.fitAddon.fit();
+                                    
+                                    if (terminalSession.isConnected) {
+                                        const cols = terminalSession.terminal.cols;
+                                        const rows = terminalSession.terminal.rows;
+                                        ResizeShell(sessionId, cols, rows).catch(error => {
+                                            console.warn('Error resizing shell during window resize:', error);
+                                        });
+                                    }
+                                }
+                            }, 50);
+                        }
+                    } catch (error) {
+                        console.warn('Error during terminal resize:', error);
+                        // Fallback to basic fit on error
+                        try {
+                            terminalSession.fitAddon.fit();
+                        } catch (fallbackError) {
+                            console.error('Fallback fit also failed:', fallbackError);
+                        }
+                    }
+                }
+            }, 100); // Debounce resize events by 100ms
         };
 
         window.addEventListener('resize', resizeHandler);
@@ -276,6 +336,7 @@ export class TerminalManager {
         const terminalSession = this.terminals.get(sessionId);
         if (terminalSession) {
             terminalSession.resizeHandler = resizeHandler;
+            terminalSession.resizeTimeout = resizeTimeout;
         }
     }
 
@@ -623,6 +684,16 @@ export class TerminalManager {
             // Mark as disconnected first to stop any ongoing operations
             terminalSession.isConnected = false;
             
+            // Cleanup resize timeout if it exists
+            if (terminalSession.resizeTimeout) {
+                try {
+                    clearTimeout(terminalSession.resizeTimeout);
+                } catch (error) {
+                    console.warn('Error clearing resize timeout:', error);
+                }
+                terminalSession.resizeTimeout = null;
+            }
+            
             // Cleanup resize handler safely
             if (terminalSession.resizeHandler) {
                 try {
@@ -704,22 +775,56 @@ export class TerminalManager {
         if (this.activeSessionId) {
             const terminalSession = this.terminals.get(this.activeSessionId);
             if (terminalSession && terminalSession.fitAddon) {
-                // Force multiple fits to ensure proper sizing
-                terminalSession.fitAddon.fit();
-                setTimeout(() => {
-                    if (terminalSession.fitAddon) {
-                        terminalSession.fitAddon.fit();
+                try {
+                    // Use proposeDimensions for more accurate sizing
+                    const proposedDimensions = terminalSession.fitAddon.proposeDimensions();
+                    
+                    if (proposedDimensions && proposedDimensions.cols > 0 && proposedDimensions.rows > 0) {
+                        // Use the proposed dimensions to ensure exact fit
+                        terminalSession.terminal.resize(proposedDimensions.cols, proposedDimensions.rows);
                         
-                        // Update shell size if connected
-                        if (terminalSession.isConnected) {
-                            const cols = terminalSession.terminal.cols;
-                            const rows = terminalSession.terminal.rows;
-                            ResizeShell(this.activeSessionId, cols, rows).catch(error => {
-                                console.warn('Error resizing shell in fit():', error);
-                            });
-                        }
+                        // Follow up with fit to ensure proper layout
+                        setTimeout(() => {
+                            if (terminalSession.fitAddon) {
+                                terminalSession.fitAddon.fit();
+                                
+                                // Update shell size if connected
+                                if (terminalSession.isConnected) {
+                                    const cols = terminalSession.terminal.cols;
+                                    const rows = terminalSession.terminal.rows;
+                                    ResizeShell(this.activeSessionId, cols, rows).catch(error => {
+                                        console.warn('Error resizing shell in fit():', error);
+                                    });
+                                }
+                            }
+                        }, 10);
+                    } else {
+                        // Fallback to regular fit if proposeDimensions fails
+                        terminalSession.fitAddon.fit();
+                        setTimeout(() => {
+                            if (terminalSession.fitAddon) {
+                                terminalSession.fitAddon.fit();
+                                
+                                // Update shell size if connected
+                                if (terminalSession.isConnected) {
+                                    const cols = terminalSession.terminal.cols;
+                                    const rows = terminalSession.terminal.rows;
+                                    ResizeShell(this.activeSessionId, cols, rows).catch(error => {
+                                        console.warn('Error resizing shell in fit():', error);
+                                    });
+                                }
+                            }
+                        }, 10);
                     }
-                }, 10);
+                } catch (error) {
+                    console.warn('Error in fit() method:', error);
+                    // Fallback to basic fit
+                    try {
+                        terminalSession.fitAddon.fit();
+                    } catch (fallbackError) {
+                        console.error('Fallback fit also failed:', fallbackError);
+                    }
+                }
             }
         } else if (this.fitAddon) {
             this.fitAddon.fit();
