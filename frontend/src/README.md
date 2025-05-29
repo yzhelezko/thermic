@@ -258,4 +258,54 @@ export function createHeaderTemplate() {
 }
 ```
 
+## Icon System and Theme Support
+
+### Day/Night Theme Issue Fix
+
+**Problem**: SVG icons remained black when switching between day/night themes.
+
+**Root Cause**: Icons were loaded as `<img>` tags, which cannot inherit CSS properties like `currentColor` from the parent document. The SVG files use `stroke="currentColor"` but this only works when SVGs are inline.
+
+**Solution**: Implemented an inline SVG system that converts `<img>` based icons to inline SVGs that can properly inherit theme colors.
+
+#### Key Changes:
+
+1. **Enhanced Icon Utilities** (`utils/icons.js`):
+   - Added `loadSvgContent()` function with caching
+   - Added `createInlineIconElement()` for theme-aware inline SVGs
+   - Updated `updateThemeToggleIcon()` to use inline SVGs
+   - Added `updateAllIconsToInline()` to convert existing icons
+
+2. **Updated CSS** (`styles/icons.css`):
+   - Added support for both `img`-based and inline SVG icons
+   - Inline SVGs use `color: var(--icon-color)` instead of filters
+   - Added proper color variables for all themes
+   - Separate styling for different icon states (hover, active, status)
+
+3. **Theme Management**:
+   - Updated Activity Bar Manager to use async icon functions
+   - Enhanced Theme Manager with proper async handling
+   - Automatic conversion of all icons on theme switch
+
+#### Usage:
+
+```javascript
+// Create theme-aware inline SVG
+const iconHtml = await createInlineIconElement('🎨', 'my-icon-class');
+
+// Update all existing icons to inline SVGs
+await updateAllIconsToInline();
+
+// Test the system
+testIconThemes(); // Available in browser console
+```
+
+#### CSS Classes:
+
+- `.svg-icon[src]` - External image icons (fallback, uses filters)
+- `.svg-icon.inline-svg-icon` - Inline SVGs (uses currentColor)
+- `.svg-icon:not([src])` - All inline SVGs (uses currentColor)
+
+The system now properly responds to theme changes, with icons automatically switching between light and dark appearances.
+
 The template-based modular architecture provides a modern, maintainable foundation for the Thermic interface with excellent separation of concerns and developer experience. 

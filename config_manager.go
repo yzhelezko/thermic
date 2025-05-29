@@ -367,3 +367,36 @@ func (a *App) SetSidebarWidth(width int) error {
 	}
 	return nil
 }
+
+// GetTheme returns the saved theme preference
+func (a *App) GetTheme() string {
+	if a.config == nil {
+		fmt.Println("GetTheme: config is nil, returning default 'dark'.")
+		return "dark"
+	}
+	// Ensure we have a valid theme value
+	theme := a.config.Theme
+	if theme != "dark" && theme != "light" && theme != "system" {
+		return "dark" // Default fallback
+	}
+	return theme
+}
+
+// SetTheme updates the theme preference in the configuration and marks it dirty
+func (a *App) SetTheme(theme string) error {
+	if a.config == nil {
+		return fmt.Errorf("config not initialized, cannot set theme")
+	}
+
+	// Validate theme value
+	if theme != "dark" && theme != "light" && theme != "system" {
+		return fmt.Errorf("invalid theme value: %s. Must be 'dark', 'light', or 'system'", theme)
+	}
+
+	if a.config.Theme != theme {
+		a.config.Theme = theme
+		fmt.Printf("Theme preference updated to: %s\n", theme)
+		a.markConfigDirty()
+	}
+	return nil
+}

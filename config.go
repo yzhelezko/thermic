@@ -15,6 +15,8 @@ type AppConfig struct {
 	// Sidebar settings
 	SidebarCollapsed bool `yaml:"sidebar_collapsed"` // Whether the sidebar is collapsed
 	SidebarWidth     int  `yaml:"sidebar_width"`     // Width of the sidebar when expanded
+	// Theme settings
+	Theme string `yaml:"theme"` // Theme preference: "dark", "light", or "system"
 }
 
 // DefaultConfig returns a new AppConfig with default values
@@ -33,5 +35,7 @@ func DefaultConfig() *AppConfig {
 		// Default sidebar settings
 		SidebarCollapsed: false, // Default to expanded
 		SidebarWidth:     250,   // Default width
+		// Default theme settings
+		Theme: "dark", // Default to dark theme
 	}
 }

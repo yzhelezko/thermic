@@ -1,0 +1,454 @@
+/* SVG Icon Styling with CSS Custom Properties */
+:root {
+    /* Default dark theme icon filter */
+    --icon-filter: invert(1) brightness(1);
+    --icon-hover-filter: invert(1) brightness(1.2);
+    --icon-active-filter: invert(1) sepia(1) saturate(2) hue-rotate(200deg) brightness(1);
+    
+    /* Status icon colors for dark theme */
+    --success-icon-filter: invert(1) sepia(1) saturate(2) hue-rotate(90deg) brightness(0.9);
+    --warning-icon-filter: invert(1) sepia(1) saturate(3) hue-rotate(25deg) brightness(1.1);
+    --error-icon-filter: invert(1) sepia(1) saturate(3) hue-rotate(320deg) brightness(1);
+    --info-icon-filter: invert(1) sepia(1) saturate(2) hue-rotate(200deg) brightness(1);
+    
+    /* Text colors for inline SVG icons */
+    --icon-color: #ffffff;
+    --icon-hover-color: #ffffff;
+    --icon-active-color: #007acc;
+    
+    /* Additional color variables for inline SVG status icons */
+    --info-color: #007acc;
+}
+
+[data-theme="light"] {
+    /* Light theme icon filter */
+    --icon-filter: invert(0) brightness(1);
+    --icon-hover-filter: invert(0) brightness(0.8);
+    --icon-active-filter: invert(0.3) sepia(1) saturate(2) hue-rotate(200deg) brightness(0.8);
+    
+    /* Status icon colors for light theme */
+    --success-icon-filter: invert(0.3) sepia(1) saturate(3) hue-rotate(90deg) brightness(0.7);
+    --warning-icon-filter: invert(0.4) sepia(1) saturate(4) hue-rotate(25deg) brightness(0.8);
+    --error-icon-filter: invert(0.2) sepia(1) saturate(4) hue-rotate(320deg) brightness(0.8);
+    --info-icon-filter: invert(0.3) sepia(1) saturate(3) hue-rotate(200deg) brightness(0.8);
+    
+    /* Text colors for inline SVG icons */
+    --icon-color: #333333;
+    --icon-hover-color: #333333;
+    --icon-active-color: #0078d4;
+    
+    /* Additional color variables for inline SVG status icons */
+    --info-color: #0078d4;
+}
+
+/* Base styling for all SVG icons */
+.svg-icon {
+    width: 16px;
+    height: 16px;
+    display: inline-block;
+    flex-shrink: 0;
+    vertical-align: middle;
+    transition: filter 0.2s ease, color 0.2s ease;
+}
+
+/* Styling for img-based SVG icons (fallback) */
+.svg-icon[src] {
+    /* Use CSS custom property for theme-responsive filtering */
+    filter: var(--icon-filter);
+}
+
+/* Styling for inline SVG icons */
+.svg-icon.inline-svg-icon,
+.svg-icon:not([src]) {
+    /* Use color inheritance for inline SVGs */
+    color: var(--icon-color);
+    fill: currentColor;
+    stroke: currentColor;
+    /* Remove filter since we're using color inheritance */
+    filter: none;
+}
+
+/* Large icons for specific contexts */
+.svg-icon.large {
+    width: 20px;
+    height: 20px;
+}
+
+.svg-icon.small {
+    width: 12px;
+    height: 12px;
+}
+
+/* Context menu icons */
+.context-menu-item-icon .svg-icon {
+    width: 14px;
+    height: 14px;
+    margin-right: 8px;
+}
+
+/* Settings section icons */
+.settings-section-icon .svg-icon {
+    width: 16px;
+    height: 16px;
+    margin-right: 8px;
+}
+
+/* Activity bar icons */
+.activity-btn .svg-icon {
+    width: 20px;
+    height: 20px;
+}
+
+/* Tab icons */
+.settings-tab .svg-icon {
+    width: 14px;
+    height: 14px;
+    margin-right: 6px;
+}
+
+/* Profile form icons */
+.profile-form-section-icon .svg-icon {
+    width: 16px;
+    height: 16px;
+    margin-right: 8px;
+}
+
+/* Icon selector in profile forms */
+.icon-selector-button {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--bg-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.icon-selector-button:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--accent-color);
+}
+
+.icon-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    max-height: 200px;
+    overflow-y: auto;
+    display: none;
+}
+
+.icon-dropdown.show {
+    display: block;
+}
+
+.icon-grid-compact {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 2px;
+    padding: 8px;
+}
+
+.icon-option {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+    font-size: 14px;
+}
+
+.icon-option:hover {
+    background: var(--bg-tertiary);
+}
+
+.icon-option.selected {
+    background: var(--accent-color);
+    color: white;
+}
+
+/* Theme toggle icon */
+.theme-toggle-icon {
+    transition: all 0.3s ease;
+}
+
+/* Theme toggle rotation animation */
+.rotating {
+    animation: rotateIcon 0.3s ease-in-out;
+}
+
+@keyframes rotateIcon {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(180deg);
+    }
+}
+
+/* Special styling for status icons */
+.svg-icon.status-success {
+    filter: var(--success-icon-filter);
+}
+
+.svg-icon.status-warning {
+    filter: var(--warning-icon-filter);
+}
+
+.svg-icon.status-error {
+    filter: var(--error-icon-filter);
+}
+
+.svg-icon.status-info {
+    filter: var(--info-icon-filter);
+}
+
+/* For inline SVG status icons, use color instead of filter */
+.svg-icon.inline-svg-icon.status-success,
+.svg-icon:not([src]).status-success {
+    color: var(--success-color);
+    filter: none;
+}
+
+.svg-icon.inline-svg-icon.status-warning,
+.svg-icon:not([src]).status-warning {
+    color: var(--warning-color);
+    filter: none;
+}
+
+.svg-icon.inline-svg-icon.status-error,
+.svg-icon:not([src]).status-error {
+    color: var(--error-color);
+    filter: none;
+}
+
+.svg-icon.inline-svg-icon.status-info,
+.svg-icon:not([src]).status-info {
+    color: var(--info-color);
+    filter: none;
+}
+
+/* Loading placeholder icons */
+.loading-placeholder .svg-icon {
+    opacity: 0.5;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 0.5;
+    }
+    50% {
+        opacity: 0.8;
+    }
+}
+
+/* Ensure proper alignment in flex containers */
+.activity-btn,
+.settings-tab,
+.context-menu-item {
+    display: flex;
+    align-items: center;
+}
+
+/* Icon spacing in buttons and menus */
+.modern-button .svg-icon {
+    margin-right: 6px;
+}
+
+.sidebar-action-btn .svg-icon {
+    width: 16px;
+    height: 16px;
+}
+
+/* Profile icon selectors */
+.name-icon-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.icon-selector-compact {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.current-icon {
+    font-size: 16px;
+    line-height: 1;
+}
+
+.icon-selector-arrow {
+    font-size: 10px;
+    color: var(--text-tertiary);
+}
+
+/* About page app icon */
+.app-icon .svg-icon {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 16px;
+}
+
+/* Notification icons with proper filter styling */
+.notification-icon .svg-icon {
+    width: 16px;
+    height: 16px;
+}
+
+.notification-icon.error .svg-icon {
+    filter: var(--error-icon-filter);
+}
+
+.notification-icon.warning .svg-icon {
+    filter: var(--warning-icon-filter);
+}
+
+.notification-icon.info .svg-icon {
+    filter: var(--info-icon-filter);
+}
+
+.notification-icon.success .svg-icon {
+    filter: var(--success-icon-filter);
+}
+
+/* Override for inline SVG notification icons */
+.notification-icon.error .svg-icon.inline-svg-icon,
+.notification-icon.error .svg-icon:not([src]) {
+    color: var(--error-color);
+    filter: none;
+}
+
+.notification-icon.warning .svg-icon.inline-svg-icon,
+.notification-icon.warning .svg-icon:not([src]) {
+    color: var(--warning-color);
+    filter: none;
+}
+
+.notification-icon.info .svg-icon.inline-svg-icon,
+.notification-icon.info .svg-icon:not([src]) {
+    color: var(--info-color);
+    filter: none;
+}
+
+.notification-icon.success .svg-icon.inline-svg-icon,
+.notification-icon.success .svg-icon:not([src]) {
+    color: var(--success-color);
+    filter: none;
+}
+
+/* Day/Night Mode Theme Toggle */
+.theme-toggle {
+    position: relative;
+    transition: transform 0.3s ease;
+}
+
+.theme-toggle:hover {
+    transform: scale(1.1);
+}
+
+.theme-toggle .svg-icon {
+    transition: all 0.3s ease;
+}
+
+/* Theme toggle icons should inherit text color for proper theming */
+.theme-toggle .svg-icon.inline-svg-icon,
+.theme-toggle .svg-icon:not([src]) {
+    color: var(--text-secondary);
+}
+
+.theme-toggle:hover .svg-icon.inline-svg-icon,
+.theme-toggle:hover .svg-icon:not([src]) {
+    color: var(--text-primary);
+}
+
+/* Smooth icon transitions for theme changes */
+[data-theme="dark"] .theme-toggle .svg-icon,
+.dark-mode .theme-toggle .svg-icon {
+    filter: none; /* Keep original theme toggle images */
+}
+
+[data-theme="light"] .theme-toggle .svg-icon,
+.light-mode .theme-toggle .svg-icon {
+    filter: none; /* Keep original theme toggle images */
+}
+
+/* Context-specific color overrides and hover states */
+.context-menu-item:hover .svg-icon[src],
+.modern-button:hover .svg-icon[src],
+.activity-btn:hover .svg-icon[src] {
+    filter: var(--icon-hover-filter);
+}
+
+/* Hover states for inline SVG icons */
+.context-menu-item:hover .svg-icon.inline-svg-icon,
+.context-menu-item:hover .svg-icon:not([src]),
+.modern-button:hover .svg-icon.inline-svg-icon,
+.modern-button:hover .svg-icon:not([src]),
+.activity-btn:hover .svg-icon.inline-svg-icon,
+.activity-btn:hover .svg-icon:not([src]) {
+    color: var(--icon-hover-color);
+}
+
+/* Settings tab active state */
+.settings-tab.active .svg-icon[src] {
+    filter: var(--icon-active-filter);
+}
+
+.settings-tab.active .svg-icon.inline-svg-icon,
+.settings-tab.active .svg-icon:not([src]) {
+    color: var(--icon-active-color);
+}
+
+/* Activity button active state */
+.activity-btn.active .svg-icon[src] {
+    filter: var(--icon-active-filter);
+}
+
+.activity-btn.active .svg-icon.inline-svg-icon,
+.activity-btn.active .svg-icon:not([src]) {
+    color: var(--icon-active-color);
+}
+
+/* Profile icon grid enhancements */
+.icon-grid-compact .icon-option {
+    position: relative;
+}
+
+.icon-grid-compact .icon-option:hover::after {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border: 2px solid var(--accent-color);
+    border-radius: 6px;
+    pointer-events: none;
+}
+
+/* Better SVG rendering for high-DPI displays */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    .svg-icon {
+        image-rendering: -webkit-optimize-contrast;
+        image-rendering: crisp-edges;
+    }
+}
+
+/* Theme toggle uses original images, no filter needed */
+#theme-toggle .svg-icon {
+    filter: none !important;
+}
+
+/* Also ensure theme toggle in activity bar keeps original colors */
+.activity-btn#theme-toggle .svg-icon {
+    filter: none !important;
+} 

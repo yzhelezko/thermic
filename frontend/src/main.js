@@ -17,6 +17,9 @@ import VersionManager from './components/VersionManager.js';
 import { modal } from './components/Modal.js';
 import { notification } from './components/Notification.js';
 
+// Import icon utilities
+import { initializeIcons, debugThemeState, updateAllIconsToInline } from './utils/icons.js';
+
 // Platform detection for window controls
 function detectPlatform() {
     const userAgent = navigator.userAgent.toLowerCase();
@@ -113,6 +116,10 @@ class ThermicTerminal {
 
     async initializeComponents() {
         try {
+            // Initialize icons first
+            console.log('Initializing icon system...');
+            await initializeIcons();
+            
             // Initialize status first to show platform info
             console.log('Initializing status manager...');
             await this.statusManager.initStatus();
@@ -128,7 +135,7 @@ class ThermicTerminal {
             await this.sidebarManager.initSidebar();
             
             console.log('Initializing activity bar manager...');
-            this.activityBarManager.init();
+            await this.activityBarManager.init();
             
             // Expose sidebar manager globally for back buttons
             window.sidebarManager = this.sidebarManager;
@@ -144,6 +151,9 @@ class ThermicTerminal {
             
             // Expose context menu manager globally for tab context menu integration
             window.contextMenuManager = this.contextMenuManager;
+            
+            // Expose the main app instance globally for settings integration
+            window.thermicApp = this;
 
             // Initialize terminal
             console.log('Initializing terminal manager...');
@@ -176,6 +186,10 @@ class ThermicTerminal {
             console.log('Initializing version manager...');
             this.versionManager = new VersionManager();
             
+            // Convert all existing icons to inline SVGs for proper theme support
+            console.log('Converting icons to inline SVGs for theme support...');
+            await updateAllIconsToInline();
+            
             console.log('Component initialization completed successfully');
         } catch (error) {
             console.error('Critical error during component initialization:', error);
@@ -194,11 +208,8 @@ class ThermicTerminal {
         window.addEventListener('resize', () => {
             clearTimeout(resizeTimeout);
             resizeTimeout = setTimeout(() => {
-                // console.log('Frontend: Window resize finished, emitting event to Go.'); // For debugging
-                if (window.runtime) { // Ensure Wails runtime is available
-                    window.runtime.EventsEmit("frontend:window:resized");
-                }
-            }, 250); // 250ms debounce period
+                this.terminalManager.handleResize();
+            }, 100);
         });
     }
 
@@ -236,15 +247,24 @@ class ThermicTerminal {
             this.settingsManager.syncDarkModeToggle(isDarkTheme);
         });
 
-        // Connect settings theme changes to UI
+        // Connect settings theme changes to UI (this is now handled by activity bar manager)
         this.settingsManager.setThemeChangeCallback(() => {
-            this.uiManager.toggleTheme();
+            // This callback is now mainly for backward compatibility
+            // The actual theme switching is handled by the activity bar manager
+            console.log('Settings theme change callback called (handled by activity bar manager)');
         });
 
         // Connect UI resize events to terminal
         this.uiManager.setTerminalResizeCallback(() => {
             this.terminalManager.fit();
         });
+
+        // Initialize settings dark mode toggle with current theme
+        const currentTheme = document.documentElement.getAttribute('data-theme') || 
+                           (document.body.classList.contains('dark-mode') ? 'dark' : 'light');
+        const isDarkTheme = currentTheme === 'dark';
+        this.activityBarManager.isDarkTheme = isDarkTheme;
+        this.activityBarManager.syncSettingsDarkModeToggle(isDarkTheme);
 
         // Set up shell selector event listener
         this.setupShellSelector();

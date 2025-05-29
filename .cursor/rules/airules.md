@@ -5,6 +5,8 @@
 - Sidebar save button uses only handleProfileSave() method - avoid duplicate event handlers to prevent multiple API calls
 - Use universal Modal component (components/Modal.js) for all dialogs - modal.confirm(), modal.confirmDelete(), modal.info(), modal.error()
 - Use universal Notification component (components/Notification.js) for all notifications - notification.success(), notification.error(), notification.warning(), notification.info()
+- Always use inline SVG icons (updateAllIconsToInline()) for proper day/night theme support - avoid img-based SVG icons
+- Theme preference persists to config.yaml via GetTheme()/SetTheme() methods - both activity bar and settings toggles save to backend config
 - Window controls are integrated into tabs titlebar - no separate header exists
 - Settings panel slides from right, profile/folder panels slide from left, both have sidebar height and start below tabs
 - macOS window controls: 12px size, 6px gap, positioned left with 8px padding, use window-control-close/minimize/maximize classes

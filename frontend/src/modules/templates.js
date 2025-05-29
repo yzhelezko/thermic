@@ -75,9 +75,7 @@ export function createActivityBarTemplate() {
         </div>
         <div class="activity-bar-bottom">
             <button class="activity-btn" id="theme-toggle" title="Toggle theme">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.166a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5H21a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-2.25A.75.75 0 0112 18zM7.758 17.303a.75.75 0 00-1.061-1.06l-1.591 1.59a.75.75 0 001.06 1.061l1.591-1.59zM6 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.25A.75.75 0 016 12zM6.697 7.757a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 00-1.061 1.06l1.59 1.591z"/>
-                </svg>
+                <img src="/src/assets/icons/moon.svg" class="svg-icon" alt="Toggle theme" width="20" height="20">
             </button>
             <button class="activity-btn" id="account-btn" title="Account">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -109,7 +107,7 @@ export function createSidebarTemplate() {
         <div class="sidebar-content" id="sidebar-content">
             <!-- Content will be dynamically populated by SidebarManager -->
             <div class="loading-placeholder" style="padding: 20px; text-align: center; color: var(--text-tertiary);">
-                <div>📁</div>
+                <div><img src="/src/assets/icons/folder.svg" class="svg-icon" alt="📁"></div>
                 <div style="margin-top: 8px;">Loading profiles...</div>
             </div>
         </div>
@@ -149,11 +147,11 @@ export function createSettingsPanelTemplate() {
         <div class="settings-panel">
             <div class="settings-panel-header">
                 <div class="settings-tabs-container">
-                    <button class="settings-tab active" data-tab-target="#settings-tab-terminal">🖥️ Terminal</button>
-                    <button class="settings-tab" data-tab-target="#settings-tab-appearance">🎨 Appearance</button>
-                    <button class="settings-tab" data-tab-target="#settings-tab-profiles">📁 Profiles</button>
-                    <button class="settings-tab" data-tab-target="#settings-tab-advanced">⚙️ Advanced</button>
-                    <button class="settings-tab" data-tab-target="#settings-tab-about">ℹ️ About</button>
+                    <button class="settings-tab active" data-tab-target="#settings-tab-terminal"><img src="/src/assets/icons/terminal.svg" class="svg-icon" alt="🖥️"> Terminal</button>
+                    <button class="settings-tab" data-tab-target="#settings-tab-appearance"><img src="/src/assets/icons/palette.svg" class="svg-icon" alt="🎨"> Appearance</button>
+                    <button class="settings-tab" data-tab-target="#settings-tab-profiles"><img src="/src/assets/icons/folder.svg" class="svg-icon" alt="📁"> Profiles</button>
+                    <button class="settings-tab" data-tab-target="#settings-tab-advanced"><img src="/src/assets/icons/settings.svg" class="svg-icon" alt="⚙️"> Advanced</button>
+                    <button class="settings-tab" data-tab-target="#settings-tab-about"><img src="/src/assets/icons/info.svg" class="svg-icon" alt="ℹ️"> About</button>
                 </div>
             </div>
             <div class="settings-panel-content">
@@ -181,7 +179,7 @@ export function createTerminalSettingsContent() {
     return `
         <div class="settings-section">
             <div class="settings-section-title">
-                <span class="settings-section-icon">🖥️</span>
+                <span class="settings-section-icon"><img src="/src/assets/icons/terminal.svg" class="svg-icon" alt="🖥️"></span>
                 Shell Configuration
             </div>
             <div class="settings-list">
@@ -225,7 +223,7 @@ export function createTerminalSettingsContent() {
 
         <div class="settings-section">
             <div class="settings-section-title">
-                <span class="settings-section-icon">⌨️</span>
+                <span class="settings-section-icon"><img src="/src/assets/icons/keyboard.svg" class="svg-icon" alt="⌨️"></span>
                 Terminal Behavior
             </div>
             <div class="settings-list">
@@ -290,7 +288,7 @@ export function createTerminalSettingsContent() {
 
         <div class="settings-section">
             <div class="settings-section-title">
-                <span class="settings-section-icon">📜</span>
+                <span class="settings-section-icon"><img src="/src/assets/icons/document.svg" class="svg-icon" alt="📜"></span>
                 Scrollback & History
             </div>
             <div class="settings-list">
@@ -338,7 +336,7 @@ export function createTerminalSettingsContent() {
 
         <div class="settings-section">
             <div class="settings-section-title">
-                <span class="settings-section-icon">🔗</span>
+                <span class="settings-section-icon"><img src="/src/assets/icons/link.svg" class="svg-icon" alt="🔗"></span>
                 Links & URLs
             </div>
             <div class="settings-list">
@@ -395,7 +393,7 @@ export function createAppearanceSettingsContent() {
     return `
         <div class="settings-section">
             <div class="settings-section-title">
-                <span class="settings-section-icon">🎨</span>
+                <span class="settings-section-icon"><img src="/src/assets/icons/palette.svg" class="svg-icon" alt="🎨"></span>
                 Theme & Colors
             </div>
             <div class="settings-list">
@@ -460,7 +458,7 @@ export function createAppearanceSettingsContent() {
 
         <div class="settings-section">
             <div class="settings-section-title">
-                <span class="settings-section-icon">🔤</span>
+                <span class="settings-section-icon"><img src="/src/assets/icons/text.svg" class="svg-icon" alt="🔤"></span>
                 Typography
             </div>
             <div class="settings-list">
@@ -524,7 +522,7 @@ export function createAppearanceSettingsContent() {
 
         <div class="settings-section">
             <div class="settings-section-title">
-                <span class="settings-section-icon">📐</span>
+                <span class="settings-section-icon"><img src="/src/assets/icons/ruler.svg" class="svg-icon" alt="📐"></span>
                 Layout & Spacing
             </div>
             <div class="settings-list">
@@ -580,7 +578,7 @@ export function createAppearanceSettingsContent() {
 
         <div class="settings-section">
             <div class="settings-section-title">
-                <span class="settings-section-icon">✨</span>
+                <span class="settings-section-icon"><img src="/src/assets/icons/sparkles.svg" class="svg-icon" alt="✨"></span>
                 Visual Effects
             </div>
             <div class="settings-list">
@@ -649,7 +647,7 @@ export function createProfilesSettingsContent() {
     return `
         <div class="settings-section">
             <div class="settings-section-title">
-                <span class="settings-section-icon">📁</span>
+                <span class="settings-section-icon"><img src="/src/assets/icons/folder.svg" class="svg-icon" alt="📁"></span>
                 Profiles Configuration
             </div>
             <div class="settings-list">
@@ -662,7 +660,7 @@ export function createProfilesSettingsContent() {
                         <div class="setting-item-control">
                             <div class="profiles-path-container">
                                 <input type="text" class="modern-input" id="profiles-path-input" placeholder="Default location will be used">
-                                <button class="modern-button secondary" id="browse-profiles-path">📂 Browse</button>
+                                <button class="modern-button secondary" id="browse-profiles-path"><img src="/src/assets/icons/folder-open.svg" class="svg-icon" alt="📂"> Browse</button>
                                 <button class="modern-button" id="save-profiles-path">Save</button>
                             </div>
                         </div>
@@ -673,7 +671,7 @@ export function createProfilesSettingsContent() {
 
         <div class="settings-section">
             <div class="settings-section-title">
-                <span class="settings-section-icon">🔄</span>
+                <span class="settings-section-icon"><img src="/src/assets/icons/refresh.svg" class="svg-icon" alt="🔄"></span>
                 Auto-Save & Backup
             </div>
             <div class="settings-list">
@@ -726,7 +724,7 @@ export function createProfilesSettingsContent() {
 
         <div class="settings-section">
             <div class="settings-section-title">
-                <span class="settings-section-icon">📤</span>
+                <span class="settings-section-icon"><img src="/src/assets/icons/export.svg" class="svg-icon" alt="📤"></span>
                 Import & Export
             </div>
             <div class="settings-list">
@@ -772,7 +770,7 @@ export function createAdvancedSettingsContent() {
     return `
         <div class="settings-section">
             <div class="settings-section-title">
-                <span class="settings-section-icon">🔧</span>
+                <span class="settings-section-icon"><img src="/src/assets/icons/wrench.svg" class="svg-icon" alt="🔧"></span>
                 Performance
             </div>
             <div class="settings-list">
@@ -820,7 +818,7 @@ export function createAdvancedSettingsContent() {
 
         <div class="settings-section">
             <div class="settings-section-title">
-                <span class="settings-section-icon">🔒</span>
+                <span class="settings-section-icon"><img src="/src/assets/icons/lock.svg" class="svg-icon" alt="🔒"></span>
                 Security
             </div>
             <div class="settings-list">
@@ -871,7 +869,7 @@ export function createAdvancedSettingsContent() {
 
         <div class="settings-section">
             <div class="settings-section-title">
-                <span class="settings-section-icon">🐛</span>
+                <span class="settings-section-icon"><img src="/src/assets/icons/bug.svg" class="svg-icon" alt="🐛"></span>
                 Debugging
             </div>
             <div class="settings-list">
@@ -922,7 +920,7 @@ export function createAdvancedSettingsContent() {
 
         <div class="settings-section">
             <div class="settings-section-title">
-                <span class="settings-section-icon">🔄</span>
+                <span class="settings-section-icon"><img src="/src/assets/icons/refresh.svg" class="svg-icon" alt="🔄"></span>
                 Updates
             </div>
             <div class="settings-list">
@@ -974,7 +972,7 @@ export function createAdvancedSettingsContent() {
 export function createAboutSettingsContent() {
     return `
         <div class="about-header">
-            <div class="app-icon">🔥</div>
+            <div class="app-icon"><img src="/src/assets/icons/fire.svg" class="svg-icon" alt="🔥"></div>
             <h2 class="app-title">Thermic Terminal</h2>
             <p class="app-subtitle">Modern terminal emulator with advanced features</p>
             <div class="app-version">
@@ -984,7 +982,7 @@ export function createAboutSettingsContent() {
 
         <div class="settings-section">
             <div class="settings-section-title">
-                <span class="settings-section-icon">ℹ️</span>
+                <span class="settings-section-icon"><img src="/src/assets/icons/info.svg" class="svg-icon" alt="ℹ️"></span>
                 Application
             </div>
             <div class="settings-list">
@@ -1037,7 +1035,7 @@ export function createAboutSettingsContent() {
 
         <div class="settings-section">
             <div class="settings-section-title">
-                <span class="settings-section-icon">💻</span>
+                <span class="settings-section-icon"><img src="/src/assets/icons/laptop.svg" class="svg-icon" alt="💻"></span>
                 System Information
             </div>
             <div class="settings-list">
@@ -1079,7 +1077,7 @@ export function createAboutSettingsContent() {
 
         <div class="settings-section">
             <div class="settings-section-title">
-                <span class="settings-section-icon">🙏</span>
+                <span class="settings-section-icon"><img src="/src/assets/icons/heart.svg" class="svg-icon" alt="🙏"></span>
                 Acknowledgments
             </div>
             <div class="settings-list">
@@ -1109,34 +1107,34 @@ export function createTerminalContextMenuTemplate() {
     return `
         <div class="context-menu" id="terminal-context-menu">
             <div class="context-menu-item" data-action="copy">
-                <span class="context-menu-item-icon">📋</span>
+                <span class="context-menu-item-icon"><img src="/src/assets/icons/clipboard.svg" class="svg-icon" alt="📋"></span>
                 <span>Copy</span>
                 <span class="context-menu-shortcut">Ctrl+C</span>
             </div>
             <div class="context-menu-item" data-action="paste">
-                <span class="context-menu-item-icon">📄</span>
+                <span class="context-menu-item-icon"><img src="/src/assets/icons/page.svg" class="svg-icon" alt="📄"></span>
                 <span>Paste</span>
                 <span class="context-menu-shortcut">Ctrl+V</span>
             </div>
             <div class="context-menu-separator"></div>
             <div class="context-menu-item" data-action="select-all">
-                <span class="context-menu-item-icon">🔤</span>
+                <span class="context-menu-item-icon"><img src="/src/assets/icons/text.svg" class="svg-icon" alt="🔤"></span>
                 <span>Select All</span>
                 <span class="context-menu-shortcut">Ctrl+A</span>
             </div>
             <div class="context-menu-separator"></div>
             <div class="context-menu-item" data-action="clear">
-                <span class="context-menu-item-icon">🗑️</span>
+                <span class="context-menu-item-icon"><img src="/src/assets/icons/trash.svg" class="svg-icon" alt="🗑️"></span>
                 <span>Clear Terminal</span>
                 <span class="context-menu-shortcut">Ctrl+L</span>
             </div>
             <div class="context-menu-item" data-action="scroll-to-top">
-                <span class="context-menu-item-icon">⬆️</span>
+                <span class="context-menu-item-icon"><img src="/src/assets/icons/arrow-up.svg" class="svg-icon" alt="⬆️"></span>
                 <span>Scroll to Top</span>
                 <span class="context-menu-shortcut">Ctrl+Home</span>
             </div>
             <div class="context-menu-item" data-action="scroll-to-bottom">
-                <span class="context-menu-item-icon">⬇️</span>
+                <span class="context-menu-item-icon"><img src="/src/assets/icons/arrow-down.svg" class="svg-icon" alt="⬇️"></span>
                 <span>Scroll to Bottom</span>
                 <span class="context-menu-shortcut">Ctrl+End</span>
             </div>
@@ -1148,44 +1146,44 @@ export function createSidebarContextMenuTemplate() {
     return `
         <div class="context-menu" id="sidebar-context-menu">
             <div class="context-menu-item" data-action="connect">
-                <span class="context-menu-item-icon">🔗</span>
+                <span class="context-menu-item-icon"><img src="/src/assets/icons/link.svg" class="svg-icon" alt="🔗"></span>
                 <span>Connect</span>
             </div>
             <div class="context-menu-separator"></div>
             <div class="context-menu-item context-menu-create-section" data-action="create-profile">
-                <span class="context-menu-item-icon">➕</span>
+                <span class="context-menu-item-icon"><img src="/src/assets/icons/plus.svg" class="svg-icon" alt="➕"></span>
                 <span>Create Profile</span>
             </div>
             <div class="context-menu-item context-menu-create-section" data-action="create-folder">
-                <span class="context-menu-item-icon">📁</span>
+                <span class="context-menu-item-icon"><img src="/src/assets/icons/folder.svg" class="svg-icon" alt="📁"></span>
                 <span>Create Folder</span>
             </div>
             <div class="context-menu-separator context-menu-create-separator"></div>
             <div class="context-menu-item" data-action="search">
-                <span class="context-menu-item-icon">🔍</span>
+                <span class="context-menu-item-icon"><img src="/src/assets/icons/search.svg" class="svg-icon" alt="🔍"></span>
                 <span>Search Profiles</span>
             </div>
             <div class="context-menu-separator"></div>
             <div class="context-menu-item" data-action="edit">
-                <span class="context-menu-item-icon">✏️</span>
+                <span class="context-menu-item-icon"><img src="/src/assets/icons/edit.svg" class="svg-icon" alt="✏️"></span>
                 <span>Edit</span>
             </div>
             <div class="context-menu-item" data-action="duplicate">
-                <span class="context-menu-item-icon">📑</span>
+                <span class="context-menu-item-icon"><img src="/src/assets/icons/copy.svg" class="svg-icon" alt="📑"></span>
                 <span>Duplicate</span>
             </div>
             <div class="context-menu-item" data-action="rename">
-                <span class="context-menu-item-icon">📝</span>
+                <span class="context-menu-item-icon"><img src="/src/assets/icons/rename.svg" class="svg-icon" alt="📝"></span>
                 <span>Rename</span>
             </div>
             <div class="context-menu-separator"></div>
             <div class="context-menu-item" data-action="delete">
-                <span class="context-menu-item-icon">🗑️</span>
+                <span class="context-menu-item-icon"><img src="/src/assets/icons/trash.svg" class="svg-icon" alt="🗑️"></span>
                 <span>Delete</span>
             </div>
             <div class="context-menu-separator"></div>
             <div class="context-menu-item" data-action="properties">
-                <span class="context-menu-item-icon">ℹ️</span>
+                <span class="context-menu-item-icon"><img src="/src/assets/icons/info.svg" class="svg-icon" alt="ℹ️"></span>
                 <span>Properties</span>
             </div>
         </div>
@@ -1196,25 +1194,25 @@ export function createTabContextMenuTemplate() {
     return `
         <div class="context-menu" id="tab-context-menu">
             <div class="context-menu-item" data-action="tab-reconnect">
-                <span class="context-menu-item-icon">🔄</span>
+                <span class="context-menu-item-icon"><img src="/src/assets/icons/refresh.svg" class="svg-icon" alt="🔄"></span>
                 <span>Reconnect</span>
             </div>
             <div class="context-menu-item" data-action="tab-force-disconnect">
-                <span class="context-menu-item-icon">❌</span>
+                <span class="context-menu-item-icon"><img src="/src/assets/icons/error.svg" class="svg-icon" alt="❌"></span>
                 <span>Force Disconnect</span>
             </div>
             <div class="context-menu-separator"></div>
             <div class="context-menu-item" data-action="tab-duplicate">
-                <span class="context-menu-item-icon">📑</span>
+                <span class="context-menu-item-icon"><img src="/src/assets/icons/copy.svg" class="svg-icon" alt="📑"></span>
                 <span>Duplicate Tab</span>
             </div>
             <div class="context-menu-separator"></div>
             <div class="context-menu-item" data-action="tab-close">
-                <span class="context-menu-item-icon">❌</span>
+                <span class="context-menu-item-icon"><img src="/src/assets/icons/error.svg" class="svg-icon" alt="❌"></span>
                 <span>Close Tab</span>
             </div>
             <div class="context-menu-item" data-action="tab-close-others">
-                <span class="context-menu-item-icon">🗂️</span>
+                <span class="context-menu-item-icon"><img src="/src/assets/icons/files.svg" class="svg-icon" alt="🗂️"></span>
                 <span>Close Other Tabs</span>
             </div>
         </div>
@@ -1229,15 +1227,15 @@ export function createProfilePanelTemplate() {
                 <div class="profile-panel-header">
                     <div class="profile-tabs-container">
                         <button class="profile-tab active" data-tab="general">
-                            <span class="profile-tab-icon">📝</span>
+                            <span class="profile-tab-icon"><img src="/src/assets/icons/edit.svg" class="svg-icon" alt="📝"></span>
                             General
                         </button>
                         <button class="profile-tab" data-tab="connection">
-                            <span class="profile-tab-icon">🔗</span>
+                            <span class="profile-tab-icon"><img src="/src/assets/icons/link.svg" class="svg-icon" alt="🔗"></span>
                             Connection
                         </button>
                         <button class="profile-tab" data-tab="settings">
-                            <span class="profile-tab-icon">⚙️</span>
+                            <span class="profile-tab-icon"><img src="/src/assets/icons/settings.svg" class="svg-icon" alt="⚙️"></span>
                             Settings
                         </button>
                     </div>
@@ -1277,7 +1275,7 @@ export function createProfileFormTemplate(mode, type, data = null) {
         return `
             <div class="profile-form-section">
                 <div class="profile-form-section-title">
-                    <span class="profile-form-section-icon">📁</span>
+                    <span class="profile-form-section-icon"><img src="/src/assets/icons/folder.svg" class="svg-icon" alt="📁"></span>
                     Folder Information
                 </div>
                 <div class="form-group">
@@ -1311,7 +1309,7 @@ export function createProfileFormTemplate(mode, type, data = null) {
         return `
             <div class="profile-form-section">
                 <div class="profile-form-section-title">
-                    <span class="profile-form-section-icon">ℹ️</span>
+                    <span class="profile-form-section-icon"><img src="/src/assets/icons/info.svg" class="svg-icon" alt="ℹ️"></span>
                     Basic Information
                 </div>
                 <div class="form-group">
@@ -1343,16 +1341,23 @@ export function createProfileFormTemplate(mode, type, data = null) {
 
             <div class="profile-form-section">
                 <div class="profile-form-section-title">
-                    <span class="profile-form-section-icon">🔧</span>
+                    <span class="profile-form-section-icon"><img src="/src/assets/icons/link.svg" class="svg-icon" alt="🔗"></span>
                     Connection Settings
                 </div>
-                <div class="form-group">
-                    <label for="profile-type">Profile Type</label>
-                    <select id="profile-type" class="form-select">
-                        <option value="local" ${data?.type === 'local' ? 'selected' : ''}>Local Shell</option>
-                        <option value="ssh" ${data?.type === 'ssh' ? 'selected' : ''}>SSH Connection</option>
-                        <option value="custom" ${data?.type === 'custom' ? 'selected' : ''}>Custom Command</option>
-                    </select>
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Profile Type</div>
+                            <div class="setting-item-description">Choose the connection type for this profile</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <select class="modern-select" id="profile-type">
+                                <option value="local">Local Shell</option>
+                                <option value="ssh">SSH Connection</option>
+                                <option value="custom">Custom Command</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
                 <div class="form-group local-shell-group" style="display: ${data?.type === 'local' || !data?.type ? 'block' : 'none'}">
                     <label for="profile-shell">Shell Command</label>
@@ -1372,7 +1377,7 @@ export function createProfileFormTemplate(mode, type, data = null) {
 
             <div class="profile-form-section ssh-group" style="display: ${data?.type === 'ssh' ? 'block' : 'none'}">
                 <div class="profile-form-section-title">
-                    <span class="profile-form-section-icon">🔐</span>
+                    <span class="profile-form-section-icon"><img src="/src/assets/icons/lock.svg" class="svg-icon" alt="🔐"></span>
                     SSH Configuration
                 </div>
                 <div class="form-group">
@@ -1395,7 +1400,7 @@ export function createProfileFormTemplate(mode, type, data = null) {
                     <label for="ssh-keypath">Private Key Path (optional)</label>
                     <div class="ssh-key-path-container">
                         <input type="text" id="ssh-keypath" class="form-input" value="${data?.sshConfig?.keyPath || ''}" placeholder="/path/to/private/key">
-                        <button type="button" class="modern-button secondary" id="browse-ssh-key">📂 Browse</button>
+                        <button type="button" class="modern-button secondary" id="browse-ssh-key"><img src="/src/assets/icons/folder-open.svg" class="svg-icon" alt="📂"> Browse</button>
                     </div>
                 </div>
             </div>
@@ -1408,7 +1413,7 @@ export function createProfileConnectionContent(type, data = null) {
         return `
             <div class="profile-form-section">
                 <div class="profile-form-section-title">
-                    <span class="profile-form-section-icon">🔗</span>
+                    <span class="profile-form-section-icon"><img src="/src/assets/icons/link.svg" class="svg-icon" alt="🔗"></span>
                     Connection Settings
                 </div>
                 <div class="setting-item">
@@ -1432,7 +1437,7 @@ export function createProfileConnectionContent(type, data = null) {
     return `
         <div class="profile-form-section">
             <div class="profile-form-section-title">
-                <span class="profile-form-section-icon">🔗</span>
+                <span class="profile-form-section-icon"><img src="/src/assets/icons/link.svg" class="svg-icon" alt="🔗"></span>
                 Connection Settings
             </div>
             <div class="setting-item">
@@ -1490,7 +1495,7 @@ export function createProfileSettingsContent(type, data = null) {
         return `
             <div class="profile-form-section">
                 <div class="profile-form-section-title">
-                    <span class="profile-form-section-icon">⚙️</span>
+                    <span class="profile-form-section-icon"><img src="/src/assets/icons/settings.svg" class="svg-icon" alt="⚙️"></span>
                     Folder Settings
                 </div>
                 <div class="setting-item">
@@ -1530,7 +1535,7 @@ export function createProfileSettingsContent(type, data = null) {
     return `
         <div class="profile-form-section">
             <div class="profile-form-section-title">
-                <span class="profile-form-section-icon">⚙️</span>
+                <span class="profile-form-section-icon"><img src="/src/assets/icons/settings.svg" class="svg-icon" alt="⚙️"></span>
                 Profile Settings
             </div>
             <div class="setting-item">
