@@ -25,36 +25,12 @@ A modern, cross-platform terminal emulator built with **Wails** and **xterm.js**
 - **Linux**: bash, zsh, fish, sh, and all available shells
 - **WSL**: Automatic detection and integration of all WSL distributions
 
-### 🏗️ **Developer Features**  
-- **🤖 CI/CD Pipeline**: Automated building and releasing for all platforms
-- **📦 Binary Distribution**: Ready-to-run executables for all major platforms
-- **🔧 Hot Reload**: Development mode with live frontend/backend updates
-- **🧪 Quality Assurance**: Automated testing and code quality checks
-
 ## 🚀 Quick Start
 
 ### Option 1: Download Pre-built Binaries (Recommended)
 
 1. **Download** the latest release for your platform:
    - [📥 **Download Latest Release**](https://github.com/yzhelezko/thermic/releases/latest)
-
-2. **Install** and run:
-   ```bash
-   # Windows
-   # Download thermic-windows-amd64.exe and run
-
-   # Linux
-   chmod +x thermic-linux-amd64
-   ./thermic-linux-amd64
-
-   # macOS Intel
-   chmod +x thermic-darwin-amd64
-   ./thermic-darwin-amd64
-
-   # macOS Apple Silicon  
-   chmod +x thermic-darwin-arm64
-   ./thermic-darwin-arm64
-   ```
 
 ### Option 2: Build from Source
 
@@ -68,21 +44,8 @@ A modern, cross-platform terminal emulator built with **Wails** and **xterm.js**
    git clone https://github.com/yzhelezko/thermic.git
    cd thermic
    go mod tidy
-   cd frontend && npm install && cd ..
    wails build
    ```
-
-## 🎯 Architecture: VS Code Comparison
-
-| Component | **VS Code** | **Thermic** |
-|-----------|------------|---------------------|
-| **Backend** | Node.js + node-pty | Go + custom PTY |
-| **Frontend** | xterm.js | xterm.js (same!) |
-| **Platform** | Electron | Wails + WebView |
-| **Communication** | IPC | Wails Events |
-| **Bundle Size** | ~150MB | ~15MB |
-| **Memory Usage** | ~100MB | ~20MB |
-| **Startup Time** | ~2s | ~0.5s |
 
 ### 🔄 **Data Flow (VS Code Compatible)**
 ```
@@ -91,59 +54,39 @@ User Input → xterm.js → Wails Events → Go Backend → Shell Process
 xterm.js ← Wails Events ← Go Backend ← Raw Byte Stream ← Shell Output
 ```
 
+## 🔐 SSH Connection Support
+
+Thermic provides **seamless SSH connectivity** with intelligent private key discovery:
+
+### **🔑 Smart Key Discovery**
+When you create an SSH profile **without specifying a private key path**, Thermic automatically:
+- **🔍 Scans** your `.ssh` directory for all valid private keys
+- **✅ Validates** each key file to ensure it's a proper SSH private key
+- **🚀 Attempts** authentication with all discovered keys until one succeeds
+
+### **📁 SSH Directory Locations**
+Thermic looks for SSH keys in the standard locations:
+
+- **🪟 Windows**: `C:\Users\[username]\.ssh\`
+- **🐧 Linux**: `~/.ssh/` (typically `/home/[username]/.ssh/`)
+- **🍎 macOS**: `~/.ssh/` (typically `/Users/[username]/.ssh/`)
+
+### **🔧 SSH Key Support**
+- **✅ RSA keys**: `id_rsa`, `my_server_key`, etc.
+- **✅ Ed25519 keys**: `id_ed25519`, `github_key`, etc.
+- **✅ ECDSA keys**: `id_ecdsa`, `server_ecdsa`, etc.
+- **✅ DSA keys**: `id_dsa` (legacy support)
+- **✅ Custom named keys**: Any valid private key file
+
+**💡 Pro Tip**: Leave the `Private Key Path` field empty to enable automatic key discovery, or specify a exact path if you want to use a specific key.
+
 ## 🐧 WSL Integration
-
-Thermic provides **first-class WSL support** on Windows:
-
-### **Automatic Detection**
-- ✅ Detects all installed WSL distributions
-- ✅ Shows distribution status (Running/Stopped)
-- ✅ Identifies default distribution
-- ✅ Handles Unicode/BOM in WSL output correctly
 
 ### **Seamless Experience**
 - 🔄 **Easy Switching**: Toggle between Windows shells and Linux environments
 - 🚀 **Auto-Start**: WSL distributions start automatically when selected  
 - 🎨 **Native Display**: Full ANSI color and formatting support
 - ⚙️ **VS Code Compatible**: Uses same WSL launching mechanism as VS Code
-
-### **Supported WSL Features**
-```bash
-# All WSL features work seamlessly:
-ls -la --color=auto
-vim file.txt
-htop
-docker ps
-git status
-npm install
-```
-
-## 🤖 CI/CD & Releases
-
-### **Automated Pipeline**
-- **✅ Continuous Integration**: Tests and builds on every push
-- **✅ Cross-Platform Builds**: Windows, Linux, macOS (Intel + ARM) 
-- **✅ Automated Releases**: Tag-triggered releases with binaries
-- **✅ Quality Gates**: Go formatting, testing, and static analysis
-
-### **Creating Releases**
-
-#### **Method 1: Release Scripts (Recommended)**
-```bash
-# Linux/macOS
-./scripts/release.sh 1.0.0
-
-# Windows PowerShell  
-.\scripts\release.ps1 1.0.0
-```
-
-#### **Method 2: Manual Git Tags**
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-**🎉 Result**: Automatic GitHub release with 4 platform binaries!
 
 ## 💻 Development
 
@@ -164,41 +107,10 @@ wails build
 wails build -clean -trimpath
 ```
 
-### **Testing**
-```bash
-# Run tests
-go test ./...
-
-# Code formatting  
-gofmt -s -w .
-
-# Static analysis
-go vet ./...
-```
-
 ## 🎨 Terminal Features
-
-### **Interactive Commands** ✅
-```bash
-# Windows PowerShell
-Get-Process | Select-Object -First 5
-Get-ChildItem | Where-Object Name -like "*.go"
-
-# Windows CMD  
-dir /s
-echo %PATH%
-
-# Linux/macOS/WSL
-ls -la | grep ".git"
-ps aux | head -10
-htop
-```
 
 ### **Advanced Features** ✅
 - **🎨 ANSI Colors**: Full color and formatting support
-- **📝 Tab Completion**: Shell-native completion 
-- **🕐 Command History**: Persistent history per shell
-- **📏 Dynamic Resize**: Proper terminal resizing
 - **🔗 Clickable Links**: Web and file links detection
 - **⌨️ Keyboard Shortcuts**: Standard terminal key bindings
 - **📑 Multiple Tabs**: Support for multiple terminal sessions with drag-and-drop reordering
@@ -214,15 +126,6 @@ htop
 - **❌ Close Tabs**: Close individual tabs while keeping others open
 - **🏷️ Smart Titles**: Automatic tab naming based on shell type
 - **🌐 SSH Support**: Create SSH connection tabs alongside local shells
-
-### **Tab Shortcuts**
-```bash
-# Keyboard shortcuts for tab management
-Ctrl+Shift+T    # Create new tab
-Ctrl+Shift+N    # Create new SSH tab  
-Ctrl+W          # Close current tab
-Ctrl+Tab        # Switch to next tab
-```
 
 ## 🎯 Technology Stack
 
@@ -242,22 +145,6 @@ Ctrl+Tab        # Switch to next tab
 - **Windows**: WebView2 
 - **macOS**: WKWebView
 - **Linux**: WebKit2GTK
-
-## 📁 Project Structure
-
-```
-thermic/
-├── app.go                 # Main application logic
-├── main.go               # Wails app entry point
-├── frontend/             # xterm.js frontend
-│   ├── src/main.js      # Terminal implementation  
-│   └── index.html       # App shell
-├── .github/             # CI/CD workflows
-│   ├── workflows/       # GitHub Actions
-│   └── ISSUE_TEMPLATE/  # Issue templates
-├── scripts/             # Release automation
-└── build/              # Built binaries
-```
 
 ## 🤝 Contributing
 
@@ -289,18 +176,13 @@ We welcome contributions! Here's how to get started:
 - [x] Professional UI with VS Code theming
 - [x] Multiple terminal tabs with drag-and-drop reordering
 - [x] Tab management (create, close, switch, rename)
+- [x] SSH connection support with intelligent key discovery
 
 ### **🚧 In Progress**  
-- [ ] Customizable themes and color schemes
-- [ ] Font size and family configuration
+- [ ] To be defined
 
 ### **🔮 Planned**
-- [ ] Terminal session persistence  
-- [ ] SSH connection support
-- [ ] Plugin/extension system
-- [ ] Terminal multiplexing (tmux/screen integration)
-- [ ] Configuration file support
-- [ ] Keyboard shortcut customization
+- [ ] To be defined
 
 ## 📄 License
 

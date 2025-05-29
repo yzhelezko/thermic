@@ -15,4 +15,4 @@
 - Profile/folder renaming: saveProfileInternal/saveProfileFolderInternal automatically clean up old files to prevent duplicates with same ID
 - Theme toggle icon: always pass explicit isDark parameter to updateThemeToggleIcon() to avoid race conditions in production builds
 - Settings panel theme changes: must call terminalManager.updateTheme() and uiManager.onThemeChange() to update terminal output window
-- SSH key discovery: use platform-specific getDefaultSSHKeyPaths() function (Windows: %USERPROFILE%\.ssh, Unix: $HOME/.ssh)
+- SSH key discovery: scans entire .ssh directory for valid private keys when no keyPath specified (Windows: %USERPROFILE%\.ssh, Unix: $HOME/.ssh)
