@@ -679,10 +679,10 @@ export class Notification {
 
     getDefaultIcon(type) {
         const icons = {
-            success: '<img src="/src/assets/icons/star.svg" class="svg-icon" alt="✅">',
-            error: '<img src="/src/assets/icons/error.svg" class="svg-icon" alt="❌">',
-            warning: '<img src="/src/assets/icons/warning.svg" class="svg-icon" alt="⚠️">',
-            info: '<img src="/src/assets/icons/info.svg" class="svg-icon" alt="ℹ️">'
+            success: '<img src="./icons/star.svg" class="svg-icon" alt="✅">',
+            error: '<img src="./icons/error.svg" class="svg-icon" alt="❌">',
+            warning: '<img src="./icons/warning.svg" class="svg-icon" alt="⚠️">',
+            info: '<img src="./icons/info.svg" class="svg-icon" alt="ℹ️">'
         };
         return icons[type] || icons.info;
     }

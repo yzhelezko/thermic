@@ -70,7 +70,8 @@ export function getIconPath(emoji) {
         console.warn(`No SVG icon found for emoji: ${emoji}`);
         return null;
     }
-    return `/src/assets/icons/${iconName}.svg`;
+    // Use relative path that works in both dev and production
+    return `./icons/${iconName}.svg`;
 }
 
 /**
@@ -78,7 +79,7 @@ export function getIconPath(emoji) {
  * @returns {string} - Path to sun or moon icon
  */
 export function getThemeToggleIcon() {
-    return isDarkMode() ? '/src/assets/icons/sun.svg' : '/src/assets/icons/moon.svg';
+    return isDarkMode() ? './icons/sun.svg' : './icons/moon.svg';
 }
 
 /**
@@ -92,7 +93,8 @@ export async function loadSvgContent(iconName) {
     }
     
     try {
-        const response = await fetch(`/src/assets/icons/${iconName}.svg`);
+        // Use relative path that works in both dev and production
+        const response = await fetch(`./icons/${iconName}.svg`);
         if (!response.ok) {
             throw new Error(`Failed to load SVG: ${response.status}`);
         }
@@ -188,11 +190,15 @@ export function replaceEmojisWithIcons(html) {
 /**
  * Update theme toggle icon when theme changes
  * @param {HTMLElement} element - The element containing the theme toggle icon
+ * @param {boolean|null} isDark - Optional: explicitly set dark mode state. If null, will auto-detect.
  */
-export async function updateThemeToggleIcon(element) {
-    const isDark = isDarkMode();
-    const iconName = isDark ? 'sun' : 'moon';
-    const altText = isDark ? 'Toggle to light mode' : 'Toggle to dark mode';
+export async function updateThemeToggleIcon(element, isDark = null) {
+    // Use provided theme state or auto-detect as fallback
+    const darkMode = isDark !== null ? isDark : isDarkMode();
+    const iconName = darkMode ? 'sun' : 'moon';
+    const altText = darkMode ? 'Toggle to light mode' : 'Toggle to dark mode';
+    
+    console.log(`Updating theme toggle icon: ${darkMode ? 'dark' : 'light'} mode -> ${iconName} icon`);
     
     try {
         const svgContent = await loadSvgContent(iconName);
@@ -205,13 +211,13 @@ export async function updateThemeToggleIcon(element) {
             element.innerHTML = svgWithClasses;
         } else {
             // Fallback to img
-            const iconPath = `/src/assets/icons/${iconName}.svg`;
+            const iconPath = `./icons/${iconName}.svg`;
             element.innerHTML = `<img src="${iconPath}" class="svg-icon" alt="${altText}" width="20" height="20">`;
         }
     } catch (error) {
         console.error('Error updating theme toggle icon:', error);
         // Fallback to img
-        const iconPath = isDark ? '/src/assets/icons/sun.svg' : '/src/assets/icons/moon.svg';
+        const iconPath = darkMode ? './icons/sun.svg' : './icons/moon.svg';
         element.innerHTML = `<img src="${iconPath}" class="svg-icon" alt="${altText}" width="20" height="20">`;
     }
 }
@@ -255,7 +261,7 @@ export async function initializeThemeToggleIcon() {
  * Update all SVG icons to use inline SVGs for proper theme support
  */
 export async function updateAllIconsToInline() {
-    const imgIcons = document.querySelectorAll('.svg-icon[src*="/src/assets/icons/"]');
+    const imgIcons = document.querySelectorAll('.svg-icon[src*="./icons/"], .svg-icon[src*="/icons/"]');
     
     for (const img of imgIcons) {
         // Skip theme toggle as it's handled separately
@@ -783,4 +789,39 @@ if (typeof window !== 'undefined') {
     window.clearIconCache = clearIconCache;
     window.clearAllIconCache = clearAllIconCache;
     window.refreshSettingsIcon = refreshSettingsIcon;
-} 
+}
+
+/**
+ * Force update theme toggle icon (useful for fixing stuck icons)
+ * @param {boolean} isDark - The intended dark mode state
+ */
+export async function forceUpdateThemeToggleIcon(isDark) {
+    const themeToggle = document.getElementById('theme-toggle');
+    if (themeToggle) {
+        console.log('Force updating theme toggle icon to:', isDark ? 'dark (sun icon)' : 'light (moon icon)');
+        await updateThemeToggleIcon(themeToggle, isDark);
+    } else {
+        console.warn('Theme toggle button not found for force update');
+    }
+}
+
+// Expose force update function globally for debugging in production
+window.forceUpdateThemeToggleIcon = forceUpdateThemeToggleIcon;
+
+/**
+ * Global debug function for theme icon issues (useful in production)
+ * Call from browser console: fixThemeIcon()
+ */
+window.fixThemeIcon = async function() {
+    console.log('🔧 Attempting to fix theme icon...');
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const isDark = currentTheme === 'dark';
+    console.log('Current theme:', currentTheme, 'isDark:', isDark);
+    
+    try {
+        await forceUpdateThemeToggleIcon(isDark);
+        console.log('✅ Theme icon fix attempted');
+    } catch (error) {
+        console.error('❌ Failed to fix theme icon:', error);
+    }
+}; 

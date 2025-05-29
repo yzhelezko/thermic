@@ -283,17 +283,18 @@ export class ActivityBarManager {
         body.setAttribute('data-theme', newTheme);
         document.documentElement.setAttribute('data-theme', newTheme);
 
-        // Update the theme toggle icon using the new async function
+        // Update the theme toggle icon using the new async function with explicit theme state
         setTimeout(async () => {
             try {
-                await updateThemeToggleIcon(themeToggle);
+                // Pass the intended theme state directly to avoid race condition
+                await updateThemeToggleIcon(themeToggle, this.isDarkTheme);
                 
                 // Also update all other icons to inline SVGs for proper theme support
                 await updateAllIconsToInline();
             } catch (error) {
                 console.error('Error updating theme icons:', error);
             }
-        }, 150); // Change icon halfway through rotation
+        }, 100); // Reduced timeout since we're not relying on DOM detection anymore
 
         // Debug the theme change
         console.log('Theme toggled from:', currentTheme ? 'dark' : 'light', 'to:', newTheme);
