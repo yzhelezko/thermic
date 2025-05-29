@@ -1,5 +1,6 @@
 // Activity Bar management module (VS Code style)
 import { updateStatus, showNotification } from './utils.js';
+import { updateThemeToggleIcon, updateAllIconsToInline } from '../utils/icons.js';
 
 export class ActivityBarManager {
     constructor(sidebarManager, uiManager = null) {
@@ -7,11 +8,49 @@ export class ActivityBarManager {
         this.uiManager = uiManager;
         this.currentView = 'profiles';
         this.sidebarCollapsed = false;
-        this.isDarkTheme = true; // Default to dark theme
+        this.isDarkTheme = true; // Default, will be updated in init
         this.savedSidebarWidth = 250; // Store the width before collapsing
     }
 
-    init() {
+    async detectCurrentTheme() {
+        // First check if we can load theme from backend config
+        if (window.go?.main?.App?.GetTheme) {
+            try {
+                const savedTheme = await window.go.main.App.GetTheme();
+                console.log('Loaded theme from config:', savedTheme);
+                if (savedTheme === 'dark' || savedTheme === 'light') {
+                    return savedTheme === 'dark';
+                }
+                // If saved theme is 'system', fall through to system detection
+                if (savedTheme === 'system') {
+                    console.log('System theme preference detected, checking system preference');
+                }
+            } catch (error) {
+                console.warn('Failed to load theme from config:', error);
+            }
+        }
+
+        // Check data-theme attribute
+        const dataTheme = document.documentElement.getAttribute('data-theme');
+        if (dataTheme) {
+            return dataTheme === 'dark';
+        }
+
+        // Check for dark-mode class on body
+        if (document.body.classList.contains('dark-mode')) {
+            return true;
+        }
+
+        // Check system preference as fallback
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            return true;
+        }
+
+        // Default to dark theme
+        return true;
+    }
+
+    async init() {
         this.setupActivityBarInteractions();
         this.setupSidebarCollapse();
         this.setupBottomButtons();
@@ -25,7 +64,30 @@ export class ActivityBarManager {
             this.applySidebarState();
         }
         
-        console.log('✅ Activity Bar initialized');
+        // Detect and sync the theme state on initialization
+        await this.initializeTheme();
+        
+        console.log('✅ Activity Bar initialized with theme:', this.isDarkTheme ? 'dark' : 'light');
+    }
+
+    async initializeTheme() {
+        // Detect the current theme from config or DOM
+        this.isDarkTheme = await this.detectCurrentTheme();
+        
+        // Sync the theme state to DOM
+        this.syncThemeState();
+    }
+
+    syncThemeState() {
+        // Make sure the DOM reflects our detected theme
+        const currentTheme = this.isDarkTheme ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', currentTheme);
+        document.body.setAttribute('data-theme', currentTheme);
+        
+        // Sync settings toggle
+        this.syncSettingsDarkModeToggle(this.isDarkTheme);
+        
+        console.log('Theme state synced:', currentTheme);
     }
 
     setupActivityBarInteractions() {
@@ -197,8 +259,11 @@ export class ActivityBarManager {
         updateStatus('Account button clicked');
     }
 
-    handleThemeToggle() {
-        this.isDarkTheme = !this.isDarkTheme;
+    async handleThemeToggle() {
+        // Detect current theme from DOM instead of just toggling internal state
+        const currentTheme = await this.detectCurrentTheme();
+        this.isDarkTheme = !currentTheme; // Toggle to opposite
+        
         const body = document.body;
         const themeToggle = document.getElementById('theme-toggle');
 
@@ -213,34 +278,54 @@ export class ActivityBarManager {
             themeToggle.classList.remove('rotating');
         }, 300);
 
-        if (this.isDarkTheme) {
-            body.setAttribute('data-theme', 'dark');
-            // Sun icon for dark theme (to switch to light)
-            setTimeout(() => {
-                themeToggle.innerHTML = `
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.166a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5H21a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-2.25A.75.75 0 0112 18zM7.758 17.303a.75.75 0 00-1.061-1.06l-1.591 1.59a.75.75 0 001.06 1.061l1.591-1.59zM6 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.25A.75.75 0 016 12zM6.697 7.757a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 00-1.061 1.06l1.59 1.591z"/>
-                    </svg>
-                `;
-            }, 150); // Change icon halfway through rotation
-        } else {
-            body.setAttribute('data-theme', 'light');
-            // Moon icon for light theme (to switch to dark)
-            setTimeout(() => {
-                themeToggle.innerHTML = `
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M9.528 1.718a.75.75 0 01.162.819A8.97 8.97 0 009 6a9 9 0 009 9 8.97 8.97 0 003.463-.69.75.75 0 01.981.98 10.503 10.503 0 01-9.694 6.46c-5.799 0-10.5-4.701-10.5-10.5 0-4.368 2.667-8.112 6.46-9.694a.75.75 0 01.818.162z"/>
-                    </svg>
-                `;
-            }, 150); // Change icon halfway through rotation
-        }
+        // Apply the new theme
+        const newTheme = this.isDarkTheme ? 'dark' : 'light';
+        body.setAttribute('data-theme', newTheme);
+        document.documentElement.setAttribute('data-theme', newTheme);
+
+        // Update the theme toggle icon using the new async function
+        setTimeout(async () => {
+            try {
+                await updateThemeToggleIcon(themeToggle);
+                
+                // Also update all other icons to inline SVGs for proper theme support
+                await updateAllIconsToInline();
+            } catch (error) {
+                console.error('Error updating theme icons:', error);
+            }
+        }, 150); // Change icon halfway through rotation
+
+        // Debug the theme change
+        console.log('Theme toggled from:', currentTheme ? 'dark' : 'light', 'to:', newTheme);
+        console.log('data-theme attribute:', document.documentElement.getAttribute('data-theme'));
 
         // Notify other managers of theme change
         if (window.thermicApp?.uiManager?.onThemeChange) {
             window.thermicApp.uiManager.onThemeChange(this.isDarkTheme);
         }
 
-        updateStatus(`Switched to ${this.isDarkTheme ? 'dark' : 'light'} theme`);
+        // Sync the settings panel dark mode toggle
+        this.syncSettingsDarkModeToggle(this.isDarkTheme);
+
+        // Save theme preference to config
+        if (window.go?.main?.App?.SetTheme) {
+            try {
+                const themeValue = this.isDarkTheme ? 'dark' : 'light';
+                await window.go.main.App.SetTheme(themeValue);
+                console.log('Theme preference saved to config:', themeValue);
+            } catch (error) {
+                console.warn('Failed to save theme to config:', error);
+            }
+        }
+
+        updateStatus(`Switched to ${newTheme} theme`);
+    }
+
+    syncSettingsDarkModeToggle(isDarkTheme) {
+        const darkModeToggle = document.getElementById('dark-mode-toggle');
+        if (darkModeToggle) {
+            darkModeToggle.checked = isDarkTheme;
+        }
     }
 
     getCurrentView() {

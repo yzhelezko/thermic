@@ -246,6 +246,10 @@ export function GetTabs() {
   return window['go']['main']['App']['GetTabs']();
 }
 
+export function GetTheme() {
+  return window['go']['main']['App']['GetTheme']();
+}
+
 export function GetVersionInfo() {
   return window['go']['main']['App']['GetVersionInfo']();
 }
@@ -396,6 +400,10 @@ export function SetSidebarCollapsed(arg1) {
 
 export function SetSidebarWidth(arg1) {
   return window['go']['main']['App']['SetSidebarWidth'](arg1);
+}
+
+export function SetTheme(arg1) {
+  return window['go']['main']['App']['SetTheme'](arg1);
 }
 
 export function ShowMessageDialog(arg1, arg2) {

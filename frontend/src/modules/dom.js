@@ -60,9 +60,17 @@ export class DOMManager {
     }
 
     renderSettingsPanel() {
+        console.log('Rendering settings panel...');
         const settingsOverlay = document.getElementById('settings-overlay');
         if (settingsOverlay) {
-            settingsOverlay.innerHTML = createSettingsPanelTemplate();
+            try {
+                settingsOverlay.innerHTML = createSettingsPanelTemplate();
+                console.log('Settings panel rendered successfully');
+            } catch (error) {
+                console.error('Error rendering settings panel:', error);
+            }
+        } else {
+            console.warn('Settings overlay element not found for rendering');
         }
     }
 

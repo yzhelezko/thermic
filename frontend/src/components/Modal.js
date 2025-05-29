@@ -439,7 +439,7 @@ export class Modal {
         return this.show({
             title,
             message,
-            icon: options.icon || '⚠️',
+            icon: options.icon || '<img src="/src/assets/icons/warning.svg" class="svg-icon" alt="⚠️">',
             buttons: [
                 { text: options.cancelText || 'Cancel', style: 'secondary', action: 'cancel' },
                 { text: options.confirmText || 'Confirm', style: options.danger ? 'danger' : 'primary', action: 'confirm' }
@@ -456,7 +456,7 @@ export class Modal {
             `Delete ${itemType}`,
             `Are you sure you want to delete "${itemName}"? This action cannot be undone.`,
             {
-                icon: '🗑️',
+                icon: '<img src="/src/assets/icons/error.svg" class="svg-icon" alt="🗑️">',
                 confirmText: 'Delete',
                 danger: true
             }
@@ -470,7 +470,7 @@ export class Modal {
         return this.show({
             title,
             message,
-            icon: options.icon || 'ℹ️',
+            icon: options.icon || '<img src="/src/assets/icons/info.svg" class="svg-icon" alt="ℹ️">',
             buttons: [
                 { text: 'OK', style: 'primary', action: 'ok' }
             ],
@@ -485,7 +485,7 @@ export class Modal {
         return this.show({
             title,
             message,
-            icon: options.icon || '❌',
+            icon: options.icon || '<img src="/src/assets/icons/error.svg" class="svg-icon" alt="❌">',
             buttons: [
                 { text: 'OK', style: 'danger', action: 'ok' }
             ],
@@ -500,7 +500,7 @@ export class Modal {
         return this.show({
             title,
             message,
-            icon: options.icon || '✅',
+            icon: options.icon || '<img src="/src/assets/icons/star.svg" class="svg-icon" alt="✅">',
             buttons: [
                 { text: 'OK', style: 'success', action: 'ok' }
             ],

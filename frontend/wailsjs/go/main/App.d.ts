@@ -125,6 +125,8 @@ export function GetTabStatus(arg1:string):Promise<Record<string, any>>;
 
 export function GetTabs():Promise<Array<main.Tab>>;
 
+export function GetTheme():Promise<string>;
+
 export function GetVersionInfo():Promise<main.VersionInfo>;
 
 export function GetVirtualFolderProfilesAPI(arg1:string):Promise<Array<main.Profile>>;
@@ -200,6 +202,8 @@ export function SetSelectToCopyEnabled(arg1:boolean):Promise<void>;
 export function SetSidebarCollapsed(arg1:boolean):Promise<void>;
 
 export function SetSidebarWidth(arg1:number):Promise<void>;
+
+export function SetTheme(arg1:string):Promise<void>;
 
 export function ShowMessageDialog(arg1:string,arg2:string):Promise<void>;
 

@@ -1,5 +1,6 @@
 // Settings management module
 import { showNotification } from './utils.js';
+import { updateAllIconsToInline, updateThemeToggleIcon } from '../utils/icons.js';
 
 export class SettingsManager {
     constructor() {
@@ -75,12 +76,35 @@ export class SettingsManager {
                 // Force display to ensure it's visible (CSS fallback)
                 overlay.style.display = 'block';
                 
+                // Ensure the settings panel HTML is rendered first
+                if (!overlay.innerHTML.trim()) {
+                    console.log('Rendering settings panel HTML...');
+                    try {
+                        // Import and render the template
+                        const { createSettingsPanelTemplate } = await import('./templates.js');
+                        overlay.innerHTML = createSettingsPanelTemplate();
+                        // Reset the initialization flag since we have new HTML
+                        this.settingsTabsInitialized = false;
+                        console.log('Settings panel HTML rendered successfully');
+                    } catch (error) {
+                        console.error('Error rendering settings panel template:', error);
+                        return;
+                    }
+                }
+                
                 // Initialize settings tabs if not already done
                 try {
                     await this.initializeSettingsTabs();
                 } catch (tabsError) {
                     console.error('Error initializing settings tabs:', tabsError);
                     // Still show the panel even if tabs initialization fails
+                }
+                
+                // Convert any img-based icons to inline SVGs for proper theme support
+                try {
+                    await updateAllIconsToInline();
+                } catch (iconsError) {
+                    console.warn('Error updating icons in settings panel:', iconsError);
                 }
             }
         } catch (error) {
@@ -89,12 +113,15 @@ export class SettingsManager {
     }
 
     async initializeSettingsTabs() {
-        // Avoid multiple initializations
+        // Avoid multiple initializations unless we've reset the flag
         if (this.settingsTabsInitialized) {
+            console.log('Settings tabs already initialized, skipping');
             return;
         }
         
         try {
+            console.log('Initializing settings tabs...');
+            
             const settingsTabs = document.querySelectorAll('.settings-tab');
             const settingsTabPanes = document.querySelectorAll('.settings-tab-pane');
 
@@ -103,9 +130,11 @@ export class SettingsManager {
                 return; // Elements not ready yet
             }
 
+            console.log(`Found ${settingsTabs.length} settings tabs and ${settingsTabPanes.length} tab panes`);
+
             settingsTabs.forEach((tab, index) => {
                 try {
-                    tab.addEventListener('click', () => {
+                    tab.addEventListener('click', async () => {
                         try {
                             // Deactivate all tabs and panes
                             settingsTabs.forEach(t => t.classList.remove('active'));
@@ -117,6 +146,13 @@ export class SettingsManager {
                             const targetPane = document.querySelector(targetPaneId);
                             if (targetPane) {
                                 targetPane.classList.add('active');
+                                
+                                // Update icons in the newly visible pane
+                                try {
+                                    await updateAllIconsToInline();
+                                } catch (iconsError) {
+                                    console.warn('Error updating icons in tab:', iconsError);
+                                }
                             } else {
                                 console.warn(`Target pane not found: ${targetPaneId}`);
                             }
@@ -131,23 +167,113 @@ export class SettingsManager {
 
             // Dark mode toggle in settings panel
             try {
+                console.log('Setting up dark mode toggle...');
                 const darkModeToggle = document.getElementById('dark-mode-toggle');
                 if (darkModeToggle) {
-                    darkModeToggle.addEventListener('change', () => {
+                    console.log('Dark mode toggle element found');
+                    // Initialize the toggle with theme from config (with fallback to DOM)
+                    let initialTheme = 'dark'; // default
+                    
+                    try {
+                        if (window.go?.main?.App?.GetTheme) {
+                            initialTheme = await window.go.main.App.GetTheme();
+                            console.log('Loaded initial theme from config for settings toggle:', initialTheme);
+                        } else {
+                            // Fallback to DOM
+                            const currentTheme = document.documentElement.getAttribute('data-theme');
+                            initialTheme = currentTheme || 'dark';
+                            console.log('Fallback: loaded initial theme from DOM for settings toggle:', initialTheme);
+                        }
+                    } catch (error) {
+                        console.warn('Failed to load theme from config, using DOM fallback:', error);
+                        const currentTheme = document.documentElement.getAttribute('data-theme');
+                        initialTheme = currentTheme || 'dark';
+                    }
+                    
+                    darkModeToggle.checked = initialTheme === 'dark';
+                    console.log('Settings dark mode toggle initialized with state:', darkModeToggle.checked);
+                    
+                    darkModeToggle.addEventListener('change', async () => {
                         try {
-                            this.onThemeChange?.();
+                            const isDarkMode = darkModeToggle.checked;
+                            console.log('Dark mode toggle changed in settings:', isDarkMode);
+                            
+                            // Apply the theme to DOM immediately
+                            const newTheme = isDarkMode ? 'dark' : 'light';
+                            document.documentElement.setAttribute('data-theme', newTheme);
+                            document.body.setAttribute('data-theme', newTheme);
+                            
+                            // Update theme toggle icon in activity bar
+                            const themeToggle = document.getElementById('theme-toggle');
+                            if (themeToggle) {
+                                await updateThemeToggleIcon(themeToggle);
+                            }
+                            
+                            // Update all icons to inline SVGs for proper theme support
+                            await updateAllIconsToInline();
+                            
+                            // Sync with activity bar manager if available
+                            if (window.thermicApp?.activityBarManager) {
+                                window.thermicApp.activityBarManager.isDarkTheme = isDarkMode;
+                                console.log('Synced theme state with activity bar manager');
+                            }
+                            
+                            // Save theme preference to config with improved error handling
+                            if (window.go?.main?.App?.SetTheme) {
+                                try {
+                                    const themeValue = isDarkMode ? 'dark' : 'light';
+                                    await window.go.main.App.SetTheme(themeValue);
+                                    console.log('✅ Theme preference saved to config from settings:', themeValue);
+                                } catch (configError) {
+                                    console.error('❌ Failed to save theme to config from settings:', configError);
+                                    
+                                    // Retry once after a short delay
+                                    setTimeout(async () => {
+                                        try {
+                                            await window.go.main.App.SetTheme(themeValue);
+                                            console.log('✅ Theme preference saved to config (retry successful):', themeValue);
+                                        } catch (retryError) {
+                                            console.error('❌ Failed to save theme to config (retry failed):', retryError);
+                                        }
+                                    }, 500);
+                                }
+                            } else {
+                                console.warn('⚠️ SetTheme method not available - Wails bindings may not be ready');
+                                
+                                // Wait a bit and try again
+                                setTimeout(async () => {
+                                    if (window.go?.main?.App?.SetTheme) {
+                                        try {
+                                            const themeValue = isDarkMode ? 'dark' : 'light';
+                                            await window.go.main.App.SetTheme(themeValue);
+                                            console.log('✅ Theme preference saved to config (delayed save):', themeValue);
+                                        } catch (delayedError) {
+                                            console.error('❌ Failed delayed save to config:', delayedError);
+                                        }
+                                    } else {
+                                        console.error('❌ SetTheme still not available after delay');
+                                    }
+                                }, 1000);
+                            }
+                            
+                            console.log('Theme applied from settings panel:', newTheme);
                         } catch (error) {
-                            console.error('Error in theme change handler:', error);
+                            console.error('Error in settings theme change handler:', error);
+                            // Revert the toggle on error
+                            darkModeToggle.checked = !darkModeToggle.checked;
                         }
                     });
+                    
+                    console.log('Dark mode toggle in settings panel initialized successfully');
                 } else {
-                    console.warn('Dark mode toggle not found');
+                    console.warn('Dark mode toggle not found in settings panel - element may not exist yet');
                 }
             } catch (error) {
-                console.error('Error setting up dark mode toggle:', error);
+                console.error('Error setting up dark mode toggle in settings:', error);
             }
 
             this.settingsTabsInitialized = true;
+            console.log('Settings tabs initialization completed successfully');
         } catch (error) {
             console.error('Error initializing settings tabs:', error);
         }
