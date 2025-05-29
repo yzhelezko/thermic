@@ -333,17 +333,6 @@ jobs:
           - **macOS Intel**: thermic-darwin-amd64.zip (contains Thermic.app)
           - **macOS Apple Silicon**: thermic-darwin-arm64.zip (contains Thermic.app)
           
-          ### 🌟 Key Features
-          - 🖥️ Cross-platform terminal emulator
-          - 🔒 Advanced SSH connection management with auto-reconnect
-          - 🐧 WSL support on Windows
-          - 🎨 VS Code-like terminal experience with tabs
-          - ⚡ Built with Wails and xterm.js
-          - 🔄 Auto-update functionality
-          - 📊 Real-time system monitoring in status bar
-          - 🎯 Smart connection hanging detection
-          - 🔧 Context-aware right-click menus
-          
           ### 🚀 Installation
           
           #### Windows
