@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"syscall"
 
@@ -133,4 +134,40 @@ func findShellExecutable(shell string) (string, error) {
 	}
 
 	return "", fmt.Errorf("shell '%s' not found or not executable on %s", shell, runtime.GOOS)
+}
+
+// getDefaultSSHKeyPaths returns default SSH key paths for Unix-like systems
+func (a *App) getDefaultSSHKeyPaths() []string {
+	// Get user home directory
+	homeDir := os.Getenv("HOME")
+	if homeDir == "" {
+		// Fallback to os.UserHomeDir()
+		var err error
+		homeDir, err = os.UserHomeDir()
+		if err != nil {
+			return []string{} // No default paths available
+		}
+	}
+
+	sshDir := filepath.Join(homeDir, ".ssh")
+
+	// First try to scan the entire .ssh directory for valid private keys
+	discoveredKeys := a.scanSSHDirectory(sshDir)
+	if len(discoveredKeys) > 0 {
+		// Limit to first 10 keys to avoid excessive authentication attempts
+		if len(discoveredKeys) > 10 {
+			discoveredKeys = discoveredKeys[:10]
+		}
+		fmt.Printf("Using %d discovered SSH keys from %s\n", len(discoveredKeys), sshDir)
+		return discoveredKeys
+	}
+
+	// Fallback to common key names if directory scan didn't find anything
+	fmt.Printf("No SSH keys discovered, falling back to common key names in %s\n", sshDir)
+	return []string{
+		os.ExpandEnv("$HOME/.ssh/id_rsa"),
+		os.ExpandEnv("$HOME/.ssh/id_ed25519"),
+		os.ExpandEnv("$HOME/.ssh/id_ecdsa"),
+		os.ExpandEnv("$HOME/.ssh/id_dsa"), // Legacy key type
+	}
 }

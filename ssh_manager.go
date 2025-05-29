@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -91,21 +92,27 @@ func (a *App) CreateSSHSessionWithSize(sessionID string, config *SSHConfig, cols
 		if agentAuth, err := a.getSSHAgentAuth(); err == nil {
 			sshConfig.Auth = append(sshConfig.Auth, agentAuth)
 			authMethodsAdded++
+			fmt.Printf("Added SSH agent authentication\n")
 		}
 
-		// Try default key locations
-		defaultKeys := []string{
-			os.ExpandEnv("$HOME/.ssh/id_rsa"),
-			os.ExpandEnv("$HOME/.ssh/id_ed25519"),
-			os.ExpandEnv("$HOME/.ssh/id_ecdsa"),
-		}
+		// Try default key locations using platform-specific paths
+		defaultKeys := a.getDefaultSSHKeyPaths()
+		var validKeys []ssh.Signer
 
 		for _, keyPath := range defaultKeys {
 			if key, err := a.loadSSHKey(keyPath); err == nil {
-				sshConfig.Auth = append(sshConfig.Auth, ssh.PublicKeys(key))
-				authMethodsAdded++
-				break
+				validKeys = append(validKeys, key)
+				fmt.Printf("Successfully loaded SSH key: %s\n", keyPath)
+			} else {
+				fmt.Printf("Failed to load SSH key %s: %v\n", keyPath, err)
 			}
+		}
+
+		// Add all valid keys to authentication methods
+		if len(validKeys) > 0 {
+			sshConfig.Auth = append(sshConfig.Auth, ssh.PublicKeys(validKeys...))
+			authMethodsAdded++
+			fmt.Printf("Added %d SSH private keys for authentication\n", len(validKeys))
 		}
 	}
 
@@ -559,6 +566,21 @@ func (a *App) CreateMonitoringSession(sshSession *SSHSession, config *SSHConfig)
 		if agentAuth, err := a.getSSHAgentAuth(); err == nil {
 			sshConfig.Auth = append(sshConfig.Auth, agentAuth)
 		}
+
+		// Try default key locations using platform-specific paths
+		defaultKeys := a.getDefaultSSHKeyPaths()
+		var validKeys []ssh.Signer
+
+		for _, keyPath := range defaultKeys {
+			if key, err := a.loadSSHKey(keyPath); err == nil {
+				validKeys = append(validKeys, key)
+			}
+		}
+
+		// Add all valid keys to authentication methods
+		if len(validKeys) > 0 {
+			sshConfig.Auth = append(sshConfig.Auth, ssh.PublicKeys(validKeys...))
+		}
 	}
 
 	// Connect monitoring client
@@ -660,4 +682,124 @@ func (a *App) CloseMonitoringSession(sshSession *SSHSession) {
 		fmt.Printf("Closed monitoring SSH session for %s\n", sshSession.sessionID)
 	}
 	sshSession.monitoringEnabled = false
+}
+
+// scanSSHDirectory scans the .ssh directory for potential private key files
+func (a *App) scanSSHDirectory(sshDir string) []string {
+	var keyFiles []string
+
+	// Check if directory exists
+	if _, err := os.Stat(sshDir); os.IsNotExist(err) {
+		return keyFiles
+	}
+
+	// Read directory contents
+	entries, err := os.ReadDir(sshDir)
+	if err != nil {
+		fmt.Printf("Failed to read SSH directory %s: %v\n", sshDir, err)
+		return keyFiles
+	}
+
+	// Filter for potential private key files
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue // Skip directories
+		}
+
+		filename := entry.Name()
+		filePath := filepath.Join(sshDir, filename)
+
+		// Skip known non-key files
+		if a.shouldSkipFile(filename) {
+			continue
+		}
+
+		// Check if it's a valid private key
+		if a.isValidPrivateKey(filePath) {
+			keyFiles = append(keyFiles, filePath)
+		}
+	}
+
+	fmt.Printf("Found %d potential SSH private keys in %s\n", len(keyFiles), sshDir)
+	return keyFiles
+}
+
+// shouldSkipFile determines if a file should be skipped during SSH key scanning
+func (a *App) shouldSkipFile(filename string) bool {
+	filename = strings.ToLower(filename)
+
+	// Skip public key files
+	if strings.HasSuffix(filename, ".pub") {
+		return true
+	}
+
+	// Skip known SSH configuration files
+	skipFiles := []string{
+		"known_hosts",
+		"authorized_keys",
+		"config",
+		"environment",
+		".DS_Store",
+	}
+
+	for _, skipFile := range skipFiles {
+		if filename == skipFile {
+			return true
+		}
+	}
+
+	// Skip backup files
+	if strings.HasSuffix(filename, ".old") ||
+		strings.HasSuffix(filename, ".bak") ||
+		strings.HasSuffix(filename, ".backup") {
+		return true
+	}
+
+	// Skip temporary files
+	if strings.HasPrefix(filename, ".") && strings.HasSuffix(filename, ".tmp") {
+		return true
+	}
+
+	return false
+}
+
+// isValidPrivateKey checks if a file is a valid SSH private key
+func (a *App) isValidPrivateKey(filePath string) bool {
+	// Check file permissions and size
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		return false
+	}
+
+	// Skip files that are too large (private keys are typically < 10KB)
+	if fileInfo.Size() > 10*1024 {
+		return false
+	}
+
+	// Skip files that are too small (private keys are typically > 100 bytes)
+	if fileInfo.Size() < 100 {
+		return false
+	}
+
+	// Try to read and parse as SSH private key
+	keyData, err := os.ReadFile(filePath)
+	if err != nil {
+		return false
+	}
+
+	// Check if it looks like a private key by content
+	keyStr := string(keyData)
+	if !strings.Contains(keyStr, "BEGIN") || !strings.Contains(keyStr, "PRIVATE KEY") {
+		return false
+	}
+
+	// Try to parse it as an SSH private key
+	_, err = ssh.ParsePrivateKey(keyData)
+	if err != nil {
+		// Not a valid private key
+		return false
+	}
+
+	fmt.Printf("Found valid SSH private key: %s\n", filePath)
+	return true
 }
