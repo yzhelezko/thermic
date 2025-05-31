@@ -9,6 +9,8 @@ export function CheckForUpdates():Promise<main.UpdateInfo>;
 
 export function CheckWSLAvailable():Promise<boolean>;
 
+export function CloseFileExplorerSession(arg1:string):Promise<void>;
+
 export function CloseMonitoringSession(arg1:main.SSHSession):Promise<void>;
 
 export function CloseSSHSession(arg1:main.SSHSession):Promise<void>;
@@ -39,6 +41,8 @@ export function CreateProfileWithFolderID(arg1:string,arg2:string,arg3:string,ar
 
 export function CreateProfileWithFolderIDAPI(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<main.Profile>;
 
+export function CreateRemoteDirectory(arg1:string,arg2:string):Promise<void>;
+
 export function CreateSSHSession(arg1:string,arg2:main.SSHConfig):Promise<main.SSHSession>;
 
 export function CreateSSHSessionWithSize(arg1:string,arg2:main.SSHConfig,arg3:number,arg4:number):Promise<main.SSHSession>;
@@ -57,7 +61,13 @@ export function DeleteProfileFolderAPI(arg1:string):Promise<void>;
 
 export function DeleteProfileFolderWithContentsAPI(arg1:string):Promise<void>;
 
+export function DeleteRemotePath(arg1:string,arg2:string):Promise<void>;
+
+export function DeleteRemotePathAdvanced(arg1:string,arg2:string,arg3:boolean):Promise<void>;
+
 export function DownloadAndInstallUpdate(arg1:string):Promise<void>;
+
+export function DownloadRemoteFile(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function DuplicateProfile(arg1:string):Promise<main.Profile>;
 
@@ -109,7 +119,11 @@ export function GetProfilesDirectory():Promise<string>;
 
 export function GetProfilesPath():Promise<string>;
 
+export function GetRemoteFileContent(arg1:string,arg2:string):Promise<string>;
+
 export function GetRemoteSystemStats(arg1:string):Promise<Record<string, any>>;
+
+export function GetRemoteWorkingDirectory(arg1:string):Promise<string>;
 
 export function GetSelectToCopyEnabled():Promise<boolean>;
 
@@ -141,11 +155,15 @@ export function GetWindowMaximizedState():Promise<boolean>;
 
 export function Greet(arg1:string):Promise<string>;
 
+export function InitializeFileExplorerSession(arg1:string):Promise<void>;
+
 export function InitializeProfiles():Promise<void>;
 
 export function IsSessionClosed(arg1:string):Promise<boolean>;
 
 export function IsWindowMaximized():Promise<boolean>;
+
+export function ListRemoteFiles(arg1:string,arg2:string):Promise<Array<main.RemoteFileEntry>>;
 
 export function LoadProfile(arg1:string):Promise<main.Profile>;
 
@@ -169,6 +187,8 @@ export function MoveProfileByIDAPI(arg1:string,arg2:string):Promise<void>;
 
 export function ReconnectTab(arg1:string):Promise<void>;
 
+export function RenameRemotePath(arg1:string,arg2:string,arg3:string):Promise<void>;
+
 export function RenameTab(arg1:string,arg2:string):Promise<void>;
 
 export function ReorderTabs(arg1:Array<string>):Promise<void>;
@@ -189,7 +209,11 @@ export function SelectDirectory():Promise<string>;
 
 export function SelectFile(arg1:string,arg2:Array<frontend.FileFilter>):Promise<string>;
 
+export function SelectFilesToUpload():Promise<Array<string>>;
+
 export function SelectSSHPrivateKey():Promise<string>;
+
+export function SelectSaveLocation(arg1:string):Promise<string>;
 
 export function SetActiveTab(arg1:string):Promise<void>;
 
@@ -226,6 +250,10 @@ export function UpdateProfile(arg1:main.Profile):Promise<void>;
 export function UpdateProfileFolder(arg1:main.ProfileFolder):Promise<void>;
 
 export function UpdateProfileTagsAPI(arg1:string,arg2:Array<string>):Promise<void>;
+
+export function UpdateRemoteFileContent(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function UploadRemoteFiles(arg1:string,arg2:Array<string>,arg3:string):Promise<void>;
 
 export function WaitForSessionClose(arg1:string):Promise<void>;
 

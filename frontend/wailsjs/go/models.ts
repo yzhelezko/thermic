@@ -19,6 +19,46 @@ export namespace frontend {
 
 export namespace main {
 	
+	export class FileHistoryEntry {
+	    path: string;
+	    fileName: string;
+	    accessCount: number;
+	    // Go type: time
+	    firstAccessed: any;
+	    // Go type: time
+	    lastAccessed: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new FileHistoryEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.fileName = source["fileName"];
+	        this.accessCount = source["accessCount"];
+	        this.firstAccessed = this.convertValues(source["firstAccessed"], null);
+	        this.lastAccessed = this.convertValues(source["lastAccessed"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class SSHConfig {
 	    host: string;
 	    port: number;
@@ -63,6 +103,7 @@ export namespace main {
 	    description?: string;
 	    isFavorite?: boolean;
 	    shortcuts?: Record<string, string>;
+	    fileHistory?: FileHistoryEntry[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Profile(source);
@@ -90,6 +131,7 @@ export namespace main {
 	        this.description = source["description"];
 	        this.isFavorite = source["isFavorite"];
 	        this.shortcuts = source["shortcuts"];
+	        this.fileHistory = this.convertValues(source["fileHistory"], FileHistoryEntry);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -255,6 +297,51 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class RemoteFileEntry {
+	    name: string;
+	    path: string;
+	    isDir: boolean;
+	    isSymlink: boolean;
+	    symlinkTarget?: string;
+	    size: number;
+	    mode: string;
+	    // Go type: time
+	    modifiedTime: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new RemoteFileEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.path = source["path"];
+	        this.isDir = source["isDir"];
+	        this.isSymlink = source["isSymlink"];
+	        this.symlinkTarget = source["symlinkTarget"];
+	        this.size = source["size"];
+	        this.mode = source["mode"];
+	        this.modifiedTime = this.convertValues(source["modifiedTime"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	
 	export class SSHSession {
 	
@@ -276,6 +363,7 @@ export namespace main {
 	    isActive: boolean;
 	    connectionType: string;
 	    sshConfig?: SSHConfig;
+	    profileId?: string;
 	    // Go type: time
 	    created: any;
 	    status: string;
@@ -294,6 +382,7 @@ export namespace main {
 	        this.isActive = source["isActive"];
 	        this.connectionType = source["connectionType"];
 	        this.sshConfig = this.convertValues(source["sshConfig"], SSHConfig);
+	        this.profileId = source["profileId"];
 	        this.created = this.convertValues(source["created"], null);
 	        this.status = source["status"];
 	        this.errorMessage = source["errorMessage"];

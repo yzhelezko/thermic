@@ -6,6 +6,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/aymanbagabas/go-pty v0.2.2
 	github.com/fsnotify/fsnotify v1.9.0
+	github.com/pkg/sftp v1.13.9
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/wailsapp/wails/v2 v2.10.1
 	golang.org/x/crypto v0.38.0
@@ -20,6 +21,7 @@ require (
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/jchv/go-winloader v0.0.0-20250406163304-c1995be93bd1 // indirect
+	github.com/kr/fs v0.1.0 // indirect
 	github.com/labstack/echo/v4 v4.13.4 // indirect
 	github.com/labstack/gommon v0.4.2 // indirect
 	github.com/leaanthony/go-ansi-parser v1.6.1 // indirect

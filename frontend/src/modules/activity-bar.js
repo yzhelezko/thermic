@@ -160,24 +160,36 @@ export class ActivityBarManager {
         });
         document.querySelector(`[data-view="${view}"]`).classList.add('active');
 
-        // Update sidebar content
+        // Update sidebar content (pass the current view as the previous view)
+        this.updateSidebarContent(view, this.currentView);
+        
+        // Update currentView after the content update
         this.currentView = view;
-        this.updateSidebarContent(view);
         
         updateStatus(`Switched to ${view} view`);
     }
 
-    updateSidebarContent(view) {
+    updateSidebarContent(view, previousView) {
         const sidebarTitle = document.getElementById('sidebar-title');
         const sidebarContent = document.getElementById('sidebar-content');
+
+        console.log('🔀 Activity Bar: Switching from', previousView, 'to', view);
+
+        // Hide the previous view first
+        if (previousView === 'files' && view !== 'files') {
+            console.log('🔀 Activity Bar: Hiding files view');
+            this.sidebarManager.hideFilesView();
+        }
 
         switch (view) {
             case 'profiles':
                 sidebarTitle.textContent = 'Profiles';
+                console.log('🔀 Activity Bar: Showing profiles view');
                 this.sidebarManager.showProfilesView();
                 break;
             case 'files':
                 sidebarTitle.textContent = 'Files';
+                console.log('🔀 Activity Bar: Showing files view');
                 this.sidebarManager.showFilesView();
                 break;
         }
