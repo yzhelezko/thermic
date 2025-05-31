@@ -51,6 +51,7 @@ type Tab struct {
 	IsActive       bool       `json:"isActive"`
 	ConnectionType string     `json:"connectionType"` // "local" or "ssh"
 	SSHConfig      *SSHConfig `json:"sshConfig,omitempty"`
+	ProfileID      string     `json:"profileId,omitempty"` // ID of the profile this tab was created from
 	Created        time.Time  `json:"created"`
 	Status         string     `json:"status"`                 // "connecting", "connected", "failed", "disconnected"
 	ErrorMessage   string     `json:"errorMessage,omitempty"` // Store error details for failed connections
@@ -63,6 +64,15 @@ type SSHConfig struct {
 	Username string `json:"username"`
 	Password string `json:"password,omitempty"` // Optional, prefer key auth
 	KeyPath  string `json:"keyPath,omitempty"`  // Path to SSH private key
+}
+
+// FileHistoryEntry represents a file access history entry
+type FileHistoryEntry struct {
+	Path          string    `yaml:"path" json:"path"`                    // Full remote file path
+	FileName      string    `yaml:"file_name" json:"fileName"`           // File name for display
+	AccessCount   int       `yaml:"access_count" json:"accessCount"`     // Number of times accessed
+	FirstAccessed time.Time `yaml:"first_accessed" json:"firstAccessed"` // First time this file was accessed
+	LastAccessed  time.Time `yaml:"last_accessed" json:"lastAccessed"`   // Most recent access time
 }
 
 // Profile represents a terminal profile configuration
@@ -81,13 +91,14 @@ type Profile struct {
 	Created      time.Time         `yaml:"created" json:"created"`
 	LastModified time.Time         `yaml:"last_modified" json:"lastModified"`
 	// Enhanced fields
-	Tags        []string          `yaml:"tags,omitempty" json:"tags,omitempty"`               // For filtering/search
-	LastUsed    time.Time         `yaml:"last_used,omitempty" json:"lastUsed,omitempty"`      // For MRU sorting
-	UsageCount  int               `yaml:"usage_count,omitempty" json:"usageCount,omitempty"`  // For popularity sorting
-	Color       string            `yaml:"color,omitempty" json:"color,omitempty"`             // Visual grouping
-	Description string            `yaml:"description,omitempty" json:"description,omitempty"` // Tooltips/notes
-	IsFavorite  bool              `yaml:"is_favorite,omitempty" json:"isFavorite,omitempty"`  // Quick access
-	Shortcuts   map[string]string `yaml:"shortcuts,omitempty" json:"shortcuts,omitempty"`     // Custom key bindings
+	Tags        []string            `yaml:"tags,omitempty" json:"tags,omitempty"`                // For filtering/search
+	LastUsed    time.Time           `yaml:"last_used,omitempty" json:"lastUsed,omitempty"`       // For MRU sorting
+	UsageCount  int                 `yaml:"usage_count,omitempty" json:"usageCount,omitempty"`   // For popularity sorting
+	Color       string              `yaml:"color,omitempty" json:"color,omitempty"`              // Visual grouping
+	Description string              `yaml:"description,omitempty" json:"description,omitempty"`  // Tooltips/notes
+	IsFavorite  bool                `yaml:"is_favorite,omitempty" json:"isFavorite,omitempty"`   // Quick access
+	Shortcuts   map[string]string   `yaml:"shortcuts,omitempty" json:"shortcuts,omitempty"`      // Custom key bindings
+	FileHistory []*FileHistoryEntry `yaml:"file_history,omitempty" json:"fileHistory,omitempty"` // Remote file access history
 }
 
 // ProfileFolder represents a folder in the profile tree

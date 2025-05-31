@@ -366,7 +366,7 @@ export class TabsManager {
         }
     }
 
-    async createNewTab(shell = null, sshConfig = null) {
+    async createNewTab(shell = null, sshConfig = null, profileId = null) {
         try {
             updateStatus('Creating new tab...');
 
@@ -387,6 +387,12 @@ export class TabsManager {
 
             // Create tab on backend (backend generates its own session ID)
             const tab = await CreateTab(shell || '', sshConfig);
+            
+            // Set profileId if provided (for tabs created from profiles)
+            if (profileId) {
+                tab.profileId = profileId;
+                console.log('🔗 Tab created with profile ID:', profileId);
+            }
             
             // Enhance tab title with formatted shell name
             if (!sshConfig && shell) {

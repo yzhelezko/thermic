@@ -280,10 +280,10 @@ export class SidebarManager {
             let newTab;
             if (profile.type === 'ssh' && profile.sshConfig) {
                 console.log('Creating SSH tab with config:', profile.sshConfig);
-                newTab = await tabsManager.createNewTab(null, profile.sshConfig);
+                newTab = await tabsManager.createNewTab(null, profile.sshConfig, profileId);
             } else {
                 console.log('Creating local tab with shell:', profile.shell);
-                newTab = await tabsManager.createNewTab(profile.shell || null);
+                newTab = await tabsManager.createNewTab(profile.shell || null, null, profileId);
             }
             
             // Set working directory if specified

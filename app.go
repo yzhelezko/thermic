@@ -1038,12 +1038,21 @@ func (a *App) CreateTabFromProfile(profileID string) (*Tab, error) {
 	go a.updateProfileUsage(profileID)
 
 	// Create tab based on profile type
+	var tab *Tab
+	var err error
 	switch profile.Type {
 	case "ssh":
-		return a.CreateTab("", profile.SSHConfig)
+		tab, err = a.CreateTab("", profile.SSHConfig)
 	default:
-		return a.CreateTab(profile.Shell, nil)
+		tab, err = a.CreateTab(profile.Shell, nil)
 	}
+
+	// Set the profile ID on the created tab
+	if err == nil && tab != nil {
+		tab.ProfileID = profileID
+	}
+
+	return tab, err
 }
 
 // Virtual Folder APIs

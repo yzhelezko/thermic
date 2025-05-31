@@ -7,16 +7,31 @@ export class RemoteExplorerManager {
         this.isActivePanel = false;
         this.currentSessionID = null;
         this.currentRemotePath = null;
+        this.currentFileList = [];
         this.loadingIndicator = null;
         this.breadcrumbs = [];
         this.fileCache = new Map(); // Cache directory listings for performance
         this.backgroundSessionID = null; // Track session in background
         this.backgroundRemotePath = null; // Track path in background
+        this.maxHistoryItems = 50; // Maximum files to keep in history
+        this.isInitialized = false;
+        this.retryHandler = null;
+        
+        // Bind methods to preserve 'this' context
+        this.handleActiveTabChanged = this.handleActiveTabChanged.bind(this);
     }
 
     init() {
+        if (this.isInitialized) return;
+        
+        console.log('🔵 Initializing Remote Explorer Manager...');
         this.setupEventListeners();
-        console.log('✅ Remote Explorer initialized');
+        this.isInitialized = true;
+        
+        // Make globally accessible for onclick handlers
+        window.remoteExplorerManager = this;
+        
+        console.log('✅ Remote Explorer Manager initialized');
     }
 
     setupEventListeners() {
@@ -196,7 +211,7 @@ export class RemoteExplorerManager {
         this.setupToolbarEventListeners();
     }
 
-    setupToolbarEventListeners() {
+    async setupToolbarEventListeners() {
         // This will be called after the UI is rendered
         // Add event listener for upload button
         const uploadBtn = document.getElementById('upload-files-btn');
@@ -236,6 +251,45 @@ export class RemoteExplorerManager {
                 await this.handleToolbarAction('refresh');
             };
             refreshBtn.addEventListener('click', this.handleRefreshClick);
+        }
+
+        // Add event listener for history button
+        const historyBtn = document.querySelector('.file-toolbar-btn[data-action="history"]');
+        if (historyBtn) {
+            historyBtn.removeEventListener('click', this.handleHistoryClick); // Remove any existing listener
+            this.handleHistoryClick = async () => {
+                await this.handleToolbarAction('history');
+            };
+            historyBtn.addEventListener('click', this.handleHistoryClick);
+        }
+
+        // Update history button count
+        await this.updateHistoryButtonCount();
+    }
+
+    async updateHistoryButtonCount() {
+        const historyBtn = document.querySelector('.file-toolbar-btn[data-action="history"]');
+        if (!historyBtn) return;
+
+        try {
+            const history = await this.getFileHistory();
+            const count = history.length;
+            
+            // Remove existing badge
+            const existingBadge = historyBtn.querySelector('.history-count-badge');
+            if (existingBadge) {
+                existingBadge.remove();
+            }
+            
+            // Add badge if there are history items
+            if (count > 0) {
+                const badge = document.createElement('span');
+                badge.className = 'history-count-badge';
+                badge.textContent = count > 99 ? '99+' : count.toString();
+                historyBtn.appendChild(badge);
+            }
+        } catch (error) {
+            console.error('Failed to update history count:', error);
         }
     }
 
@@ -334,8 +388,12 @@ export class RemoteExplorerManager {
             // Different tab or no background session - initialize new
             try {
                 await this.initializeForSSHSession(activeTab);
+                
+                // Update history count for the new tab
+                await this.updateHistoryButtonCount();
+                
             } catch (error) {
-                console.error('Failed to initialize for SSH session:', error);
+                console.error('🔄 Failed to initialize for new SSH session:', error);
                 this.showErrorState(`Failed to initialize: ${error.message}`);
             }
         }
@@ -379,62 +437,69 @@ export class RemoteExplorerManager {
         const { tab } = tabDetails;
         
         console.log('🔄 handleActiveTabChanged called with tab:', tab);
-        console.log('🔄 Current session ID:', this.currentSessionID);
-        console.log('🔄 Background session ID:', this.backgroundSessionID);
+        
+        // Only process if the panel is currently active
+        if (!this.isActivePanel) {
+            console.log('🔄 Panel not active, skipping tab change processing');
+            return;
+        }
 
-        // If switching to a different SSH session or different session type
-        if (tab && tab.connectionType === 'ssh' && tab.status === 'connected') {
-            if (this.currentSessionID !== tab.sessionId) {
-                console.log('🔄 Switching to different session:', tab.sessionId);
-                
-                // Clean up old session (if different from background)
-                if (this.currentSessionID && this.currentSessionID !== this.backgroundSessionID) {
-                    await this.cleanupSFTPSession(this.currentSessionID);
-                }
-                
-                // Check if this tab matches our background session
-                if (this.backgroundSessionID === tab.sessionId) {
-                    console.log('🟢 Switching to background SFTP session:', this.backgroundSessionID);
-                    console.log('🟢 Restoring background path:', this.backgroundRemotePath);
-                    
-                    // Restore from background
-                    this.currentSessionID = this.backgroundSessionID;
-                    this.currentRemotePath = this.backgroundRemotePath || '.';
-                    
-                    // Always reload the directory to ensure fresh state
-                    // Don't use cache here to avoid stale breadcrumbs
-                    console.log('🟢 Reloading directory for tab switch:', this.currentRemotePath);
-                    await this.loadDirectoryContent(this.currentRemotePath);
-                    
-                    updateStatus(`File Explorer switched to ${tab.title}`);
-                } else {
-                    // Clean up old background session if different
-                    if (this.backgroundSessionID && this.backgroundSessionID !== tab.sessionId) {
-                        await this.cleanupSFTPSession(this.backgroundSessionID);
-                        this.backgroundSessionID = null;
-                        this.backgroundRemotePath = null;
-                    }
-                    
-                    // Initialize new session
-                    console.log('🔴 Initializing new session for tab:', tab.sessionId);
-                    await this.initializeForSSHSession(tab);
-                }
-            } else {
-                console.log('🔄 Same session, no action needed');
-            }
-        } else {
-            console.log('🔴 Tab is not SSH or not connected, cleaning up');
-            // Tab is not SSH or not connected - cleanup everything
-            if (this.currentSessionID) {
-                await this.cleanupSFTPSession(this.currentSessionID);
-            }
-            if (this.backgroundSessionID) {
-                await this.cleanupSFTPSession(this.backgroundSessionID);
-                this.backgroundSessionID = null;
-                this.backgroundRemotePath = null;
-            }
+        console.log('🔄 Processing tab change for active panel');
+        console.log('🔄 New tab:', tab);
+        console.log('🔄 Tab type:', tab?.connectionType);
+        console.log('🔄 Tab status:', tab?.status);
+        
+        // Check if we have a valid SSH tab
+        if (!tab || tab.connectionType !== 'ssh' || tab.status !== 'connected') {
+            console.log('🔄 No SSH tab or not connected');
+            
+            // Clean up current session but keep background intact
             this.currentSessionID = null;
+            this.currentRemotePath = null;
+            
             this.showSelectSSHMessage();
+            return;
+        }
+
+        // If this is the same session as our current or background, don't reinitialize
+        if (this.currentSessionID === tab.sessionId || this.backgroundSessionID === tab.sessionId) {
+            console.log('🔄 Same session, no reinitialization needed');
+            
+            // If we have a background session for this tab, restore it
+            if (this.backgroundSessionID === tab.sessionId) {
+                console.log('🔄 Restoring from background session');
+                this.currentSessionID = this.backgroundSessionID;
+                this.currentRemotePath = this.backgroundRemotePath || '.';
+                
+                // Re-render if needed
+                await this.loadDirectoryContent(this.currentRemotePath);
+                
+                // Update history count for the new tab
+                await this.updateHistoryButtonCount();
+            }
+            
+            return;
+        }
+
+        console.log('🔄 Different session, initializing new connection');
+        
+        // Move current session to background if it exists and is different
+        if (this.currentSessionID && this.currentSessionID !== tab.sessionId) {
+            console.log('🔄 Moving current session to background');
+            this.backgroundSessionID = this.currentSessionID;
+            this.backgroundRemotePath = this.currentRemotePath;
+        }
+
+        // Initialize for the new SSH session
+        try {
+            await this.initializeForSSHSession(tab);
+            
+            // Update history count for the new tab
+            await this.updateHistoryButtonCount();
+            
+        } catch (error) {
+            console.error('🔄 Failed to initialize for new SSH session:', error);
+            this.showErrorState(`Failed to initialize: ${error.message}`);
         }
     }
 
@@ -484,51 +549,80 @@ export class RemoteExplorerManager {
     }
 
     async loadDirectoryContent(remotePath) {
-        if (!this.currentSessionID) return;
+        console.log('📂 loadDirectoryContent called with path:', remotePath);
+        console.log('📂 Current session ID:', this.currentSessionID);
+        
+        if (!this.currentSessionID) {
+            console.error('📂 No current session ID');
+            return;
+        }
+
+        if (!remotePath) {
+            console.error('📂 No remote path provided');
+            this.showErrorState('Invalid path: undefined');
+            return;
+        }
 
         try {
             this.showLoadingState();
 
             // Check cache first
             const cacheKey = `${this.currentSessionID}:${remotePath}`;
+            console.log('📂 Checking cache for key:', cacheKey);
+            
             if (this.fileCache.has(cacheKey)) {
                 console.log('📦 Using cached content for path:', remotePath);
                 const cachedFiles = this.fileCache.get(cacheKey);
                 
-                // Add parent directory entry if not at absolute root
-                const processedFiles = [...cachedFiles];
-                if (remotePath !== '/') {
-                    const parentPath = this.getParentPath(remotePath);
-                    processedFiles.unshift({
-                        name: '..',
-                        path: parentPath,
-                        isDir: true,
-                        isParent: true,
-                        size: 0,
-                        mode: 'drwxr-xr-x',
-                        modifiedTime: new Date()
-                    });
-                }
-                
-                // Sort files: parent directory first, then directories, then files by name
-                processedFiles.sort((a, b) => {
-                    if (a.isParent) return -1;
-                    if (b.isParent) return 1;
-                    if (a.isDir !== b.isDir) {
-                        return b.isDir - a.isDir; // Directories first
+                if (!cachedFiles || !Array.isArray(cachedFiles)) {
+                    console.error('📦 Invalid cached data:', cachedFiles);
+                    this.fileCache.delete(cacheKey);
+                    // Fall through to fresh load
+                } else {
+                    // Add parent directory entry if not at absolute root
+                    const processedFiles = [...cachedFiles];
+                    if (remotePath !== '/') {
+                        const parentPath = this.getParentPath(remotePath);
+                        processedFiles.unshift({
+                            name: '..',
+                            path: parentPath,
+                            isDir: true,
+                            isParent: true,
+                            size: 0,
+                            mode: 'drwxr-xr-x',
+                            modifiedTime: new Date()
+                        });
                     }
-                    return a.name.localeCompare(b.name);
-                });
-                
-                // IMPORTANT: Update current path and breadcrumbs even for cached content
-                this.currentRemotePath = remotePath;
-                this.updateBreadcrumbs(remotePath);
-                this.renderFileList(processedFiles);
-                return;
+                    
+                    // Sort files: parent directory first, then directories, then files by name
+                    processedFiles.sort((a, b) => {
+                        if (a.isParent) return -1;
+                        if (b.isParent) return 1;
+                        if (a.isDir !== b.isDir) {
+                            return b.isDir - a.isDir; // Directories first
+                        }
+                        return a.name.localeCompare(b.name);
+                    });
+                    
+                    // IMPORTANT: Update current path and breadcrumbs even for cached content
+                    this.currentRemotePath = remotePath;
+                    this.updateBreadcrumbs(remotePath);
+                    this.renderFileList(processedFiles);
+                    console.log('📦 Cached content rendered successfully');
+                    return;
+                }
             }
 
             console.log('🌐 Loading fresh content for path:', remotePath);
             const files = await window.go.main.App.ListRemoteFiles(this.currentSessionID, remotePath);
+            
+            if (!files || !Array.isArray(files)) {
+                console.error('🌐 Invalid files response:', files);
+                this.showErrorState('Invalid response from server');
+                return;
+            }
+            
+            console.log('🌐 Received files:', files.length);
             
             // Add parent directory entry if not at absolute root
             const processedFiles = [...files];
@@ -561,6 +655,7 @@ export class RemoteExplorerManager {
             this.currentRemotePath = remotePath;
             this.updateBreadcrumbs(remotePath);
             this.renderFileList(processedFiles);
+            console.log('🌐 Fresh content rendered successfully');
 
         } catch (error) {
             console.error('Failed to load directory:', error);
@@ -596,56 +691,73 @@ export class RemoteExplorerManager {
     }
 
     updateBreadcrumbs(path) {
-        console.log('🍞 updateBreadcrumbs called with path:', path);
-        
-        // Always build breadcrumbs from root for absolute paths
-        this.breadcrumbs = [{ name: 'Root', path: '/' }];
-        
-        if (path && path !== '/' && path !== '.' && path !== '') {
-            if (path.startsWith('/')) {
-                // Build breadcrumbs from root for absolute paths
-                const parts = path.split('/').filter(part => part.length > 0);
-                console.log('🍞 Path parts:', parts);
-                let currentPath = '';
-                
-                for (const part of parts) {
-                    currentPath = currentPath ? `${currentPath}/${part}` : `/${part}`;
-                    this.breadcrumbs.push({ name: part, path: currentPath });
-                    console.log('🍞 Added breadcrumb:', { name: part, path: currentPath });
-                }
-            } else {
-                // Handle relative path case (fallback) - should be rare now
-                console.log('🍞 Using relative path fallback for:', path);
-                this.breadcrumbs = [{ name: 'Home', path: '.' }];
-                const parts = path.split('/').filter(part => part.length > 0);
-                let currentPath = '';
-                
-                for (const part of parts) {
-                    currentPath = currentPath ? `${currentPath}/${part}` : part;
-                    this.breadcrumbs.push({ name: part, path: currentPath });
-                }
+        console.log('Updating breadcrumbs for path:', path);
+        this.breadcrumbs = [];
+
+        if (path === '← Back to Files') {
+            // Special case for history view - make it clickable
+            this.breadcrumbs = [{
+                name: '← Back to Files',
+                path: 'back-to-files',
+                isClickable: true
+            }];
+        } else if (path === '/') {
+            this.breadcrumbs = [{ name: 'Root', path: '/', isClickable: false }];
+        } else {
+            const parts = path.split('/').filter(part => part.length > 0);
+            let currentPath = '';
+            
+            // Add root
+            this.breadcrumbs.push({ name: 'Root', path: '/', isClickable: true });
+            
+            // Add each directory
+            for (let i = 0; i < parts.length; i++) {
+                currentPath += '/' + parts[i];
+                this.breadcrumbs.push({ 
+                    name: parts[i], 
+                    path: currentPath,
+                    isClickable: i < parts.length - 1 // Make all except the last one clickable
+                });
             }
         }
 
-        console.log('🍞 Final breadcrumbs:', this.breadcrumbs);
         this.renderBreadcrumbs();
     }
 
     renderBreadcrumbs() {
-        const breadcrumbContainer = document.querySelector('.file-breadcrumbs');
-        if (!breadcrumbContainer) return;
+        const container = document.querySelector('.file-breadcrumbs');
+        if (!container) return;
 
-        const breadcrumbHTML = this.breadcrumbs.map((crumb, index) => {
+        const breadcrumbsHTML = this.breadcrumbs.map((item, index) => {
             const isLast = index === this.breadcrumbs.length - 1;
-            return `
-                <span class="breadcrumb-item ${isLast ? 'active' : 'clickable'}" data-path="${crumb.path}">
-                    ${crumb.name}
-                </span>
-                ${!isLast ? '<span class="breadcrumb-separator">></span>' : ''}
-            `;
+            const itemClass = `breadcrumb-item ${item.isClickable ? 'clickable' : ''} ${isLast ? 'active' : ''}`;
+            
+            let content = `<span class="${itemClass}" data-path="${item.path}">${item.name}</span>`;
+            
+            if (!isLast) {
+                content += `<span class="breadcrumb-separator">></span>`;
+            }
+            
+            return content;
         }).join('');
 
-        breadcrumbContainer.innerHTML = breadcrumbHTML;
+        container.innerHTML = breadcrumbsHTML;
+
+        // Add click listeners for clickable breadcrumbs
+        container.querySelectorAll('.breadcrumb-item.clickable').forEach(item => {
+            item.addEventListener('click', async () => {
+                const targetPath = item.dataset.path;
+                console.log('Breadcrumb clicked:', targetPath);
+                
+                if (targetPath === 'back-to-files') {
+                    // Return to files from history view
+                    await this.toggleFileHistoryView();
+                } else {
+                    // Navigate to directory
+                    await this.navigateToPath(targetPath);
+                }
+            });
+        });
     }
 
     renderFileList(files) {
@@ -863,28 +975,37 @@ export class RemoteExplorerManager {
         sidebarContent.innerHTML = `
             <div class="remote-explorer-container">
                 <div class="file-toolbar">
-                    <button class="file-toolbar-btn" data-action="refresh" title="Refresh">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
-                        </svg>
-                    </button>
-                    <button class="file-toolbar-btn" id="upload-files-btn" title="Upload Files">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
-                            <path d="M12,11L16,15H13V19H11V15H8L12,11Z"/>
-                        </svg>
-                    </button>
-                    <button class="file-toolbar-btn" data-action="new-file" title="New File">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M13,9V3.5L18.5,9M6,2C4.89,2 4,2.89 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2H6Z"/>
-                            <path d="M11,15H13V12H16V10H13V7H11V10H8V12H11V15Z"/>
-                        </svg>
-                    </button>
-                    <button class="file-toolbar-btn" data-action="new-folder" title="New Folder">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z"/>
-                        </svg>
-                    </button>
+                    <div class="file-toolbar-left">
+                        <button class="file-toolbar-btn" data-action="refresh" title="Refresh">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                            </svg>
+                        </button>
+                        <button class="file-toolbar-btn" id="upload-files-btn" title="Upload Files">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+                                <path d="M12,11L16,15H13V19H11V15H8L12,11Z"/>
+                            </svg>
+                        </button>
+                        <button class="file-toolbar-btn" data-action="new-file" title="New File">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M13,9V3.5L18.5,9M6,2C4.89,2 4,2.89 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2H6Z"/>
+                                <path d="M11,15H13V12H16V10H13V7H11V10H8V12H11V15Z"/>
+                            </svg>
+                        </button>
+                        <button class="file-toolbar-btn" data-action="new-folder" title="New Folder">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="file-toolbar-right">
+                        <button class="file-toolbar-btn" data-action="history" title="File History">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M13.5,8H12V13L16.28,15.54L17,14.33L13.5,12.25V8M13,3A9,9 0 0,0 4,12H1L4.96,16.03L9,12H6A7,7 0 0,1 13,5A7,7 0 0,1 20,12A7,7 0 0,1 13,19C11.07,19 9.32,18.21 8.06,16.94L6.64,18.36C8.27,20 10.5,21 13,21A9,9 0 0,0 22,12A9,9 0 0,0 13,3Z"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
                 <div class="file-breadcrumbs">
                     <!-- Breadcrumbs will be rendered here -->
@@ -920,6 +1041,9 @@ export class RemoteExplorerManager {
                 break;
             case 'new-folder':
                 this.showNewFolderDialog();
+                break;
+            case 'history':
+                await this.showFileHistoryView();
                 break;
         }
     }
@@ -1123,8 +1247,16 @@ export class RemoteExplorerManager {
     }
 
     retryCurrentOperation() {
+        console.log('🔁 Retry operation called');
+        console.log('🔁 Current session ID:', this.currentSessionID);
+        console.log('🔁 Current remote path:', this.currentRemotePath);
+        
         if (this.currentSessionID && this.currentRemotePath) {
+            console.log('🔁 Retrying with valid session and path');
             this.loadDirectoryContent(this.currentRemotePath);
+        } else {
+            console.error('🔁 Cannot retry - missing session or path');
+            this.showErrorState('Cannot retry: no active session or path');
         }
     }
 
@@ -1400,6 +1532,9 @@ export class RemoteExplorerManager {
         try {
             // Download file content for preview
             const content = await window.go.main.App.GetRemoteFileContent(this.currentSessionID, filePath);
+            
+            // Track file in history
+            await this.addToFileHistory(filePath, fileName);
             
             // Show file preview panel
             this.showFilePreviewPanel(filePath, fileName, content);
@@ -2075,5 +2210,574 @@ export class RemoteExplorerManager {
         ];
         
         return configPatterns.some(pattern => lowercaseName.includes(pattern));
+    }
+
+    // File History Management Methods
+    async addToFileHistory(filePath, fileName) {
+        const activeTab = this.tabsManager.getActiveTab();
+        
+        if (!activeTab) {
+            console.log('No active tab for file history');
+            return;
+        }
+
+        if (!activeTab.profileId) {
+            console.log('Tab was not created from a profile, skipping file history');
+            return;
+        }
+
+        // Get the profile from backend
+        let profile;
+        try {
+            profile = await window.go.main.App.GetProfileByIDAPI(activeTab.profileId);
+        } catch (error) {
+            console.error('Failed to load profile for file history:', error);
+            return;
+        }
+
+        // Initialize history if it doesn't exist
+        if (!profile.fileHistory) {
+            profile.fileHistory = [];
+        }
+
+        const now = new Date();
+        const existingIndex = profile.fileHistory.findIndex(item => item.path === filePath);
+
+        if (existingIndex >= 0) {
+            // Update existing entry
+            const existingItem = profile.fileHistory[existingIndex];
+            existingItem.accessCount++;
+            existingItem.lastAccessed = now;
+            
+            // Move to front of array for recent access
+            profile.fileHistory.splice(existingIndex, 1);
+            profile.fileHistory.unshift(existingItem);
+        } else {
+            // Add new entry
+            const historyItem = {
+                path: filePath,
+                fileName: fileName,
+                accessCount: 1,
+                firstAccessed: now,
+                lastAccessed: now
+            };
+
+            profile.fileHistory.unshift(historyItem);
+        }
+
+        // Limit history size
+        if (profile.fileHistory.length > this.maxHistoryItems) {
+            profile.fileHistory = profile.fileHistory.slice(0, this.maxHistoryItems);
+        }
+
+        // Save the updated profile
+        try {
+            await this.saveProfileHistory(profile);
+            console.log(`Added ${fileName} to file history. Total: ${profile.fileHistory.length}`);
+            
+            // Update history button count
+            await this.updateHistoryButtonCount();
+            
+        } catch (error) {
+            console.error('Failed to save file history:', error);
+        }
+        
+        console.log(`📚 Added to history: ${fileName} (${profile.fileHistory.length} total files)`);
+    }
+
+    async getFileHistory() {
+        const activeTab = this.tabsManager.getActiveTab();
+        if (!activeTab || !activeTab.profileId) {
+            return [];
+        }
+
+        try {
+            const profile = await window.go.main.App.GetProfileByIDAPI(activeTab.profileId);
+            if (!profile || !profile.fileHistory) {
+                return [];
+            }
+
+            // Sort by access count (most used first), then by last accessed
+            return profile.fileHistory
+                .slice() // Create a copy
+                .sort((a, b) => {
+                    if (a.accessCount !== b.accessCount) {
+                        return b.accessCount - a.accessCount; // Higher access count first
+                    }
+                    return new Date(b.lastAccessed) - new Date(a.lastAccessed); // More recent first
+                });
+        } catch (error) {
+            console.error('Failed to load profile for file history:', error);
+            return [];
+        }
+    }
+
+    async saveProfileHistory(profile) {
+        try {
+            // Use the backend SaveProfile method
+            await window.go.main.App.SaveProfile(profile);
+            console.log(`📚 Profile file history saved: ${profile.name}`);
+        } catch (error) {
+            console.error('Failed to save profile history:', error);
+            showNotification('Failed to save file history', 'error');
+        }
+    }
+
+    async showFileHistory() {
+        console.log('📚 Showing file history');
+        
+        const history = await this.getFileHistory();
+        
+        if (history.length === 0) {
+            showNotification('No file history available', 'info');
+            return;
+        }
+
+        // Create history content
+        const historyContent = this.createHistoryContent(history);
+        
+        // Use the existing modal component
+        if (window.modal) {
+            window.modal.show({
+                title: 'File History',
+                message: `Recently opened files (${history.length} files)`,
+                icon: '📚',
+                content: historyContent,
+                buttons: [
+                    { 
+                        text: 'Clear History', 
+                        style: 'secondary', 
+                        action: 'custom',
+                        handler: () => {
+                            this.clearFileHistory();
+                            window.modal.hide();
+                        }
+                    },
+                    { text: 'Close', style: 'primary', action: 'cancel' }
+                ]
+            }).then(result => {
+                // Setup click handlers for history items
+                setTimeout(() => {
+                    this.setupHistoryClickHandlers();
+                }, 100);
+            });
+        }
+    }
+
+    createHistoryContent(history) {
+        return `
+            <div class="file-history-container">
+                <div class="history-stats">
+                    <span class="history-stat">Total files: ${history.length}</span>
+                    <span class="history-stat">Most used: ${history[0]?.fileName || 'None'} (${history[0]?.accessCount || 0} times)</span>
+                </div>
+                <div class="history-list">
+                    ${history.map((item, index) => `
+                        <div class="history-item" data-path="${item.path}" data-filename="${item.fileName}">
+                            <div class="history-item-content">
+                                <div class="history-item-main">
+                                    <div class="history-file-icon">${this.getFileIconForExtension(item.fileName)}</div>
+                                    <div class="history-file-details">
+                                        <div class="history-file-name">${item.fileName}</div>
+                                        <div class="history-file-path">${item.path}</div>
+                                    </div>
+                                </div>
+                                <div class="history-item-stats">
+                                    <div class="history-access-count">${item.accessCount} times</div>
+                                    <div class="history-last-accessed">${this.formatRelativeTime(item.lastAccessed)}</div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+            <style>
+                .file-history-container {
+                    margin-top: 16px;
+                    max-height: 400px;
+                    overflow-y: auto;
+                }
+                .history-stats {
+                    display: flex;
+                    gap: 16px;
+                    margin-bottom: 12px;
+                    padding: 8px 12px;
+                    background: var(--bg-tertiary);
+                    border-radius: 4px;
+                    font-size: 12px;
+                }
+                .history-stat {
+                    color: var(--text-secondary);
+                }
+                .history-list {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 2px;
+                }
+                .history-item {
+                    padding: 8px 12px;
+                    background: var(--bg-secondary);
+                    border-radius: 4px;
+                    cursor: pointer;
+                    transition: all 0.15s ease;
+                    border: 1px solid transparent;
+                }
+                .history-item:hover {
+                    background: var(--hover-bg);
+                    border-color: var(--accent-color);
+                }
+                .history-item-content {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                }
+                .history-item-main {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    flex: 1;
+                    min-width: 0;
+                }
+                .history-file-icon {
+                    font-size: 16px;
+                    width: 20px;
+                    text-align: center;
+                    flex-shrink: 0;
+                }
+                .history-file-details {
+                    flex: 1;
+                    min-width: 0;
+                }
+                .history-file-name {
+                    font-size: 13px;
+                    font-weight: 500;
+                    color: var(--text-primary);
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                }
+                .history-file-path {
+                    font-size: 11px;
+                    color: var(--text-tertiary);
+                    font-family: monospace;
+                    white-space: nowrap;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    margin-top: 2px;
+                }
+                .history-item-stats {
+                    text-align: right;
+                    flex-shrink: 0;
+                }
+                .history-access-count {
+                    font-size: 12px;
+                    color: var(--accent-color);
+                    font-weight: 600;
+                }
+                .history-last-accessed {
+                    font-size: 10px;
+                    color: var(--text-tertiary);
+                    margin-top: 2px;
+                }
+            </style>
+        `;
+    }
+
+    setupHistoryClickHandlers() {
+        const historyItems = document.querySelectorAll('.history-item');
+        historyItems.forEach(item => {
+            item.addEventListener('click', () => {
+                const filePath = item.dataset.path;
+                const fileName = item.dataset.filename;
+                
+                // Close modal and open file
+                window.modal.hide();
+                setTimeout(() => {
+                    this.showFilePreview(filePath, fileName);
+                }, 300);
+            });
+        });
+    }
+
+    getFileIconForExtension(fileName) {
+        // Simple version of getFileIcon for history display
+        const ext = fileName.split('.').pop().toLowerCase();
+        const iconMap = {
+            'txt': '📄', 'md': '📄', 'log': '📄',
+            'js': '📜', 'ts': '📜', 'py': '📜', 'sh': '📜',
+            'html': '🌐', 'css': '🎨', 'json': '📋',
+            'jpg': '🖼️', 'png': '🖼️', 'gif': '🖼️',
+            'pdf': '📕', 'zip': '📦'
+        };
+        return iconMap[ext] || '📄';
+    }
+
+    formatRelativeTime(date) {
+        const now = new Date();
+        const diff = now - new Date(date);
+        const minutes = Math.floor(diff / (1000 * 60));
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+        if (minutes < 1) return 'Just now';
+        if (minutes < 60) return `${minutes}m ago`;
+        if (hours < 24) return `${hours}h ago`;
+        if (days < 7) return `${days}d ago`;
+        return new Date(date).toLocaleDateString();
+    }
+
+    async clearFileHistory() {
+        console.log('🗑️ Clearing file history...');
+        
+        const activeTab = this.tabsManager.getActiveTab();
+        if (!activeTab || !activeTab.profileId) {
+            console.log('🗑️ No active tab or profile ID');
+            showNotification('No active profile found', 'error');
+            return;
+        }
+
+        console.log('🗑️ Active tab profile ID:', activeTab.profileId);
+
+        try {
+            const profile = await window.go.main.App.GetProfileByIDAPI(activeTab.profileId);
+            if (profile) {
+                console.log('🗑️ Current history length:', profile.fileHistory?.length || 0);
+                
+                profile.fileHistory = [];
+                await this.saveProfileHistory(profile);
+                
+                console.log('🗑️ History cleared and saved');
+                
+                // Update history button count
+                await this.updateHistoryButtonCount();
+                
+                showNotification('File history cleared', 'success');
+            } else {
+                console.log('🗑️ Profile not found');
+                showNotification('Profile not found', 'error');
+            }
+        } catch (error) {
+            console.error('Failed to clear file history:', error);
+            showNotification('Failed to clear file history', 'error');
+        }
+    }
+
+    async showFileHistoryView() {
+        console.log('📚 Showing file history view');
+        
+        if (!this.currentSessionID) {
+            showNotification('No active SSH session', 'info');
+            return;
+        }
+        
+        const history = await this.getFileHistory();
+        const sidebarContent = document.getElementById('sidebar-content');
+        
+        if (!sidebarContent) {
+            console.error('Sidebar content not found');
+            return;
+        }
+        
+        // Create back button header without emojis
+        const backButton = `
+            <div class="virtual-folder-header">
+                <button class="back-btn" onclick="window.remoteExplorerManager.showFilesView()">← Back to Files</button>
+                <h3>File History</h3>
+            </div>
+        `;
+        
+        if (history.length === 0) {
+            sidebarContent.innerHTML = backButton + `
+                <div class="empty-state">
+                    <div class="empty-state-title">No File History</div>
+                    <div class="empty-state-description">Files you open will appear here for quick access</div>
+                </div>
+            `;
+            return;
+        }
+
+        // Create history list HTML showing file paths
+        const historyHTML = history.map(entry => {
+            const icon = this.getFileIconForExtension(entry.fileName);
+            const relativeTime = this.formatRelativeTime(new Date(entry.lastAccessed));
+            const accessText = entry.accessCount === 1 ? '1 time' : `${entry.accessCount} times`;
+            
+            // Show the filename first, then path under
+            const displayPath = entry.path;
+            const fileName = entry.fileName;
+            
+            return `
+                <div class="tree-item virtual-profile history-item" data-file-path="${entry.path}" data-file-name="${entry.fileName}" title="Click to open ${fileName}">
+                    <div class="tree-item-content">
+                        <span class="tree-item-icon">${icon}</span>
+                        <div class="file-info">
+                            <div class="tree-item-text">${fileName}</div>
+                            <div class="file-path-secondary">${displayPath}</div>
+                        </div>
+                        <div class="history-meta">
+                            <div class="usage-count">${accessText}</div>
+                            <div class="last-accessed">${relativeTime}</div>
+                        </div>
+                        <div class="history-actions-inline">
+                            <button class="action-btn remove-btn" onclick="window.remoteExplorerManager.removeFromHistory('${entry.path.replace(/'/g, "\\'")}'); event.stopPropagation();" title="Remove from history">×</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        const clearButton = `
+            <div class="history-actions">
+                <button class="btn btn-secondary" onclick="window.remoteExplorerManager.clearFileHistoryAndRefresh()">Clear History</button>
+            </div>
+        `;
+
+        sidebarContent.innerHTML = backButton + historyHTML + clearButton;
+        
+        // Setup click handlers for history items
+        this.setupHistoryItemClickHandlers();
+    }
+
+    async showFilesView() {
+        console.log('📁 Returning to files view');
+        
+        // Restore the file explorer UI
+        this.renderFileExplorerUI();
+        
+        // Reload current directory if we have session and path
+        if (this.currentSessionID && this.currentRemotePath) {
+            try {
+                await this.loadDirectoryContent(this.currentRemotePath);
+            } catch (error) {
+                console.error('Failed to load directory:', error);
+                this.showErrorState(`Failed to load directory: ${error.message}`);
+            }
+        } else {
+            this.showSelectSSHMessage();
+        }
+    }
+
+    setupHistoryItemClickHandlers() {
+        const historyItems = document.querySelectorAll('.tree-item[data-file-path]');
+        historyItems.forEach(item => {
+            item.addEventListener('click', async () => {
+                const filePath = item.dataset.filePath;
+                const fileName = item.dataset.fileName;
+                
+                if (filePath && fileName) {
+                    await this.openFileFromHistory(filePath, fileName);
+                }
+            });
+        });
+    }
+
+    async clearFileHistoryAndRefresh() {
+        console.log('🧹 Clear history button clicked');
+        
+        if (confirm('Are you sure you want to clear all file history?')) {
+            console.log('🧹 User confirmed, clearing history...');
+            
+            try {
+                await this.clearFileHistory();
+                console.log('🧹 History cleared, refreshing view...');
+                
+                await this.showFileHistoryView(); // Refresh the view
+                console.log('🧹 View refreshed, updating count...');
+                
+                await this.updateHistoryButtonCount(); // Update the count badge
+                console.log('🧹 Count updated, done!');
+                
+            } catch (error) {
+                console.error('🧹 Error during clear and refresh:', error);
+                showNotification('Failed to clear history', 'error');
+            }
+        } else {
+            console.log('🧹 User cancelled clear operation');
+        }
+    }
+
+    async openFileFromHistory(filePath, fileName) {
+        try {
+            console.log('📂 Opening file from history:', filePath);
+            
+            if (!this.currentSessionID) {
+                showNotification('No active SSH session', 'error');
+                return;
+            }
+
+            // Get the directory containing the file
+            const dirPath = this.getParentPath(filePath);
+            console.log('📁 File directory:', dirPath);
+            
+            // Return to files view first
+            await this.showFilesView();
+            
+            // Wait a moment for the UI to be ready
+            await new Promise(resolve => setTimeout(resolve, 200));
+            
+            // Navigate to the directory containing the file
+            console.log('📁 Navigating to directory:', dirPath);
+            await this.navigateToPath(dirPath);
+            
+            // Wait for the directory to load and file list to update
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
+            // Highlight the file in the list if possible
+            this.highlightFileInList(fileName);
+            
+            // Open the file preview
+            await this.showFilePreview(filePath, fileName);
+            
+            showNotification(`Opened ${fileName}`, 'success');
+            
+        } catch (error) {
+            console.error('Failed to open file from history:', error);
+            showNotification(`Failed to open file: ${error.message}`, 'error');
+        }
+    }
+
+    highlightFileInList(fileName) {
+        // Find and highlight the file in the current file list
+        const fileItems = document.querySelectorAll('.file-item');
+        fileItems.forEach(item => {
+            const itemName = item.dataset.name;
+            if (itemName === fileName) {
+                // Clear previous selections
+                document.querySelectorAll('.file-item.selected').forEach(selected => {
+                    selected.classList.remove('selected');
+                });
+                // Highlight this file
+                item.classList.add('selected');
+                // Scroll into view if needed
+                item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                console.log('📄 Highlighted file in list:', fileName);
+            }
+        });
+    }
+
+    async removeFromHistory(filePath) {
+        try {
+            const activeTab = this.tabsManager.getActiveTab();
+            if (!activeTab || !activeTab.profileId) {
+                return;
+            }
+
+            const profile = await window.go.main.App.GetProfileByIDAPI(activeTab.profileId);
+            if (profile && profile.fileHistory) {
+                // Remove the specific file from history
+                profile.fileHistory = profile.fileHistory.filter(entry => entry.path !== filePath);
+                await this.saveProfileHistory(profile);
+                
+                // Update history button count
+                await this.updateHistoryButtonCount();
+                
+                // Refresh the history view
+                await this.showFileHistoryView();
+                showNotification('Removed from history', 'success');
+            }
+        } catch (error) {
+            console.error('Failed to remove from history:', error);
+            showNotification('Failed to remove from history', 'error');
+        }
     }
 } 
