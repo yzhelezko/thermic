@@ -17,8 +17,18 @@ export class RemoteExplorerManager {
         this.isInitialized = false;
         this.retryHandler = null;
         
+        // Live search properties
+        this.searchQuery = '';
+        this.filteredFiles = [];
+        this.originalFiles = [];
+        this.searchTimeout = null;
+        
+        // Monaco Editor theme observer
+        this.themeObserver = null;
+        
         // Bind methods to preserve 'this' context
         this.handleActiveTabChanged = this.handleActiveTabChanged.bind(this);
+        this.handleFileSearch = this.handleFileSearch.bind(this);
     }
 
     init() {
@@ -90,8 +100,20 @@ export class RemoteExplorerManager {
         document.addEventListener('contextmenu', (e) => {
             if (!this.isActivePanel) return;
 
+            // Check if we're in the remote explorer container
+            const remoteExplorerContainer = e.target.closest('.remote-explorer-container');
+            if (!remoteExplorerContainer) return;
+
+            // Prevent default for all context menus in remote explorer area
+            e.preventDefault();
+            e.stopPropagation();
+
+            // If no session or showing placeholder, don't show any context menu
+            if (!this.currentSessionID || e.target.closest('.remote-explorer-placeholder')) {
+                return;
+            }
+
             if (e.target.closest('.file-item')) {
-                e.preventDefault();
                 const fileItem = e.target.closest('.file-item');
                 
                 // Extract file data from the DOM element
@@ -107,13 +129,12 @@ export class RemoteExplorerManager {
                     window.contextMenuManager.showFileExplorerItemContextMenu(e, fileItem, fileData);
                 }
             } else if (e.target.closest('.remote-files-container')) {
-                e.preventDefault();
-                
                 // Use the existing context menu system for directory context menu
                 if (window.contextMenuManager) {
                     window.contextMenuManager.showFileExplorerDirectoryContextMenu(e);
                 }
             }
+            // If neither file item nor files container, don't show any context menu
         });
 
         // Listen for keyboard shortcuts
@@ -205,6 +226,18 @@ export class RemoteExplorerManager {
                 this.refreshCurrentDirectory();
                 return;
             }
+
+            // Escape - Clear search if active
+            if (e.key === 'Escape') {
+                if (this.searchQuery) {
+                    e.preventDefault();
+                    this.clearFileSearch();
+                }
+                return;
+            }
+
+            // Live search - Handle typing for file filtering
+            this.handleFileSearch(e);
         });
 
         // Set up toolbar event listeners when the UI is rendered
@@ -299,8 +332,10 @@ export class RemoteExplorerManager {
         console.log('🔵 Current session ID:', this.currentSessionID);
         console.log('🔵 Background session ID:', this.backgroundSessionID);
         console.log('🔵 Background path:', this.backgroundRemotePath);
+        console.log('🔵 isActivePanel before:', this.isActivePanel);
         
         this.isActivePanel = true;
+        console.log('🔵 isActivePanel set to:', this.isActivePanel);
 
         // Get current active tab
         const activeTab = this.tabsManager.getActiveTab();
@@ -313,6 +348,8 @@ export class RemoteExplorerManager {
             return;
         }
         
+        console.log('🔵 SSH tab is valid, processing...');
+        
         // Check if we have a background session for this same tab
         if (this.backgroundSessionID === activeTab.sessionId) {
             console.log('🟢 Restoring background SFTP session:', this.backgroundSessionID);
@@ -323,6 +360,10 @@ export class RemoteExplorerManager {
             this.currentRemotePath = this.backgroundRemotePath || '.';
             
             console.log('🟢 Restored current path:', this.currentRemotePath);
+            
+            // Always render the UI first to ensure proper structure
+            console.log('🟢 Rendering file explorer UI');
+            this.renderFileExplorerUI();
             
             // Check if we have cached content for this path
             const cacheKey = `${this.currentSessionID}:${this.currentRemotePath}`;
@@ -360,17 +401,13 @@ export class RemoteExplorerManager {
                     return a.name.localeCompare(b.name);
                 });
                 
-                console.log('🟢 About to render UI - files count:', processedFiles.length);
-                
-                // Render the UI completely
-                this.renderFileExplorerUI();
-                console.log('🟢 File explorer UI rendered');
+                console.log('🟢 About to render cached files - count:', processedFiles.length);
                 
                 this.updateBreadcrumbs(this.currentRemotePath); // Rebuild breadcrumbs from path
                 console.log('🟢 Breadcrumbs updated for path:', this.currentRemotePath);
                 
                 this.renderFileList(processedFiles);
-                console.log('🟢 File list rendered');
+                console.log('🟢 File list rendered from cache');
             } else {
                 console.log('🟠 No cache, reloading directory:', this.currentRemotePath);
                 // No cache, reload the directory
@@ -424,6 +461,16 @@ export class RemoteExplorerManager {
             this.currentRemotePath = null;
             
             console.log('🟡 Active session cleared');
+        }
+
+        // Clear any search state
+        this.clearFileSearch();
+        
+        // Clear any UI classes that might interfere with other views
+        const sidebarContent = document.getElementById('sidebar-content');
+        if (sidebarContent) {
+            sidebarContent.className = '';
+            console.log('🟡 Cleared sidebar content classes');
         }
 
         // DON'T clear the view - keep the UI intact for faster restoration
@@ -616,16 +663,21 @@ export class RemoteExplorerManager {
             console.log('🌐 Loading fresh content for path:', remotePath);
             const files = await window.go.main.App.ListRemoteFiles(this.currentSessionID, remotePath);
             
-            if (!files || !Array.isArray(files)) {
-                console.error('🌐 Invalid files response:', files);
+            // Handle null/undefined response as empty directory
+            let fileList = files;
+            if (!files) {
+                console.log('🌐 Empty directory (null response), treating as empty array');
+                fileList = [];
+            } else if (!Array.isArray(files)) {
+                console.error('🌐 Invalid files response (not an array):', files);
                 this.showErrorState('Invalid response from server');
                 return;
             }
             
-            console.log('🌐 Received files:', files.length);
+            console.log('🌐 Received files:', fileList.length);
             
             // Add parent directory entry if not at absolute root
-            const processedFiles = [...files];
+            const processedFiles = [...fileList];
             if (remotePath !== '/') {
                 const parentPath = this.getParentPath(remotePath);
                 processedFiles.unshift({
@@ -650,7 +702,7 @@ export class RemoteExplorerManager {
             });
 
             // Cache the results (without parent directory entry for consistency)
-            this.fileCache.set(cacheKey, files);
+            this.fileCache.set(cacheKey, fileList);
             
             this.currentRemotePath = remotePath;
             this.updateBreadcrumbs(remotePath);
@@ -761,6 +813,9 @@ export class RemoteExplorerManager {
     }
 
     renderFileList(files) {
+        // Clear any active search when showing new files
+        this.clearFileSearch();
+        
         const container = this.getFileListContainer();
         if (!container) return;
 
@@ -935,7 +990,12 @@ export class RemoteExplorerManager {
         if (sidebarContent) {
             sidebarContent.innerHTML = `
                 <div class="remote-explorer-placeholder">
-                    <div class="placeholder-icon">🔗</div>
+                    <div class="placeholder-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" style="color: var(--text-secondary);">
+                            <path d="M10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z"/>
+                            <path d="M4,8V18H20V8H4M6,10H8V12H6V10M10,10H18V12H10V10M6,14H8V16H6V14M10,14H18V16H10V14Z"/>
+                        </svg>
+                    </div>
                     <div class="placeholder-title">Remote File Explorer</div>
                     <div class="placeholder-message">
                         Select a connected SSH tab to browse remote files
@@ -1517,6 +1577,11 @@ export class RemoteExplorerManager {
                         this.monacoEditor.dispose();
                         this.monacoEditor = null;
                     }
+                    // Clean up theme observer
+                    if (this.themeObserver) {
+                        this.themeObserver.disconnect();
+                        this.themeObserver = null;
+                    }
                     existingPreview.remove();
                     this.currentEditingFile = null;
                     // Now open the new file
@@ -1785,6 +1850,41 @@ export class RemoteExplorerManager {
                 saveBtn.classList.add('modified');
             }
         });
+
+        // Add theme change listener
+        this.setupThemeChangeListener();
+    }
+
+    setupThemeChangeListener() {
+        // Remove existing observer if it exists
+        if (this.themeObserver) {
+            this.themeObserver.disconnect();
+        }
+
+        // Create a MutationObserver to watch for theme changes on the document element
+        this.themeObserver = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
+                    this.updateEditorTheme();
+                }
+            });
+        });
+
+        // Start observing the document element for attribute changes
+        this.themeObserver.observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ['data-theme']
+        });
+    }
+
+    updateEditorTheme() {
+        if (this.monacoEditor && window.monaco) {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'vs-dark' : 'vs-light';
+            
+            console.log('🎨 Updating Monaco Editor theme to:', newTheme);
+            window.monaco.editor.setTheme(newTheme);
+        }
     }
 
     async loadMonacoEditor() {
@@ -1864,6 +1964,11 @@ export class RemoteExplorerManager {
                 if (this.monacoEditor) {
                     this.monacoEditor.dispose();
                     this.monacoEditor = null;
+                }
+                // Clean up theme observer
+                if (this.themeObserver) {
+                    this.themeObserver.disconnect();
+                    this.themeObserver = null;
                 }
                 overlay.remove();
                 this.currentEditingFile = null;
@@ -2578,6 +2683,9 @@ export class RemoteExplorerManager {
             return;
         }
         
+        // Add class to indicate we're in history view
+        sidebarContent.className = 'history-view-active';
+        
         // Create back button header without emojis
         const backButton = `
             <div class="virtual-folder-header">
@@ -2640,6 +2748,12 @@ export class RemoteExplorerManager {
 
     async showFilesView() {
         console.log('📁 Returning to files view');
+        
+        // Remove history view class
+        const sidebarContent = document.getElementById('sidebar-content');
+        if (sidebarContent) {
+            sidebarContent.className = '';
+        }
         
         // Restore the file explorer UI
         this.renderFileExplorerUI();
@@ -2778,6 +2892,222 @@ export class RemoteExplorerManager {
         } catch (error) {
             console.error('Failed to remove from history:', error);
             showNotification('Failed to remove from history', 'error');
+        }
+    }
+
+    // Live Search Methods
+    handleFileSearch(e) {
+        // Don't trigger search on special keys or when modifiers are pressed
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        
+        // Ignore function keys, arrows, and other special keys
+        const ignoredKeys = [
+            'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12',
+            'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+            'Home', 'End', 'PageUp', 'PageDown',
+            'Insert', 'Delete', 'Tab', 'Enter', 'Escape',
+            'CapsLock', 'Shift', 'Control', 'Alt', 'Meta'
+        ];
+        
+        if (ignoredKeys.includes(e.key)) return;
+        
+        // Check if a file preview is open - don't trigger search then
+        const filePreviewOpen = document.getElementById('file-preview-overlay');
+        if (filePreviewOpen && filePreviewOpen.classList.contains('active')) {
+            return;
+        }
+        
+        // Check if an input field is currently focused - don't trigger search then
+        const activeElement = document.activeElement;
+        if (activeElement && (
+            activeElement.tagName === 'INPUT' || 
+            activeElement.tagName === 'TEXTAREA' ||
+            activeElement.contentEditable === 'true' ||
+            activeElement.closest('.modal-overlay') || // Any modal is open
+            activeElement.closest('.profile-panel') // Profile panel is open
+        )) {
+            return;
+        }
+        
+        // Handle backspace
+        if (e.key === 'Backspace') {
+            if (this.searchQuery.length > 0) {
+                e.preventDefault();
+                this.searchQuery = this.searchQuery.slice(0, -1);
+                this.performFileSearch();
+            }
+            return;
+        }
+        
+        // Handle regular typing
+        if (e.key.length === 1) {
+            e.preventDefault();
+            this.searchQuery += e.key.toLowerCase();
+            this.performFileSearch();
+        }
+    }
+
+    performFileSearch() {
+        console.log('🔍 Searching files for:', this.searchQuery);
+        
+        // Clear previous timeout
+        if (this.searchTimeout) {
+            clearTimeout(this.searchTimeout);
+        }
+        
+        // Debounce search
+        this.searchTimeout = setTimeout(() => {
+            if (!this.searchQuery) {
+                this.clearFileSearch();
+                return;
+            }
+            
+            // Get current files
+            const fileItems = document.querySelectorAll('.file-item');
+            const files = Array.from(fileItems).map(item => ({
+                element: item,
+                name: item.dataset.name || '',
+                isParent: item.dataset.isParent === 'true'
+            }));
+            
+            // Show search UI
+            this.showSearchUI();
+            
+            // Filter files
+            let matchCount = 0;
+            files.forEach(file => {
+                const matches = file.isParent || file.name.toLowerCase().includes(this.searchQuery);
+                
+                if (matches) {
+                    file.element.style.display = '';
+                    if (!file.isParent) matchCount++;
+                } else {
+                    file.element.style.display = 'none';
+                }
+            });
+            
+            // Update search results count
+            this.updateSearchResults(matchCount);
+            
+        }, 100); // 100ms debounce
+    }
+
+    showSearchUI() {
+        // Create or update search indicator
+        let searchIndicator = document.querySelector('.file-search-indicator');
+        if (!searchIndicator) {
+            const container = document.querySelector('.remote-files-container');
+            if (container) {
+                searchIndicator = document.createElement('div');
+                searchIndicator.className = 'file-search-indicator';
+                container.insertBefore(searchIndicator, container.firstChild);
+            }
+        }
+        
+        if (searchIndicator) {
+            searchIndicator.innerHTML = `
+                <div class="search-info">
+                    <span class="search-icon">🔍</span>
+                    <span class="search-query">${this.searchQuery}</span>
+                    <span class="search-results" id="search-results-count">Searching...</span>
+                    <button class="search-clear" onclick="window.remoteExplorerManager.clearFileSearch()">×</button>
+                </div>
+            `;
+            searchIndicator.style.display = 'block';
+        }
+    }
+
+    updateSearchResults(count) {
+        const resultsElement = document.getElementById('search-results-count');
+        if (resultsElement) {
+            const text = count === 0 ? 'No matches' : 
+                         count === 1 ? '1 match' : 
+                         `${count} matches`;
+            resultsElement.textContent = text;
+        }
+    }
+
+    clearFileSearch() {
+        console.log('🔍 Clearing file search');
+        
+        this.searchQuery = '';
+        
+        // Clear timeout
+        if (this.searchTimeout) {
+            clearTimeout(this.searchTimeout);
+            this.searchTimeout = null;
+        }
+        
+        // Show all files
+        const fileItems = document.querySelectorAll('.file-item');
+        fileItems.forEach(item => {
+            item.style.display = '';
+        });
+        
+        // Hide search UI
+        const searchIndicator = document.querySelector('.file-search-indicator');
+        if (searchIndicator) {
+            searchIndicator.style.display = 'none';
+        }
+    }
+
+    updateFileList(files, path = null) {
+        // Clear any active search when showing new directory
+        this.clearFileSearch();
+        
+        const container = document.querySelector('.remote-files-container');
+        if (!container) {
+            console.error('❌ Remote files container not found');
+            return;
+        }
+
+        // Store the current file list for reference
+        this.currentFileList = files;
+        
+        // Update breadcrumbs if path is provided
+        if (path !== null) {
+            this.updateBreadcrumbs(path);
+        }
+
+        // Clear current content
+        container.innerHTML = '';
+
+        // Create file list
+        const fileList = document.createElement('div');
+        fileList.className = 'file-list';
+
+        if (!files || files.length === 0) {
+            fileList.innerHTML = '<div class="empty-state">No files in this directory</div>';
+            container.appendChild(fileList);
+            return;
+        }
+
+        // Sort files: directories first, then files, both alphabetically
+        const sortedFiles = [...files].sort((a, b) => {
+            // Parent directory always comes first
+            if (a.name === '..') return -1;
+            if (b.name === '..') return 1;
+            
+            // Directories before files
+            if (a.is_dir && !b.is_dir) return -1;
+            if (!a.is_dir && b.is_dir) return 1;
+            
+            // Alphabetical within same type
+            return a.name.localeCompare(b.name);
+        });
+
+        // Create file items
+        sortedFiles.forEach((file, index) => {
+            const fileItem = this.createFileItem(file, index);
+            fileList.appendChild(fileItem);
+        });
+
+        container.appendChild(fileList);
+
+        // Select first non-parent item by default
+        const firstSelectableItem = fileList.querySelector('.file-item:not([data-is-parent="true"])');
+        if (firstSelectableItem) {
+            firstSelectableItem.classList.add('selected');
         }
     }
 } 

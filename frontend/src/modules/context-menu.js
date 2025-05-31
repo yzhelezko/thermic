@@ -126,17 +126,17 @@ export class ContextMenuManager {
         if (sidebar) {
             sidebar.addEventListener('contextmenu', (e) => {
                 e.preventDefault();
+                
+                // Check if we're in history view - don't show context menus there
+                const sidebarContent = document.getElementById('sidebar-content');
+                if (sidebarContent && sidebarContent.classList.contains('history-view-active')) {
+                    return; // Don't show any context menu in history view
+                }
+                
                 const treeItem = e.target.closest('.tree-item');
                 if (treeItem) {
                     this.selectSidebarItem(treeItem);
                     this.showSidebarContextMenu(e, treeItem);
-                } else {
-                    // Right-clicked on empty space anywhere in sidebar - show root context menu
-                    // Check if we're actually in the sidebar (not just a child element)
-                    const isInSidebar = e.target.closest('.sidebar');
-                    if (isInSidebar) {
-                        this.showRootContextMenu(e);
-                    }
                 }
             });
         }
@@ -461,27 +461,27 @@ export class ContextMenuManager {
         const { isDir, isParent } = fileData;
         
         // Hide/show items based on file type
+        const openItem = menu.querySelector('[data-action="file-open"]');
         const previewItem = menu.querySelector('[data-action="file-preview"]');
         const uploadHereItem = menu.querySelector('[data-action="file-upload-here"]');
         
+        // Hide "Open" for files, show only for directories
+        if (openItem) {
+            openItem.style.display = isDir ? 'flex' : 'none';
+        }
+        
+        // Show "Preview" only for files, hide for directories
         if (previewItem) {
             previewItem.style.display = !isDir ? 'flex' : 'none';
         }
         
+        // Show "Upload Files Here" only for directories
         if (uploadHereItem) {
             uploadHereItem.style.display = isDir ? 'flex' : 'none';
         }
 
         // Update text based on item type
-        const openItem = menu.querySelector('[data-action="file-open"]');
         const downloadItem = menu.querySelector('[data-action="file-download"]');
-        
-        if (openItem) {
-            const textSpan = openItem.querySelector('span:not(.context-menu-item-icon)');
-            if (textSpan) {
-                textSpan.textContent = isDir ? 'Open' : 'Open';
-            }
-        }
         
         if (downloadItem) {
             const textSpan = downloadItem.querySelector('span:not(.context-menu-item-icon)');
