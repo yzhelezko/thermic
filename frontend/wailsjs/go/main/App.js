@@ -14,6 +14,10 @@ export function CheckWSLAvailable() {
   return window['go']['main']['App']['CheckWSLAvailable']();
 }
 
+export function CloseFileExplorerSession(arg1) {
+  return window['go']['main']['App']['CloseFileExplorerSession'](arg1);
+}
+
 export function CloseMonitoringSession(arg1) {
   return window['go']['main']['App']['CloseMonitoringSession'](arg1);
 }
@@ -74,6 +78,10 @@ export function CreateProfileWithFolderIDAPI(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['CreateProfileWithFolderIDAPI'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function CreateRemoteDirectory(arg1, arg2) {
+  return window['go']['main']['App']['CreateRemoteDirectory'](arg1, arg2);
+}
+
 export function CreateSSHSession(arg1, arg2) {
   return window['go']['main']['App']['CreateSSHSession'](arg1, arg2);
 }
@@ -110,8 +118,20 @@ export function DeleteProfileFolderWithContentsAPI(arg1) {
   return window['go']['main']['App']['DeleteProfileFolderWithContentsAPI'](arg1);
 }
 
+export function DeleteRemotePath(arg1, arg2) {
+  return window['go']['main']['App']['DeleteRemotePath'](arg1, arg2);
+}
+
+export function DeleteRemotePathAdvanced(arg1, arg2, arg3) {
+  return window['go']['main']['App']['DeleteRemotePathAdvanced'](arg1, arg2, arg3);
+}
+
 export function DownloadAndInstallUpdate(arg1) {
   return window['go']['main']['App']['DownloadAndInstallUpdate'](arg1);
+}
+
+export function DownloadRemoteFile(arg1, arg2, arg3) {
+  return window['go']['main']['App']['DownloadRemoteFile'](arg1, arg2, arg3);
 }
 
 export function DuplicateProfile(arg1) {
@@ -214,8 +234,16 @@ export function GetProfilesPath() {
   return window['go']['main']['App']['GetProfilesPath']();
 }
 
+export function GetRemoteFileContent(arg1, arg2) {
+  return window['go']['main']['App']['GetRemoteFileContent'](arg1, arg2);
+}
+
 export function GetRemoteSystemStats(arg1) {
   return window['go']['main']['App']['GetRemoteSystemStats'](arg1);
+}
+
+export function GetRemoteWorkingDirectory(arg1) {
+  return window['go']['main']['App']['GetRemoteWorkingDirectory'](arg1);
 }
 
 export function GetSelectToCopyEnabled() {
@@ -278,6 +306,10 @@ export function Greet(arg1) {
   return window['go']['main']['App']['Greet'](arg1);
 }
 
+export function InitializeFileExplorerSession(arg1) {
+  return window['go']['main']['App']['InitializeFileExplorerSession'](arg1);
+}
+
 export function InitializeProfiles() {
   return window['go']['main']['App']['InitializeProfiles']();
 }
@@ -288,6 +320,10 @@ export function IsSessionClosed(arg1) {
 
 export function IsWindowMaximized() {
   return window['go']['main']['App']['IsWindowMaximized']();
+}
+
+export function ListRemoteFiles(arg1, arg2) {
+  return window['go']['main']['App']['ListRemoteFiles'](arg1, arg2);
 }
 
 export function LoadProfile(arg1) {
@@ -334,6 +370,10 @@ export function ReconnectTab(arg1) {
   return window['go']['main']['App']['ReconnectTab'](arg1);
 }
 
+export function RenameRemotePath(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RenameRemotePath'](arg1, arg2, arg3);
+}
+
 export function RenameTab(arg1, arg2) {
   return window['go']['main']['App']['RenameTab'](arg1, arg2);
 }
@@ -374,8 +414,16 @@ export function SelectFile(arg1, arg2) {
   return window['go']['main']['App']['SelectFile'](arg1, arg2);
 }
 
+export function SelectFilesToUpload() {
+  return window['go']['main']['App']['SelectFilesToUpload']();
+}
+
 export function SelectSSHPrivateKey() {
   return window['go']['main']['App']['SelectSSHPrivateKey']();
+}
+
+export function SelectSaveLocation(arg1) {
+  return window['go']['main']['App']['SelectSaveLocation'](arg1);
 }
 
 export function SetActiveTab(arg1) {
@@ -448,6 +496,14 @@ export function UpdateProfileFolder(arg1) {
 
 export function UpdateProfileTagsAPI(arg1, arg2) {
   return window['go']['main']['App']['UpdateProfileTagsAPI'](arg1, arg2);
+}
+
+export function UpdateRemoteFileContent(arg1, arg2, arg3) {
+  return window['go']['main']['App']['UpdateRemoteFileContent'](arg1, arg2, arg3);
+}
+
+export function UploadRemoteFiles(arg1, arg2, arg3) {
+  return window['go']['main']['App']['UploadRemoteFiles'](arg1, arg2, arg3);
 }
 
 export function WaitForSessionClose(arg1) {

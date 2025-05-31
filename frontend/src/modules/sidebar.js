@@ -12,6 +12,7 @@ export class SidebarManager {
         this.editingProfile = null;
         this.doubleClickHandled = false;
         this.iconSelectorListeners = [];
+        this.virtualFolderClickHandler = null; // For proper event listener cleanup
     }
 
     async initSidebar() {
@@ -280,10 +281,10 @@ export class SidebarManager {
             let newTab;
             if (profile.type === 'ssh' && profile.sshConfig) {
                 console.log('Creating SSH tab with config:', profile.sshConfig);
-                newTab = await tabsManager.createNewTab(null, profile.sshConfig);
+                newTab = await tabsManager.createNewTab(null, profile.sshConfig, profileId);
             } else {
                 console.log('Creating local tab with shell:', profile.shell);
-                newTab = await tabsManager.createNewTab(profile.shell || null);
+                newTab = await tabsManager.createNewTab(profile.shell || null, null, profileId);
             }
             
             // Set working directory if specified
@@ -579,7 +580,7 @@ export class SidebarManager {
     }
 
     renderProfileTree() {
-        const sidebarContent = document.querySelector('.sidebar-content');
+        const sidebarContent = document.getElementById('sidebar-content');
         if (!sidebarContent) return;
 
         let virtualFoldersHTML = '';
@@ -616,23 +617,37 @@ export class SidebarManager {
     }
 
     setupVirtualFolderInteractions() {
+        console.log('🔧 Setting up virtual folder interactions');
+        
+        // Remove any existing virtual folder click handler to prevent duplicates
+        if (this.virtualFolderClickHandler) {
+            document.removeEventListener('click', this.virtualFolderClickHandler);
+        }
+        
+        // Create a new handler and store reference for cleanup
+        this.virtualFolderClickHandler = (e) => {
+            if (e.target.closest('.virtual-folder')) {
+                this.handleVirtualFolderClick(e);
+            }
+        };
+        
+        // Add the new handler
+        document.addEventListener('click', this.virtualFolderClickHandler);
+        
         // Load profile counts for virtual folders
         this.virtualFolders?.forEach(async vf => {
             try {
+                console.log(`🔧 Loading count for virtual folder: ${vf.name} (${vf.id})`);
                 const profiles = await window.go.main.App.GetVirtualFolderProfilesAPI(vf.id);
                 const countElement = document.querySelector(`[data-folder-id="${vf.id}"]`);
                 if (countElement) {
                     countElement.textContent = `(${profiles.length})`;
+                    console.log(`🔧 Updated count for ${vf.name}: ${profiles.length}`);
+                } else {
+                    console.warn(`🔧 Count element not found for virtual folder: ${vf.id}`);
                 }
             } catch (error) {
                 console.error(`Failed to load count for virtual folder ${vf.id}:`, error);
-            }
-        });
-
-        // Handle virtual folder clicks
-        document.addEventListener('click', (e) => {
-            if (e.target.closest('.virtual-folder')) {
-                this.handleVirtualFolderClick(e);
             }
         });
     }
@@ -652,9 +667,19 @@ export class SidebarManager {
 
     showVirtualFolderContent(vfId, profiles) {
         const vf = this.virtualFolders.find(f => f.id === vfId);
-        if (!vf) return;
+        if (!vf) {
+            console.error('Virtual folder not found:', vfId);
+            return;
+        }
 
-        const sidebarContent = document.querySelector('.sidebar-content');
+        console.log(`📁 Showing virtual folder content: ${vf.name} with ${profiles.length} profiles`);
+        
+        const sidebarContent = document.getElementById('sidebar-content');
+        if (!sidebarContent) {
+            console.error('Sidebar content element not found');
+            return;
+        }
+        
         const backButton = `
             <div class="virtual-folder-header">
                 <button class="back-btn" onclick="window.sidebarManager.renderProfileTree()">← Back</button>
@@ -677,6 +702,7 @@ export class SidebarManager {
         }).join('');
 
         sidebarContent.innerHTML = backButton + (profilesHTML || '<div class="empty-state">No profiles found</div>');
+        console.log(`📁 Virtual folder content rendered: ${profiles.length} profiles`);
     }
 
     showSearchPanel() {
@@ -1337,16 +1363,87 @@ export class SidebarManager {
 
     // New view methods for activity bar integration
     showProfilesView() {
+        console.log('📋 SidebarManager: Showing profiles view');
         const sidebarContent = document.getElementById('sidebar-content');
         if (sidebarContent) {
-            this.renderProfileTree();
+            // Clear any existing content first to prevent mixing
+            sidebarContent.innerHTML = '';
+            sidebarContent.className = ''; // Clear any classes from other views
+            console.log('📋 SidebarManager: Sidebar content cleared');
+            
+            // Force reload profile tree data to ensure it's fresh (including virtual folders)
+            this.loadProfileTree().then(() => {
+                // Render the profile tree
+                this.renderProfileTree();
+                console.log('📋 SidebarManager: Profile tree rendered');
+                
+                // Force setup virtual folder interactions after rendering
+                setTimeout(() => {
+                    console.log('📋 SidebarManager: Setting up virtual folder interactions after render');
+                    this.setupVirtualFolderInteractions();
+                }, 100);
+                
+            }).catch(error => {
+                console.error('📋 SidebarManager: Failed to load profile tree:', error);
+                // Render with existing data as fallback
+                this.renderProfileTree();
+                
+                // Still try to setup interactions
+                setTimeout(() => {
+                    this.setupVirtualFolderInteractions();
+                }, 100);
+            });
         }
     }
 
     showFilesView() {
+        console.log('📁 SidebarManager: Showing files view');
+        
+        // Clear the sidebar content first to prevent conflicts
         const sidebarContent = document.getElementById('sidebar-content');
         if (sidebarContent) {
-            sidebarContent.innerHTML = this.getFileManagerContent();
+            sidebarContent.innerHTML = '';
+            console.log('📁 SidebarManager: Sidebar content cleared for files view');
+        }
+        
+        // Trigger remote explorer to handle the Files view
+        if (window.remoteExplorerManager) {
+            console.log('📁 SidebarManager: Triggering remote explorer activation');
+            window.remoteExplorerManager.handlePanelBecameActive();
+        } else {
+            // Fallback if remote explorer isn't available yet
+            console.log('📁 SidebarManager: Remote explorer not available, showing placeholder');
+            if (sidebarContent) {
+                sidebarContent.innerHTML = `
+                    <div class="remote-explorer-placeholder">
+                        <div class="placeholder-icon">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" style="color: var(--text-secondary);">
+                                <path d="M10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z"/>
+                                <path d="M4,8V18H20V8H4M6,10H8V12H6V10M10,10H18V12H10V10M6,14H8V16H6V14M10,14H18V16H10V14Z"/>
+                            </svg>
+                        </div>
+                        <div class="placeholder-title">Remote File Explorer</div>
+                        <div class="placeholder-message">
+                            Initializing file explorer...
+                        </div>
+                    </div>
+                `;
+            }
+        }
+    }
+
+    // Called when the sidebar switches away from Files view
+    hideFilesView() {
+        if (window.remoteExplorerManager) {
+            // Use the background session management instead of full cleanup
+            window.remoteExplorerManager.handlePanelBecameHidden();
+        }
+    }
+
+    // Method for complete cleanup (called on app shutdown or similar)
+    async forceCleanupFilesView() {
+        if (window.remoteExplorerManager) {
+            await window.remoteExplorerManager.forceCleanup();
         }
     }
 

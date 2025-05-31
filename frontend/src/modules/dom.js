@@ -9,7 +9,8 @@ import {
     createTerminalContextMenuTemplate,
     createSidebarContextMenuTemplate,
     createTabContextMenuTemplate,
-    createProfilePanelTemplate
+    createProfilePanelTemplate,
+    createFileExplorerContextMenuTemplate,
 } from './templates.js';
 
 export class DOMManager {
@@ -90,7 +91,8 @@ export class DOMManager {
         contextMenuContainer.innerHTML = 
             createTerminalContextMenuTemplate() + 
             createSidebarContextMenuTemplate() +
-            createTabContextMenuTemplate();
+            createTabContextMenuTemplate() +
+            createFileExplorerContextMenuTemplate();
     }
 
     // Utility methods for dynamic updates

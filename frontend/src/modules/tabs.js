@@ -366,7 +366,7 @@ export class TabsManager {
         }
     }
 
-    async createNewTab(shell = null, sshConfig = null) {
+    async createNewTab(shell = null, sshConfig = null, profileId = null) {
         try {
             updateStatus('Creating new tab...');
 
@@ -387,6 +387,12 @@ export class TabsManager {
 
             // Create tab on backend (backend generates its own session ID)
             const tab = await CreateTab(shell || '', sshConfig);
+            
+            // Set profileId if provided (for tabs created from profiles)
+            if (profileId) {
+                tab.profileId = profileId;
+                console.log('🔗 Tab created with profile ID:', profileId);
+            }
             
             // Enhance tab title with formatted shell name
             if (!sshConfig && shell) {
@@ -488,6 +494,12 @@ export class TabsManager {
             // Update UI immediately
             this.renderTabs();
             updateStatus(`Switched to: ${tab.title}`);
+
+            // Emit active tab changed event for remote explorer
+            const tabChangedEvent = new CustomEvent('active-tab-changed', {
+                detail: { tab }
+            });
+            document.dispatchEvent(tabChangedEvent);
 
             // Set active on backend asynchronously (don't block UI)
             SetActiveTab(tabId).catch((error) => {
@@ -1110,7 +1122,14 @@ export class TabsManager {
 
     // Method to check if tab has activity
     hasTabActivity(tabId) {
-        return this.tabActivity.has(tabId) && this.tabActivity.get(tabId);
+        return this.tabActivity.get(tabId) || false;
+    }
+
+    getActiveTab() {
+        if (this.activeTabId) {
+            return this.tabs.get(this.activeTabId);
+        }
+        return null;
     }
 
     createNewTabButtons() {

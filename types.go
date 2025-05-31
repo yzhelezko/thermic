@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/aymanbagabas/go-pty"
+	"github.com/pkg/sftp" // Import for SFTP client
 )
 
 // App struct represents the main application
@@ -25,6 +26,9 @@ type App struct {
 	profileWatcher *ProfileWatcher
 	virtualFolders []*VirtualFolder
 	metrics        *ProfileMetrics
+	// SFTP File Explorer
+	sftpClients      map[string]*sftp.Client
+	sftpClientsMutex sync.RWMutex
 }
 
 // TerminalSession represents a PTY session (exactly like VS Code)
@@ -47,6 +51,7 @@ type Tab struct {
 	IsActive       bool       `json:"isActive"`
 	ConnectionType string     `json:"connectionType"` // "local" or "ssh"
 	SSHConfig      *SSHConfig `json:"sshConfig,omitempty"`
+	ProfileID      string     `json:"profileId,omitempty"` // ID of the profile this tab was created from
 	Created        time.Time  `json:"created"`
 	Status         string     `json:"status"`                 // "connecting", "connected", "failed", "disconnected"
 	ErrorMessage   string     `json:"errorMessage,omitempty"` // Store error details for failed connections
@@ -59,6 +64,15 @@ type SSHConfig struct {
 	Username string `json:"username"`
 	Password string `json:"password,omitempty"` // Optional, prefer key auth
 	KeyPath  string `json:"keyPath,omitempty"`  // Path to SSH private key
+}
+
+// FileHistoryEntry represents a file access history entry
+type FileHistoryEntry struct {
+	Path          string    `yaml:"path" json:"path"`                    // Full remote file path
+	FileName      string    `yaml:"file_name" json:"fileName"`           // File name for display
+	AccessCount   int       `yaml:"access_count" json:"accessCount"`     // Number of times accessed
+	FirstAccessed time.Time `yaml:"first_accessed" json:"firstAccessed"` // First time this file was accessed
+	LastAccessed  time.Time `yaml:"last_accessed" json:"lastAccessed"`   // Most recent access time
 }
 
 // Profile represents a terminal profile configuration
@@ -77,13 +91,14 @@ type Profile struct {
 	Created      time.Time         `yaml:"created" json:"created"`
 	LastModified time.Time         `yaml:"last_modified" json:"lastModified"`
 	// Enhanced fields
-	Tags        []string          `yaml:"tags,omitempty" json:"tags,omitempty"`               // For filtering/search
-	LastUsed    time.Time         `yaml:"last_used,omitempty" json:"lastUsed,omitempty"`      // For MRU sorting
-	UsageCount  int               `yaml:"usage_count,omitempty" json:"usageCount,omitempty"`  // For popularity sorting
-	Color       string            `yaml:"color,omitempty" json:"color,omitempty"`             // Visual grouping
-	Description string            `yaml:"description,omitempty" json:"description,omitempty"` // Tooltips/notes
-	IsFavorite  bool              `yaml:"is_favorite,omitempty" json:"isFavorite,omitempty"`  // Quick access
-	Shortcuts   map[string]string `yaml:"shortcuts,omitempty" json:"shortcuts,omitempty"`     // Custom key bindings
+	Tags        []string            `yaml:"tags,omitempty" json:"tags,omitempty"`                // For filtering/search
+	LastUsed    time.Time           `yaml:"last_used,omitempty" json:"lastUsed,omitempty"`       // For MRU sorting
+	UsageCount  int                 `yaml:"usage_count,omitempty" json:"usageCount,omitempty"`   // For popularity sorting
+	Color       string              `yaml:"color,omitempty" json:"color,omitempty"`              // Visual grouping
+	Description string              `yaml:"description,omitempty" json:"description,omitempty"`  // Tooltips/notes
+	IsFavorite  bool                `yaml:"is_favorite,omitempty" json:"isFavorite,omitempty"`   // Quick access
+	Shortcuts   map[string]string   `yaml:"shortcuts,omitempty" json:"shortcuts,omitempty"`      // Custom key bindings
+	FileHistory []*FileHistoryEntry `yaml:"file_history,omitempty" json:"fileHistory,omitempty"` // Remote file access history
 }
 
 // ProfileFolder represents a folder in the profile tree
@@ -171,6 +186,18 @@ type WSLDistribution struct {
 	Default bool   `json:"default"`
 }
 
+// RemoteFileEntry represents a file or directory entry on a remote SFTP server.
+type RemoteFileEntry struct {
+	Name          string    `json:"name"`                    // Name of the file or directory
+	Path          string    `json:"path"`                    // Full remote path
+	IsDir         bool      `json:"isDir"`                   // True if this entry is a directory
+	IsSymlink     bool      `json:"isSymlink"`               // True if this entry is a symbolic link
+	SymlinkTarget string    `json:"symlinkTarget,omitempty"` // Target path if IsSymlink is true
+	Size          int64     `json:"size"`                    // Size in bytes
+	Mode          string    `json:"mode"`                    // File mode string (e.g., "drwxr-xr-x")
+	ModifiedTime  time.Time `json:"modifiedTime"`            // Last modification time
+}
+
 // Config constants
 const (
 	ConfigFileName  = "config.yaml"
@@ -191,5 +218,6 @@ func NewApp() *App {
 		profileFolders: make(map[string]*ProfileFolder),
 		activeTabId:    "",
 		config:         DefaultConfig(),
+		sftpClients:    make(map[string]*sftp.Client), // Initialize the map
 	}
 }
