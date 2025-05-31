@@ -12,6 +12,7 @@ import { SettingsManager } from './modules/settings.js';
 import { SidebarManager } from './modules/sidebar.js';
 import { ActivityBarManager } from './modules/activity-bar.js';
 import { StatusManager } from './modules/status.js';
+import { RemoteExplorerManager } from './modules/remote-explorer.js';
 import { updateStatus } from './modules/utils.js';
 import VersionManager from './components/VersionManager.js';
 import { modal } from './components/Modal.js';
@@ -49,7 +50,11 @@ class ThermicTerminal {
         // Now update terminal manager with tabs manager reference
         this.terminalManager.tabsManager = this.tabsManager;
         
-        this.contextMenuManager = new ContextMenuManager(this.terminalManager);
+        // Initialize remote explorer first
+        this.remoteExplorerManager = new RemoteExplorerManager(this.tabsManager);
+        
+        // Pass remote explorer to context menu manager
+        this.contextMenuManager = new ContextMenuManager(this.terminalManager, this.remoteExplorerManager);
         this.windowControlsManager = new WindowControlsManager();
         this.uiManager = new UIManager();
         this.settingsManager = new SettingsManager();
@@ -137,6 +142,10 @@ class ThermicTerminal {
             console.log('Initializing activity bar manager...');
             await this.activityBarManager.init();
             
+            // Initialize remote explorer
+            console.log('Initializing remote explorer manager...');
+            this.remoteExplorerManager.init();
+            
             // Expose sidebar manager globally for back buttons
             window.sidebarManager = this.sidebarManager;
             
@@ -145,6 +154,9 @@ class ThermicTerminal {
             
             // Expose tabs manager globally for event handling
             window.tabsManager = this.tabsManager;
+            
+            // Expose remote explorer globally for integration
+            window.remoteExplorerManager = this.remoteExplorerManager;
             
             // Expose status manager globally for event handling
             window.statusManager = this.statusManager;

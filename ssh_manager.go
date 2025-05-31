@@ -435,6 +435,9 @@ func (a *App) CloseSSHSession(sshSession *SSHSession) error {
 
 	sshSession.cleaning = true
 
+	// Close SFTP client if it exists for this session
+	a.CloseFileExplorerSession(sshSession.sessionID)
+
 	// Close monitoring session first
 	a.CloseMonitoringSession(sshSession)
 

@@ -4,14 +4,18 @@ import { showNotification } from './utils.js';
 import { modal } from '../components/Modal.js';
 
 export class ContextMenuManager {
-    constructor(terminalManager) {
+    constructor(terminalManager, remoteExplorerManager = null) {
         this.terminalManager = terminalManager;
+        this.remoteExplorerManager = remoteExplorerManager;
         this.activeMenu = null;
         this.currentTarget = null;
         this.selectedSidebarItem = null;
         // Add tab context properties
         this.currentTab = null;
         this.currentTabData = null;
+        // File explorer context properties
+        this.currentFileItem = null;
+        this.currentFileData = null;
         // Context menu settings
         this.selectToCopyEnabled = false;
     }
@@ -221,6 +225,50 @@ export class ContextMenuManager {
         this.activeMenu = menu;
     }
 
+    showFileExplorerItemContextMenu(event, fileItem, fileData) {
+        if (!this.remoteExplorerManager) {
+            console.warn('Remote explorer manager not available for context menu');
+            return;
+        }
+
+        // Don't show context menu for parent directory (..)
+        if (fileData.isParent) return;
+
+        const menu = document.getElementById('file-explorer-context-menu');
+        if (!menu) return;
+
+        this.hideAllMenus();
+        this.currentFileItem = fileItem;
+        this.currentFileData = fileData;
+
+        // Update menu items based on file type
+        this.updateFileExplorerItemMenuItems(menu, fileData);
+
+        // Position and show menu
+        this.positionMenu(menu, event.clientX, event.clientY);
+        this.showMenu(menu);
+        this.activeMenu = menu;
+    }
+
+    showFileExplorerDirectoryContextMenu(event) {
+        if (!this.remoteExplorerManager) {
+            console.warn('Remote explorer manager not available for context menu');
+            return;
+        }
+
+        const menu = document.getElementById('file-explorer-directory-context-menu');
+        if (!menu) return;
+
+        this.hideAllMenus();
+        this.currentFileItem = null;
+        this.currentFileData = null;
+
+        // Position and show menu
+        this.positionMenu(menu, event.clientX, event.clientY);
+        this.showMenu(menu);
+        this.activeMenu = menu;
+    }
+
     updateTerminalMenuItems(menu) {
         const copyItem = menu.querySelector('[data-action="copy"]');
         const pasteItem = menu.querySelector('[data-action="paste"]');
@@ -409,6 +457,40 @@ export class ContextMenuManager {
         }
     }
 
+    updateFileExplorerItemMenuItems(menu, fileData) {
+        const { isDir, isParent } = fileData;
+        
+        // Hide/show items based on file type
+        const previewItem = menu.querySelector('[data-action="file-preview"]');
+        const uploadHereItem = menu.querySelector('[data-action="file-upload-here"]');
+        
+        if (previewItem) {
+            previewItem.style.display = !isDir ? 'flex' : 'none';
+        }
+        
+        if (uploadHereItem) {
+            uploadHereItem.style.display = isDir ? 'flex' : 'none';
+        }
+
+        // Update text based on item type
+        const openItem = menu.querySelector('[data-action="file-open"]');
+        const downloadItem = menu.querySelector('[data-action="file-download"]');
+        
+        if (openItem) {
+            const textSpan = openItem.querySelector('span:not(.context-menu-item-icon)');
+            if (textSpan) {
+                textSpan.textContent = isDir ? 'Open' : 'Open';
+            }
+        }
+        
+        if (downloadItem) {
+            const textSpan = downloadItem.querySelector('span:not(.context-menu-item-icon)');
+            if (textSpan) {
+                textSpan.textContent = isDir ? 'Download Folder' : 'Download';
+            }
+        }
+    }
+
     selectSidebarItem(treeItem) {
         // Remove previous selection
         const prevSelected = document.querySelector('.tree-item.selected');
@@ -453,6 +535,8 @@ export class ContextMenuManager {
         this.currentTarget = null;
         this.currentTab = null;
         this.currentTabData = null;
+        this.currentFileItem = null;
+        this.currentFileData = null;
     }
 
     async handleMenuAction(action) {
@@ -516,6 +600,49 @@ export class ContextMenuManager {
                 break;
             case 'tab-close-others':
                 await this.handleTabCloseOthers();
+                break;
+            // File Explorer actions
+            case 'file-open':
+                await this.handleFileOpen();
+                break;
+            case 'file-preview':
+                await this.handleFilePreview();
+                break;
+            case 'file-download':
+                await this.handleFileDownload();
+                break;
+            case 'file-upload-here':
+                await this.handleFileUploadHere();
+                break;
+            case 'file-rename':
+                await this.handleFileRename();
+                break;
+            case 'file-copy-path':
+                await this.handleFileCopyPath();
+                break;
+            case 'file-delete':
+                await this.handleFileDelete();
+                break;
+            case 'dir-new-folder':
+                await this.handleDirNewFolder();
+                break;
+            case 'dir-upload-files':
+                await this.handleDirUploadFiles();
+                break;
+            case 'dir-upload-folder':
+                await this.handleDirUploadFolder();
+                break;
+            case 'dir-refresh':
+                await this.handleDirRefresh();
+                break;
+            case 'dir-copy-path':
+                await this.handleDirCopyPath();
+                break;
+            case 'dir-properties':
+                await this.handleDirProperties();
+                break;
+            case 'directory-properties':
+                await this.handleDirectoryProperties();
                 break;
             default:
                 console.log('Unknown action:', action);
@@ -909,6 +1036,115 @@ export class ContextMenuManager {
         } catch (error) {
             console.error('Failed to close other tabs:', error);
             showNotification('Failed to close other tabs', 2000);
+        }
+    }
+
+    // File Explorer actions
+    async handleFileOpen() {
+        if (!this.remoteExplorerManager || !this.currentFileData) return;
+        
+        if (this.currentFileData.isDir) {
+            await this.remoteExplorerManager.navigateToPath(this.currentFileData.path);
+        } else {
+            // For files, we could implement file preview or download
+            await this.remoteExplorerManager.showFileActions(this.currentFileItem);
+        }
+    }
+
+    async handleFilePreview() {
+        if (!this.remoteExplorerManager || !this.currentFileData) return;
+        
+        if (!this.currentFileData.isDir) {
+            await this.remoteExplorerManager.showFilePreview(this.currentFileData.path, this.currentFileData.name);
+        }
+    }
+
+    async handleFileDownload() {
+        if (!this.remoteExplorerManager || !this.currentFileData) return;
+        
+        await this.remoteExplorerManager.downloadFile(
+            this.currentFileData.path, 
+            this.currentFileData.name, 
+            this.currentFileData.isDir
+        );
+    }
+
+    async handleFileUploadHere() {
+        if (!this.remoteExplorerManager || !this.currentFileData) return;
+        
+        if (this.currentFileData.isDir) {
+            await this.remoteExplorerManager.uploadToDirectory(this.currentFileData.path);
+        }
+    }
+
+    async handleFileRename() {
+        if (!this.remoteExplorerManager || !this.currentFileData) return;
+        
+        this.remoteExplorerManager.showRenameDialog(
+            this.currentFileData.path, 
+            this.currentFileData.name
+        );
+    }
+
+    async handleFileCopyPath() {
+        if (!this.remoteExplorerManager || !this.currentFileData) return;
+        
+        await this.remoteExplorerManager.copyPathToClipboard(this.currentFileData.path);
+    }
+
+    async handleFileDelete() {
+        if (!this.remoteExplorerManager || !this.currentFileData) return;
+        
+        this.remoteExplorerManager.showDeleteConfirmation(
+            this.currentFileData.path, 
+            this.currentFileData.name, 
+            this.currentFileData.isDir
+        );
+    }
+
+    async handleDirNewFolder() {
+        if (!this.remoteExplorerManager) return;
+        
+        this.remoteExplorerManager.showNewFolderDialog();
+    }
+
+    async handleDirUploadFiles() {
+        if (!this.remoteExplorerManager) return;
+        
+        await this.remoteExplorerManager.uploadToDirectory(this.remoteExplorerManager.currentRemotePath);
+    }
+
+    async handleDirUploadFolder() {
+        if (!this.remoteExplorerManager) return;
+        
+        await this.remoteExplorerManager.uploadFolderToDirectory(this.remoteExplorerManager.currentRemotePath);
+    }
+
+    async handleDirRefresh() {
+        if (!this.remoteExplorerManager) return;
+        
+        await this.remoteExplorerManager.refreshCurrentDirectory();
+    }
+
+    async handleDirCopyPath() {
+        if (!this.remoteExplorerManager) return;
+        
+        await this.remoteExplorerManager.copyPathToClipboard(this.remoteExplorerManager.currentRemotePath);
+    }
+
+    async handleDirProperties() {
+        if (!this.remoteExplorerManager || !this.currentFileData) return;
+        
+        if (this.currentFileData.isDir) {
+            this.remoteExplorerManager.showDirectoryProperties(this.currentFileData.path, this.currentFileData.name);
+        }
+    }
+
+    async handleDirectoryProperties() {
+        if (!this.remoteExplorerManager || !this.currentFileData) return;
+        
+        if (this.currentFileData.isDir) {
+            this.remoteExplorerManager.showDirectoryProperties(this.currentFileData.path, this.currentFileData.name);
         }
     }
 }

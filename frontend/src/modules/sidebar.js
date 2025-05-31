@@ -1344,9 +1344,38 @@ export class SidebarManager {
     }
 
     showFilesView() {
-        const sidebarContent = document.getElementById('sidebar-content');
-        if (sidebarContent) {
-            sidebarContent.innerHTML = this.getFileManagerContent();
+        // Trigger remote explorer to handle the Files view
+        if (window.remoteExplorerManager) {
+            window.remoteExplorerManager.handlePanelBecameActive();
+        } else {
+            // Fallback if remote explorer isn't available yet
+            const sidebarContent = document.getElementById('sidebar-content');
+            if (sidebarContent) {
+                sidebarContent.innerHTML = `
+                    <div class="remote-explorer-placeholder">
+                        <div class="placeholder-icon">🔗</div>
+                        <div class="placeholder-title">Remote File Explorer</div>
+                        <div class="placeholder-message">
+                            Initializing file explorer...
+                        </div>
+                    </div>
+                `;
+            }
+        }
+    }
+
+    // Called when the sidebar switches away from Files view
+    hideFilesView() {
+        if (window.remoteExplorerManager) {
+            // Use the background session management instead of full cleanup
+            window.remoteExplorerManager.handlePanelBecameHidden();
+        }
+    }
+
+    // Method for complete cleanup (called on app shutdown or similar)
+    async forceCleanupFilesView() {
+        if (window.remoteExplorerManager) {
+            await window.remoteExplorerManager.forceCleanup();
         }
     }
 

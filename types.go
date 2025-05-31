@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/aymanbagabas/go-pty"
+	"github.com/pkg/sftp" // Import for SFTP client
 )
 
 // App struct represents the main application
@@ -25,6 +26,9 @@ type App struct {
 	profileWatcher *ProfileWatcher
 	virtualFolders []*VirtualFolder
 	metrics        *ProfileMetrics
+	// SFTP File Explorer
+	sftpClients      map[string]*sftp.Client
+	sftpClientsMutex sync.RWMutex
 }
 
 // TerminalSession represents a PTY session (exactly like VS Code)
@@ -171,6 +175,18 @@ type WSLDistribution struct {
 	Default bool   `json:"default"`
 }
 
+// RemoteFileEntry represents a file or directory entry on a remote SFTP server.
+type RemoteFileEntry struct {
+	Name          string    `json:"name"`                    // Name of the file or directory
+	Path          string    `json:"path"`                    // Full remote path
+	IsDir         bool      `json:"isDir"`                   // True if this entry is a directory
+	IsSymlink     bool      `json:"isSymlink"`               // True if this entry is a symbolic link
+	SymlinkTarget string    `json:"symlinkTarget,omitempty"` // Target path if IsSymlink is true
+	Size          int64     `json:"size"`                    // Size in bytes
+	Mode          string    `json:"mode"`                    // File mode string (e.g., "drwxr-xr-x")
+	ModifiedTime  time.Time `json:"modifiedTime"`            // Last modification time
+}
+
 // Config constants
 const (
 	ConfigFileName  = "config.yaml"
@@ -191,5 +207,6 @@ func NewApp() *App {
 		profileFolders: make(map[string]*ProfileFolder),
 		activeTabId:    "",
 		config:         DefaultConfig(),
+		sftpClients:    make(map[string]*sftp.Client), // Initialize the map
 	}
 }

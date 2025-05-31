@@ -489,6 +489,12 @@ export class TabsManager {
             this.renderTabs();
             updateStatus(`Switched to: ${tab.title}`);
 
+            // Emit active tab changed event for remote explorer
+            const tabChangedEvent = new CustomEvent('active-tab-changed', {
+                detail: { tab }
+            });
+            document.dispatchEvent(tabChangedEvent);
+
             // Set active on backend asynchronously (don't block UI)
             SetActiveTab(tabId).catch((error) => {
                 console.warn('Backend SetActiveTab failed:', error);
@@ -1110,7 +1116,14 @@ export class TabsManager {
 
     // Method to check if tab has activity
     hasTabActivity(tabId) {
-        return this.tabActivity.has(tabId) && this.tabActivity.get(tabId);
+        return this.tabActivity.get(tabId) || false;
+    }
+
+    getActiveTab() {
+        if (this.activeTabId) {
+            return this.tabs.get(this.activeTabId);
+        }
+        return null;
     }
 
     createNewTabButtons() {

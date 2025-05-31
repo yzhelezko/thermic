@@ -1611,3 +1611,82 @@ export function createProfileSettingsContent(type, data = null) {
         </div>
     `;
 } 
+
+export function createFileExplorerContextMenuTemplate() {
+    return `
+        <div class="context-menu" id="file-explorer-context-menu">
+            <!-- File/Directory specific actions -->
+            <div class="context-menu-item" data-action="file-open">
+                <span class="context-menu-item-icon"><img src="./icons/folder.svg" class="svg-icon" alt="📁"></span>
+                <span>Open</span>
+            </div>
+            <div class="context-menu-item" data-action="file-preview">
+                <span class="context-menu-item-icon"><img src="./icons/eye.svg" class="svg-icon" alt="👁️"></span>
+                <span>Preview</span>
+            </div>
+            <div class="context-menu-separator"></div>
+            
+            <!-- Transfer actions -->
+            <div class="context-menu-item" data-action="file-download">
+                <span class="context-menu-item-icon"><img src="./icons/arrow-down.svg" class="svg-icon" alt="⬇️"></span>
+                <span>Download</span>
+            </div>
+            <div class="context-menu-item" data-action="file-upload-here">
+                <span class="context-menu-item-icon"><img src="./icons/arrow-up.svg" class="svg-icon" alt="⬆️"></span>
+                <span>Upload Files Here</span>
+            </div>
+            <div class="context-menu-separator"></div>
+            
+            <!-- File management actions -->
+            <div class="context-menu-item" data-action="file-rename">
+                <span class="context-menu-item-icon"><img src="./icons/rename.svg" class="svg-icon" alt="📝"></span>
+                <span>Rename</span>
+            </div>
+            <div class="context-menu-item" data-action="file-copy-path">
+                <span class="context-menu-item-icon"><img src="./icons/clipboard.svg" class="svg-icon" alt="📋"></span>
+                <span>Copy Path</span>
+            </div>
+            <div class="context-menu-separator"></div>
+            
+            <!-- Dangerous actions -->
+            <div class="context-menu-item" data-action="file-delete">
+                <span class="context-menu-item-icon"><img src="./icons/trash.svg" class="svg-icon" alt="🗑️"></span>
+                <span>Delete</span>
+            </div>
+        </div>
+        
+        <div class="context-menu" id="file-explorer-directory-context-menu">
+            <!-- Directory creation and upload -->
+            <div class="context-menu-item" data-action="dir-new-folder">
+                <span class="context-menu-item-icon"><img src="./icons/folder.svg" class="svg-icon" alt="📁"></span>
+                <span>New Folder</span>
+            </div>
+            <div class="context-menu-item" data-action="dir-upload-files">
+                <span class="context-menu-item-icon"><img src="./icons/arrow-up.svg" class="svg-icon" alt="⬆️"></span>
+                <span>Upload Files</span>
+            </div>
+            <div class="context-menu-item" data-action="dir-upload-folder">
+                <span class="context-menu-item-icon"><img src="./icons/arrow-up.svg" class="svg-icon" alt="⬆️"></span>
+                <span>Upload Folder</span>
+            </div>
+            <div class="context-menu-separator"></div>
+            
+            <!-- Directory actions -->
+            <div class="context-menu-item" data-action="dir-refresh">
+                <span class="context-menu-item-icon"><img src="./icons/refresh.svg" class="svg-icon" alt="🔄"></span>
+                <span>Refresh</span>
+            </div>
+            <div class="context-menu-item" data-action="dir-copy-path">
+                <span class="context-menu-item-icon"><img src="./icons/clipboard.svg" class="svg-icon" alt="📋"></span>
+                <span>Copy Current Path</span>
+            </div>
+            <div class="context-menu-separator"></div>
+            
+            <!-- Directory info -->
+            <div class="context-menu-item" data-action="dir-properties">
+                <span class="context-menu-item-icon"><img src="./icons/info.svg" class="svg-icon" alt="📊"></span>
+                <span>Show Properties</span>
+            </div>
+        </div>
+    `;
+}
