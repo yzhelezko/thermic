@@ -16,3 +16,8 @@
 - Theme toggle icon: always pass explicit isDark parameter to updateThemeToggleIcon() to avoid race conditions in production builds
 - Settings panel theme changes: must call terminalManager.updateTheme() and uiManager.onThemeChange() to update terminal output window
 - SSH key discovery: scans entire .ssh directory for valid private keys when no keyPath specified (Windows: %USERPROFILE%\.ssh, Unix: $HOME/.ssh)
+- App structure: Core functionality split into app_core.go (startup/shutdown/basic methods) and app.go (business logic) - maintain this separation
+- Tab management: All tab-related functionality extracted to app_tabs.go (CreateTab, GetTabs, SetActiveTab, CloseTab, SSH connections, status management, reordering) - keep tab logic separate
+- Profile management: All profile-related functionality extracted to app_profiles.go (CRUD operations, folder management, tree structure, virtual folders, search, metrics, API methods) - keep profile logic separate
+- System monitoring: All system statistics and monitoring functionality extracted to app_system.go (local/remote system stats, CPU/memory/network monitoring, active tab info) - keep monitoring logic separate
+- SFTP file explorer: All SFTP file operations extracted to app_sftp.go (InitializeFileExplorerSession, ListRemoteFiles, file upload/download, directory operations, file content management) - keep SFTP logic separate

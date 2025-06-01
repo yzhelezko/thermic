@@ -101,12 +101,17 @@ Windows-specific platform implementation with 348 lines. Handles WSL detection, 
 
 ## Recommended Security Fixes
 
-### 1. **Remove Automatic SSH Key Scanning**
+### 1. **SSH Key Scanning - Future User Choice**
 ```go
+// NOTE: Keep SSH key scanning functionality for future user choice feature
+// Plan: Add user preference to enable/disable automatic SSH key discovery
+// Current: Preserve existing functionality, add user consent option later
 func (a *App) getDefaultSSHKeyPaths() []string {
-    // NEVER automatically scan SSH directory on Windows
-    // Require explicit user selection via file dialog
-    return []string{} // Return empty, force manual selection
+    // TODO: Add user preference check for SSH key auto-discovery
+    // if !a.config.AllowSSHKeyAutoDiscovery { return []string{} }
+    
+    // Keep existing functionality for now
+    // ... existing implementation
 }
 ```
 

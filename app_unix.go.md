@@ -69,17 +69,15 @@ Unix-specific platform implementation with 174 lines. Handles shell detection, P
 
 ## Security Recommendations
 
-### 1. **SSH Key Access Control**
+### 1. **SSH Key Access Control - Future Enhancement**
 ```go
+// NOTE: Preserve SSH key scanning for future user choice implementation
 func (a *App) getDefaultSSHKeyPaths() []string {
-    // NEVER automatically scan SSH directory
-    // Require explicit user consent
-    if !a.userConsentForSSHKeys {
-        return []string{} // Return empty, require manual key selection
-    }
+    // TODO: Add user preference for SSH key auto-discovery
+    // if !a.config.AllowSSHKeyAutoDiscovery { return []string{} }
     
-    // Only return keys explicitly approved by user
-    return a.approvedSSHKeys
+    // Keep existing functionality - will add user consent option later
+    // ... existing implementation
 }
 ```
 
