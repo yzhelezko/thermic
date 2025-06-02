@@ -8,14 +8,67 @@ class ThemeManager {
     constructor() {
         this.currentTheme = this.detectCurrentTheme();
         this.observers = [];
-        this.init();
+        this.isInitialized = false;
+        // Don't call init() automatically - let it be called when DOM is ready
     }
 
     async init() {
+        if (this.isInitialized) {
+            console.warn('ThemeManager already initialized');
+            return;
+        }
+        
+        // Load saved theme from config first
+        await this.loadThemeFromConfig();
+        
         // Listen for theme changes
         this.setupThemeToggleButton();
         this.setupThemeObserver();
         await this.updateThemeIcons();
+        this.isInitialized = true;
+        
+        console.log('✅ ThemeManager fully initialized with theme:', this.currentTheme);
+    }
+
+    async loadThemeFromConfig() {
+        console.log('Loading theme from backend config...');
+        try {
+            // Try to load theme from backend config
+            if (window.go?.main?.App?.ConfigGet) {
+                const savedTheme = await window.go.main.App.ConfigGet("Theme");
+                console.log('Loaded theme from config:', savedTheme);
+                
+                if (savedTheme && (savedTheme === 'dark' || savedTheme === 'light' || savedTheme === 'system')) {
+                    // Handle 'system' theme by detecting system preference
+                    let themeToApply = savedTheme;
+                    if (savedTheme === 'system') {
+                        themeToApply = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                        console.log('System theme detected as:', themeToApply);
+                    }
+                    
+                    // Apply the theme to DOM immediately
+                    document.documentElement.setAttribute('data-theme', themeToApply);
+                    document.body.classList.toggle('dark-mode', themeToApply === 'dark');
+                    
+                    this.currentTheme = themeToApply;
+                    console.log('✅ Applied theme from config:', themeToApply);
+                    return;
+                }
+            } else {
+                console.warn('ConfigGet not available - Wails bindings not ready yet');
+            }
+        } catch (error) {
+            console.warn('Failed to load theme from config:', error);
+        }
+        
+        // Fallback to detecting current theme
+        console.log('Falling back to theme detection...');
+        this.currentTheme = this.detectCurrentTheme();
+        
+        // Apply detected theme to DOM to ensure consistency
+        document.documentElement.setAttribute('data-theme', this.currentTheme);
+        document.body.classList.toggle('dark-mode', this.currentTheme === 'dark');
+        console.log('Applied fallback theme:', this.currentTheme);
     }
 
     detectCurrentTheme() {
@@ -41,10 +94,29 @@ class ThemeManager {
     setupThemeToggleButton() {
         const themeToggleBtn = document.getElementById('theme-toggle');
         if (themeToggleBtn) {
-            themeToggleBtn.addEventListener('click', () => {
-                this.toggleTheme();
-            });
+            // Remove any existing listener to prevent duplicates
+            themeToggleBtn.removeEventListener('click', this.themeToggleHandler);
+            
+            // Create bound handler if it doesn't exist
+            if (!this.themeToggleHandler) {
+                this.themeToggleHandler = () => this.toggleTheme();
+            }
+            
+            themeToggleBtn.addEventListener('click', this.themeToggleHandler);
+            console.log('✅ Theme toggle button event listener attached');
+        } else {
+            console.warn('❌ Theme toggle button not found in DOM');
         }
+    }
+    
+    // Method to re-initialize theme toggle button (useful for late DOM initialization)
+    reinitializeThemeToggleButton() {
+        this.setupThemeToggleButton();
+    }
+    
+    // Method to force update theme icons (useful for ensuring icons are set correctly)
+    async forceUpdateThemeIcons() {
+        await this.updateThemeIcons();
     }
 
     setupThemeObserver() {
@@ -108,11 +180,23 @@ class ThemeManager {
         // Update body class for compatibility
         document.body.classList.toggle('dark-mode', theme === 'dark');
         
-        // Store preference
+        // Save to backend config first (preferred)
+        try {
+            if (window.go?.main?.App?.ConfigSet) {
+                await window.go.main.App.ConfigSet("Theme", theme);
+                console.log('✅ Theme saved to backend config:', theme);
+            } else {
+                console.warn('ConfigSet not available - theme change will not persist');
+            }
+        } catch (error) {
+            console.error('Failed to save theme to backend config:', error);
+        }
+        
+        // Also store in localStorage as fallback
         try {
             localStorage.setItem('theme', theme);
         } catch (e) {
-            console.warn('Could not save theme preference:', e);
+            console.warn('Could not save theme preference to localStorage:', e);
         }
 
         this.currentTheme = theme;

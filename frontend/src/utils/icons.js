@@ -46,7 +46,8 @@ const EMOJI_TO_ICON = {
     '🌐': 'globe'
 };
 
-// Cache for loaded SVG content
+// Cache for loaded SVG content with version to prevent corruption
+const SVG_CACHE_VERSION = '1.2'; // Increment to invalidate old cache
 const svgCache = new Map();
 
 /**
@@ -88,8 +89,10 @@ export function getThemeToggleIcon() {
  * @returns {Promise<string>} - The SVG content as a string
  */
 export async function loadSvgContent(iconName) {
-    if (svgCache.has(iconName)) {
-        return svgCache.get(iconName);
+    const cacheKey = `${iconName}_v${SVG_CACHE_VERSION}`;
+    
+    if (svgCache.has(cacheKey)) {
+        return svgCache.get(cacheKey);
     }
     
     try {
@@ -99,7 +102,17 @@ export async function loadSvgContent(iconName) {
             throw new Error(`Failed to load SVG: ${response.status}`);
         }
         const svgContent = await response.text();
-        svgCache.set(iconName, svgContent);
+        
+        // Store with versioned key and clean up old versions
+        svgCache.set(cacheKey, svgContent);
+        
+        // Clean up old cache entries for this icon
+        for (const key of svgCache.keys()) {
+            if (key.startsWith(`${iconName}_v`) && key !== cacheKey) {
+                svgCache.delete(key);
+            }
+        }
+        
         return svgContent;
     } catch (error) {
         console.error(`Failed to load SVG ${iconName}:`, error);
@@ -195,30 +208,65 @@ export function replaceEmojisWithIcons(html) {
 export async function updateThemeToggleIcon(element, isDark = null) {
     // Use provided theme state or auto-detect as fallback
     const darkMode = isDark !== null ? isDark : isDarkMode();
-    const iconName = darkMode ? 'sun' : 'moon';
     const altText = darkMode ? 'Toggle to light mode' : 'Toggle to dark mode';
     
-    console.log(`Updating theme toggle icon: ${darkMode ? 'dark' : 'light'} mode -> ${iconName} icon`);
-    
     try {
+        // Check if this is the activity bar theme toggle (has inline SVG)
+        const svgElement = element.querySelector('svg.theme-toggle-icon');
+        
+        if (svgElement) {
+            // Activity bar theme toggle - update inline SVG path
+            const pathElement = svgElement.querySelector('path');
+            if (pathElement) {
+                if (darkMode) {
+                    // Dark mode shows sun icon
+                    svgElement.innerHTML = `<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12a4 4 0 1 0 8 0a4 4 0 1 0-8 0m-5 0h1m8-9v1m8 8h1m-9 8v1M5.6 5.6l.7.7m12.1-.7l-.7.7m0 11.4l.7.7m-12.1-.7l-.7.7"/>`;
+                    element.title = 'Toggle to light mode';
+                } else {
+                    // Light mode shows moon icon
+                    svgElement.innerHTML = `<path fill="currentColor" d="M21.64 13a1 1 0 0 0-1.05-.14a8.05 8.05 0 0 1-3.37.73a8.15 8.15 0 0 1-8.14-8.1a8.59 8.59 0 0 1 .25-2A1 1 0 0 0 8 2.36a10.14 10.14 0 1 0 14 11.69a1 1 0 0 0-.36-1.05Zm-9.5 6.69A8.14 8.14 0 0 1 7.08 5.22v.27a10.15 10.15 0 0 0 10.14 10.14a9.79 9.79 0 0 0 2.1-.22a8.11 8.11 0 0 1-7.18 4.32Z"/>`;
+                    element.title = 'Toggle to dark mode';
+                }
+                return; // Successfully updated inline SVG
+            }
+        }
+        
+        // Fallback for other theme toggles or legacy implementations
+        const iconName = darkMode ? 'sun' : 'moon';
         const svgContent = await loadSvgContent(iconName);
+        
         if (svgContent) {
-            // Replace the content with inline SVG
-            const svgWithClasses = svgContent.replace(
+            // Clean the SVG content and ensure proper attributes
+            let cleanSvgContent = svgContent.trim();
+            
+            // Remove any existing class, alt, width, height attributes to avoid duplication
+            cleanSvgContent = cleanSvgContent.replace(/\s+class="[^"]*"/g, '');
+            cleanSvgContent = cleanSvgContent.replace(/\s+alt="[^"]*"/g, '');
+            cleanSvgContent = cleanSvgContent.replace(/\s+width="[^"]*"/g, '');
+            cleanSvgContent = cleanSvgContent.replace(/\s+height="[^"]*"/g, '');
+            
+            // Keep original viewBox for proper proportions
+            // The size difference will be handled by CSS
+            
+            // Add our attributes
+            const svgWithClasses = cleanSvgContent.replace(
                 '<svg',
-                `<svg class="svg-icon theme-toggle-icon" alt="${altText}" width="20" height="20"`
+                `<svg class="svg-icon theme-toggle-icon" alt="${altText}" width="24" height="24"`
             );
+            
+            // Completely replace the innerHTML to avoid nested SVGs
+            element.innerHTML = '';
             element.innerHTML = svgWithClasses;
         } else {
             // Fallback to img
             const iconPath = `./icons/${iconName}.svg`;
-            element.innerHTML = `<img src="${iconPath}" class="svg-icon" alt="${altText}" width="20" height="20">`;
+            element.innerHTML = `<img src="${iconPath}" class="svg-icon" alt="${altText}" width="24" height="24">`;
         }
     } catch (error) {
         console.error('Error updating theme toggle icon:', error);
         // Fallback to img
         const iconPath = darkMode ? './icons/sun.svg' : './icons/moon.svg';
-        element.innerHTML = `<img src="${iconPath}" class="svg-icon" alt="${altText}" width="20" height="20">`;
+        element.innerHTML = `<img src="${iconPath}" class="svg-icon" alt="${altText}" width="24" height="24">`;
     }
 }
 
@@ -378,10 +426,78 @@ export function testIconThemes() {
 // Expose test function globally for console access
 window.testIconThemes = testIconThemes;
 
+// Debug function to manually test theme icon update
+window.testThemeIconUpdate = async function() {
+    console.log('🧪 Manual theme icon test starting...');
+    const themeButton = document.getElementById('theme-toggle');
+    if (!themeButton) {
+        console.error('❌ Theme button not found!');
+        return;
+    }
+    
+    console.log('🔍 Current button HTML:', themeButton.innerHTML);
+    
+    // Check computed styles
+    const buttonStyles = getComputedStyle(themeButton);
+    const svgElement = themeButton.querySelector('svg');
+    if (svgElement) {
+        const svgStyles = getComputedStyle(svgElement);
+        console.log('🎨 Button computed styles:', {
+            color: buttonStyles.color,
+            backgroundColor: buttonStyles.backgroundColor,
+            display: buttonStyles.display,
+            visibility: buttonStyles.visibility,
+            opacity: buttonStyles.opacity,
+            width: buttonStyles.width,
+            height: buttonStyles.height
+        });
+        console.log('🎨 SVG computed styles:', {
+            color: svgStyles.color,
+            fill: svgStyles.fill,
+            stroke: svgStyles.stroke,
+            display: svgStyles.display,
+            visibility: svgStyles.visibility,
+            opacity: svgStyles.opacity,
+            width: svgStyles.width,
+            height: svgStyles.height
+        });
+    }
+    
+    // Test both sun and moon
+    console.log('🌙 Testing moon icon...');
+    await updateThemeToggleIcon(themeButton, false); // Light mode shows moon
+    console.log('🔍 After moon update:', themeButton.innerHTML);
+    
+    setTimeout(async () => {
+        console.log('☀️ Testing sun icon...');
+        await updateThemeToggleIcon(themeButton, true); // Dark mode shows sun
+        console.log('🔍 After sun update:', themeButton.innerHTML);
+        
+        // Check styles again after update
+        const svgAfterUpdate = themeButton.querySelector('svg');
+        if (svgAfterUpdate) {
+            const svgStylesAfter = getComputedStyle(svgAfterUpdate);
+            console.log('🎨 SVG styles after sun update:', {
+                color: svgStylesAfter.color,
+                fill: svgStylesAfter.fill,
+                stroke: svgStylesAfter.stroke,
+                display: svgStylesAfter.display,
+                visibility: svgStylesAfter.visibility,
+                opacity: svgStylesAfter.opacity
+            });
+        }
+    }, 2000);
+};
+
 /**
  * Initialize all icons in the UI (can be called on page load)
  */
 export async function initializeIcons() {
+    // Clear potentially corrupted theme icon cache from previous versions
+    clearIconCache('sun');
+    clearIconCache('moon');
+    console.log('🧹 Cleared theme icon cache to prevent corruption');
+    
     await initializeThemeToggleIcon();
     
     // Debug theme state on initialization
@@ -735,8 +851,16 @@ if (typeof window !== 'undefined') {
  * @param {string} iconName - The icon name to clear from cache
  */
 export function clearIconCache(iconName) {
-    if (svgCache.has(iconName)) {
-        svgCache.delete(iconName);
+    let cleared = false;
+    // Clear all versions of this icon from cache
+    for (const key of svgCache.keys()) {
+        if (key.startsWith(`${iconName}_v`)) {
+            svgCache.delete(key);
+            cleared = true;
+        }
+    }
+    
+    if (cleared) {
         console.log(`Cleared cache for icon: ${iconName}`);
     }
 }
@@ -808,6 +932,48 @@ export async function forceUpdateThemeToggleIcon(isDark) {
 // Expose force update function globally for debugging in production
 window.forceUpdateThemeToggleIcon = forceUpdateThemeToggleIcon;
 
+// Debug function to test if the issue is color-related
+window.testSunVisibility = function() {
+    console.log('🔍 Testing sun icon visibility...');
+    const themeButton = document.getElementById('theme-toggle');
+    if (!themeButton) {
+        console.error('❌ Theme button not found!');
+        return;
+    }
+    
+    const svg = themeButton.querySelector('svg');
+    if (!svg) {
+        console.error('❌ No SVG found in theme button!');
+        return;
+    }
+    
+    console.log('🎯 Current SVG:', svg.outerHTML);
+    
+    // Test with different colors
+    console.log('🎨 Testing with red color...');
+    svg.style.color = 'red';
+    svg.style.fill = 'red';
+    
+    setTimeout(() => {
+        console.log('🎨 Testing with white color...');
+        svg.style.color = 'white';
+        svg.style.fill = 'white';
+        
+        setTimeout(() => {
+            console.log('🎨 Testing with yellow color...');
+            svg.style.color = 'yellow';
+            svg.style.fill = 'yellow';
+            
+            setTimeout(() => {
+                console.log('🔄 Removing manual styles...');
+                svg.style.color = '';
+                svg.style.fill = '';
+                console.log('✅ Visibility test completed');
+            }, 2000);
+        }, 2000);
+    }, 2000);
+};
+
 /**
  * Global debug function for theme icon issues (useful in production)
  * Call from browser console: fixThemeIcon()
@@ -819,6 +985,9 @@ window.fixThemeIcon = async function() {
     console.log('Current theme:', currentTheme, 'isDark:', isDark);
     
     try {
+        // Clear corrupted cache first
+        clearIconCache('sun');
+        clearIconCache('moon');
         await forceUpdateThemeToggleIcon(isDark);
         console.log('✅ Theme icon fix attempted');
     } catch (error) {

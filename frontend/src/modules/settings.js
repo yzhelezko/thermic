@@ -198,10 +198,17 @@ export class SettingsManager {
                             const isDarkMode = darkModeToggle.checked;
                             console.log('Dark mode toggle changed in settings:', isDarkMode);
                             
-                            // Apply the theme to DOM immediately
+                            // Apply the theme through theme manager for consistency
                             const newTheme = isDarkMode ? 'dark' : 'light';
-                            document.documentElement.setAttribute('data-theme', newTheme);
-                            document.body.setAttribute('data-theme', newTheme);
+                            if (window.themeManager) {
+                                await window.themeManager.setTheme(newTheme);
+                                console.log('Theme set through theme manager:', newTheme);
+                            } else {
+                                // Fallback to direct DOM manipulation
+                                document.documentElement.setAttribute('data-theme', newTheme);
+                                document.body.setAttribute('data-theme', newTheme);
+                                console.log('Theme set directly (theme manager not available):', newTheme);
+                            }
                             
                             // Update theme toggle icon in activity bar with explicit theme state
                             const themeToggle = document.getElementById('theme-toggle');
@@ -230,43 +237,7 @@ export class SettingsManager {
                                 console.log('Synced theme state with activity bar manager');
                             }
                             
-                            // Save theme preference to config with improved error handling
-                            if (window.go?.main?.App?.ConfigSet) {
-                                try {
-                                    const themeValue = isDarkMode ? 'dark' : 'light';
-                                    await window.go.main.App.ConfigSet("Theme", themeValue);
-                                    console.log('✅ Theme preference saved to config from settings:', themeValue);
-                                } catch (configError) {
-                                    console.error('❌ Failed to save theme to config from settings:', configError);
-                                    
-                                    // Retry once after a short delay
-                                    setTimeout(async () => {
-                                        try {
-                                            await window.go.main.App.ConfigSet("Theme", themeValue);
-                                            console.log('✅ Theme preference saved to config (retry successful):', themeValue);
-                                        } catch (retryError) {
-                                            console.error('❌ Failed to save theme to config (retry failed):', retryError);
-                                        }
-                                    }, 500);
-                                }
-                            } else {
-                                console.warn('⚠️ ConfigSet method not available - Wails bindings may not be ready');
-                                
-                                // Wait a bit and try again
-                                setTimeout(async () => {
-                                    if (window.go?.main?.App?.ConfigSet) {
-                                        try {
-                                            const themeValue = isDarkMode ? 'dark' : 'light';
-                                            await window.go.main.App.ConfigSet("Theme", themeValue);
-                                            console.log('✅ Theme preference saved to config (delayed save):', themeValue);
-                                        } catch (delayedError) {
-                                            console.error('❌ Failed delayed save to config:', delayedError);
-                                        }
-                                    } else {
-                                        console.error('❌ ConfigSet still not available after delay');
-                                    }
-                                }, 1000);
-                            }
+                            // Theme manager already handles saving to config when setTheme is called
                             
                             console.log('Theme applied from settings panel:', newTheme);
                         } catch (error) {

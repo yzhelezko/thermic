@@ -95,11 +95,15 @@
     transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-#theme-toggle svg {
+#theme-toggle svg,
+#theme-toggle .theme-toggle-icon {
     transition: transform 0.3s ease;
+    width: 24px;
+    height: 24px;
 }
 
-#theme-toggle.rotating svg {
+#theme-toggle.rotating svg,
+#theme-toggle.rotating .theme-toggle-icon {
     transform: rotate(180deg);
 }
 

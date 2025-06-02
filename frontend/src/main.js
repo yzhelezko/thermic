@@ -21,6 +21,9 @@ import { notification } from './components/Notification.js';
 // Import icon utilities
 import { initializeIcons, debugThemeState, updateAllIconsToInline } from './utils/icons.js';
 
+// Import theme manager to ensure it's initialized
+import { themeManager } from './modules/theme-manager.js';
+
 // Platform detection for window controls
 function detectPlatform() {
     const userAgent = navigator.userAgent.toLowerCase();
@@ -125,6 +128,10 @@ class ThermicTerminal {
             console.log('Initializing icon system...');
             await initializeIcons();
             
+            // Initialize theme manager after DOM is ready
+            console.log('Initializing theme manager...');
+            await themeManager.init();
+            
             // Initialize status first to show platform info
             console.log('Initializing status manager...');
             await this.statusManager.initStatus();
@@ -142,9 +149,9 @@ class ThermicTerminal {
             console.log('Initializing activity bar manager...');
             await this.activityBarManager.init();
             
-            // Sync terminal theme with activity bar's loaded theme
+            // Sync terminal theme with theme manager's loaded theme
             console.log('Syncing terminal theme with loaded config...');
-            this.terminalManager.updateTheme(this.activityBarManager.isDarkTheme);
+            this.terminalManager.updateTheme(themeManager.isDarkMode());
             
             // Initialize remote explorer
             console.log('Initializing remote explorer manager...');
@@ -170,6 +177,9 @@ class ThermicTerminal {
             
             // Expose the main app instance globally for settings integration
             window.thermicApp = this;
+            
+            // Expose theme manager globally for settings integration
+            window.themeManager = themeManager;
 
             // Initialize terminal
             console.log('Initializing terminal manager...');
