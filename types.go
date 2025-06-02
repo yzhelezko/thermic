@@ -209,6 +209,7 @@ type App struct {
 	profiles        *ProfileManager
 	ssh             *SSHManager
 	config          *ConfigManager
+	messages        *MessageManager
 	resourceManager *ResourceManager
 	mutex           sync.RWMutex
 }
@@ -553,13 +554,19 @@ func NewApp() *App {
 	}
 	mainRM.Register(config.resourceManager)
 
-	return &App{
+	// Create the app
+	app := &App{
 		terminal:        terminal,
 		profiles:        profiles,
 		ssh:             ssh,
 		config:          config,
 		resourceManager: mainRM,
 	}
+
+	// Create message manager (requires app reference)
+	app.messages = NewMessageManager(app)
+
+	return app
 }
 
 // BoundedMap provides a map with size limits and automatic cleanup

@@ -2,7 +2,7 @@
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
-import { GetAvailableShells, StartShell, WriteToShell, ResizeShell, CloseShell, ShowMessageDialog, WaitForSessionClose, ConfigGet, ConfigSet } from '../../wailsjs/go/main/App';
+import { GetAvailableShells, StartShell, WriteToShell, ResizeShell, CloseShell, ShowMessageDialog, WaitForSessionClose, ConfigGet, ConfigSet, ApproveHostKeyUpdate } from '../../wailsjs/go/main/App';
 import { EventsOn, EventsEmit } from '../../wailsjs/runtime/runtime';
 import { THEMES, DEFAULT_TERMINAL_OPTIONS, generateSessionId, formatShellName, updateStatus } from './utils.js';
 
@@ -34,6 +34,13 @@ export class TerminalManager {
         this.maxSessions = 50;
         this.resizeObserver = null;
         this.cleanupInterval = null;
+        
+        // Host key prompt mode
+        this.hostKeyPromptMode = {
+            active: false,
+            sessionId: null,
+            keydownHandler: null
+        };
         
         // Terminal configuration
         this.scrollbackLines = 10000; // Will be loaded from backend
@@ -90,7 +97,9 @@ export class TerminalManager {
                             const isAtBottom = terminalSession.terminal.buffer.active.viewportY >= 
                                               terminalSession.terminal.buffer.active.baseY;
                             
-                            terminalSession.terminal.write(data.data);
+                            // Process SSH status messages for better display
+                            const processedData = this.processSSHMessage(data.data, sessionId);
+                            terminalSession.terminal.write(processedData);
                             
                             // Auto-scroll to bottom if we were already at the bottom
                             if (isAtBottom || terminalSession.terminal.buffer.active.length === 0) {
@@ -141,6 +150,12 @@ export class TerminalManager {
                     } else {
                         console.warn('StatusManager not available for tab switch:', data);
                     }
+                });
+
+                // Set up host key prompt listener
+                this.globalHostKeyPromptListener = EventsOn('host-key-prompt', (data) => {
+                    console.log('Global listener received host key prompt:', data);
+                    this.enableHostKeyPromptMode(data.sessionId);
                 });
 
                 this.globalListenerSetup = true;
@@ -1016,7 +1031,7 @@ export class TerminalManager {
         // Don't trigger activity for certain types of output
         if (!data || typeof data !== 'string') return false;
         
-        // Filter out SSH connection animations and status messages
+        // Filter out SSH connection status messages with new format
         if (data.includes('SSH Connection') || 
             data.includes('Connecting...') ||
             data.includes('Connected to') ||
@@ -1029,8 +1044,95 @@ export class TerminalManager {
             return false;
         }
         
-        // Trigger activity for actual content
+        // Filter out new formatted SSH status messages (they shouldn't trigger activity)
+        if (data.includes('● Authentication:') ||
+            data.includes('⏳ Connecting to') ||
+            data.includes('⏳ Creating session') ||
+            data.includes('⏳ Loading key:') ||
+            data.includes('⏳ Discovering authentication') ||
+            data.includes('✓ Connection established') ||
+            data.includes('✓ SSH session ready') ||
+            data.includes('● New host:') ||
+            data.includes('⏳ Adding') && data.includes('to known hosts') ||
+            data.includes('✓ Host') && data.includes('verified and added')) {
+            return false;
+        }
+        
+        // Trigger activity for actual user content and important warnings/errors
         return true;
+    }
+
+    processSSHMessage(data, sessionId) {
+        // Don't process empty or non-string data
+        if (!data || typeof data !== 'string') {
+            return data;
+        }
+
+        // Check if this is an SSH connection message by looking for our new format
+        const isSSHMessage = data.includes('●') || data.includes('✓') || data.includes('⚠') || data.includes('⏳') || data.includes('✗');
+        
+        if (!isSSHMessage) {
+            return data; // Return original data if not an SSH status message
+        }
+
+        // Add some spacing and formatting improvements for SSH messages
+        let processedData = data;
+
+        // Add subtle animation effect for progress messages
+        if (data.includes('⏳')) {
+            // Add a subtle pulse effect using ANSI sequences (optional enhancement)
+            processedData = data.replace('⏳', '\x1b[2m⏳\x1b[0m\x1b[90m');
+        }
+
+        // Make success messages slightly more prominent
+        if (data.includes('✓')) {
+            processedData = data.replace('✓', '\x1b[1m✓\x1b[0m');
+        }
+
+        // Make warning messages more noticeable
+        if (data.includes('⚠')) {
+            processedData = data.replace('⚠', '\x1b[1m⚠\x1b[0m');
+        }
+
+        // Add subtle visual separation for SSH connection flow
+        if (data.includes('✓ SSH session ready')) {
+            // Update tab status for successful connection
+            this.updateSSHConnectionStatus(sessionId, 'connected');
+        }
+
+        // Handle connection errors
+        if (data.includes('✗') && (data.includes('failed') || data.includes('error'))) {
+            this.updateSSHConnectionStatus(sessionId, 'failed');
+        }
+
+        // Handle warnings
+        if (data.includes('⚠') && data.includes('Host key changed')) {
+            this.updateSSHConnectionStatus(sessionId, 'warning');
+        }
+
+        return processedData;
+    }
+
+    updateSSHConnectionStatus(sessionId, status) {
+        // Find the tab associated with this session and update its visual state
+        if (this.tabsManager) {
+            const tabId = this.findTabBySessionId(sessionId);
+            if (tabId) {
+                // Emit a custom event that the tabs manager can listen to
+                const event = new CustomEvent('ssh-connection-status', {
+                    detail: { 
+                        sessionId, 
+                        tabId, 
+                        status,
+                        timestamp: Date.now()
+                    }
+                });
+                document.dispatchEvent(event);
+                
+                // Also log for debugging
+                console.log(`SSH connection status updated: ${sessionId} -> ${status}`);
+            }
+        }
     }
 
     async loadTerminalConfig() {
@@ -1077,6 +1179,105 @@ export class TerminalManager {
                     console.warn(`Error updating config for session ${sessionId}:`, error);
                 }
             }
+        }
+    }
+
+    // Host key prompt mode methods
+    enableHostKeyPromptMode(sessionId) {
+        console.log(`Enabling host key prompt mode for session: ${sessionId}`);
+        
+        this.hostKeyPromptMode.active = true;
+        this.hostKeyPromptMode.sessionId = sessionId;
+        
+        // Add visual indicator to the terminal
+        const terminalSession = this.terminals.get(sessionId);
+        if (terminalSession && terminalSession.container) {
+            terminalSession.container.classList.add('host-key-prompt-active');
+        }
+        
+        // Set up global keyboard listener
+        this.hostKeyPromptMode.keydownHandler = (event) => {
+            this.handleHostKeyPromptInput(event);
+        };
+        
+        document.addEventListener('keydown', this.hostKeyPromptMode.keydownHandler, true);
+        console.log('Host key prompt mode enabled - listening for keyboard input');
+    }
+
+    disableHostKeyPromptMode() {
+        console.log('Disabling host key prompt mode');
+        
+        const sessionId = this.hostKeyPromptMode.sessionId;
+        this.hostKeyPromptMode.active = false;
+        this.hostKeyPromptMode.sessionId = null;
+        
+        // Remove visual indicator
+        if (sessionId) {
+            const terminalSession = this.terminals.get(sessionId);
+            if (terminalSession && terminalSession.container) {
+                terminalSession.container.classList.remove('host-key-prompt-active');
+            }
+        }
+        
+        // Remove keyboard event listener
+        if (this.hostKeyPromptMode.keydownHandler) {
+            document.removeEventListener('keydown', this.hostKeyPromptMode.keydownHandler, true);
+            this.hostKeyPromptMode.keydownHandler = null;
+        }
+        
+        console.log('Host key prompt mode disabled');
+    }
+
+    handleHostKeyPromptInput(event) {
+        if (!this.hostKeyPromptMode.active) return;
+        
+        const sessionId = this.hostKeyPromptMode.sessionId;
+        console.log(`Host key prompt input: ${event.key} for session: ${sessionId}`);
+        
+        // Handle Enter key (approve)
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            event.stopPropagation();
+            this.approveHostKey(sessionId, true);
+            this.disableHostKeyPromptMode();
+        }
+        // Handle Escape key (reject)
+        else if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            this.approveHostKey(sessionId, false);
+            this.disableHostKeyPromptMode();
+        }
+        // Handle 'y' or 'Y' for yes
+        else if (event.key.toLowerCase() === 'y') {
+            event.preventDefault();
+            event.stopPropagation();
+            this.approveHostKey(sessionId, true);
+            this.disableHostKeyPromptMode();
+        }
+        // Handle 'n' or 'N' for no
+        else if (event.key.toLowerCase() === 'n') {
+            event.preventDefault();
+            event.stopPropagation();
+            this.approveHostKey(sessionId, false);
+            this.disableHostKeyPromptMode();
+        }
+    }
+
+    async approveHostKey(sessionId, approved) {
+        try {
+            console.log(`Host key ${approved ? 'approved' : 'rejected'} for session: ${sessionId}`);
+            
+            await ApproveHostKeyUpdate(sessionId, approved);
+            
+            if (approved) {
+                console.log('Host key updated successfully. You can now retry the connection.');
+            } else {
+                console.log('Host key update cancelled by user.');
+            }
+            
+        } catch (error) {
+            console.error('Failed to process host key approval:', error);
         }
     }
 
@@ -1137,6 +1338,20 @@ export class TerminalManager {
                 console.warn('Error cleaning up global config listener:', error);
             }
             this.globalConfigListener = null;
+        }
+
+        if (this.globalHostKeyPromptListener) {
+            try {
+                this.globalHostKeyPromptListener();
+            } catch (error) {
+                console.warn('Error cleaning up global host key prompt listener:', error);
+            }
+            this.globalHostKeyPromptListener = null;
+        }
+
+        // Disable host key prompt mode if active
+        if (this.hostKeyPromptMode.active) {
+            this.disableHostKeyPromptMode();
         }
 
         // Cleanup all terminal sessions

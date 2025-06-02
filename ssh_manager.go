@@ -13,30 +13,358 @@ import (
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
+	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 // SSHSession represents a native SSH session
 type SSHSession struct {
-	client    *ssh.Client
-	session   *ssh.Session
-	stdin     io.WriteCloser
-	stdout    io.Reader
-	stderr    io.Reader
-	done      chan bool
-	closed    chan bool
-	cols      int
-	rows      int
-	cleaning  bool
-	sessionID string
-	// Add connection monitoring fields
+	// Core SSH connection fields
+	client  *ssh.Client
+	session *ssh.Session
+	stdin   io.WriteCloser
+	stdout  io.Reader
+	stderr  io.Reader
+
+	// Channel management
+	done       chan bool
+	closed     chan bool
+	forceClose chan bool
+
+	// Terminal dimensions
+	cols int
+	rows int
+
+	// Session state (protected by mutex)
+	mu           sync.RWMutex
+	cleaning     bool
+	sessionID    string
 	lastActivity time.Time
 	isHanging    bool
-	forceClose   chan bool
-	// Add monitoring session for system stats
+
+	// Monitoring session for system stats
 	monitoringClient  *ssh.Client
 	monitoringEnabled bool
 	monitoringCache   map[string]string
 	monitoringMutex   sync.RWMutex
+
+	// Resource tracking for cleanup
+	activeGoroutines int32
+}
+
+// PendingHostKeyUpdate stores information about a host key that needs user approval
+type PendingHostKeyUpdate struct {
+	SessionID      string
+	Hostname       string
+	KnownHostsPath string
+	Remote         net.Addr
+	NewKey         ssh.PublicKey
+	KeyError       *knownhosts.KeyError
+}
+
+// Thread-safe getters and setters for SSHSession state
+func (s *SSHSession) SetCleaning(cleaning bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cleaning = cleaning
+}
+
+func (s *SSHSession) IsCleaning() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cleaning
+}
+
+func (s *SSHSession) UpdateLastActivity() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastActivity = time.Now()
+	s.isHanging = false
+}
+
+func (s *SSHSession) GetLastActivity() time.Time {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.lastActivity
+}
+
+func (s *SSHSession) SetHanging(hanging bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.isHanging = hanging
+}
+
+func (s *SSHSession) IsHanging() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.isHanging
+}
+
+// createHostKeyCallback creates a sophisticated host key callback with user interaction
+func (a *App) createHostKeyCallback(sessionID string) ssh.HostKeyCallback {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		a.emitTerminalMessage(sessionID, "WARNING: Could not determine home directory, using insecure host key verification")
+		return ssh.InsecureIgnoreHostKey()
+	}
+
+	knownHostsPath := filepath.Join(homeDir, ".ssh", "known_hosts")
+
+	// Ensure .ssh directory exists
+	sshDir := filepath.Dir(knownHostsPath)
+	if err := os.MkdirAll(sshDir, 0700); err != nil {
+		a.emitTerminalMessage(sessionID, fmt.Sprintf("WARNING: Could not create .ssh directory: %v", err))
+		return ssh.InsecureIgnoreHostKey()
+	}
+
+	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		// Try to load existing known_hosts file
+		callback, err := knownhosts.New(knownHostsPath)
+		if err != nil {
+			// known_hosts file doesn't exist or can't be read, create it
+			a.emitTerminalMessage(sessionID, fmt.Sprintf("Creating new known_hosts file: %s", knownHostsPath))
+			return a.addHostKeyToKnownHosts(sessionID, knownHostsPath, hostname, remote, key)
+		}
+
+		// Try to verify with existing known_hosts
+		err = callback(hostname, remote, key)
+		if err != nil {
+			// Handle different types of host key errors
+			if keyErr, ok := err.(*knownhosts.KeyError); ok {
+				return a.handleHostKeyError(sessionID, knownHostsPath, hostname, remote, key, keyErr)
+			}
+
+			// Generic error
+			a.emitTerminalMessage(sessionID, fmt.Sprintf("Host key verification failed: %v", err))
+			return err
+		}
+
+		return nil
+	}
+}
+
+// MessageType defines different types of SSH messages
+type MessageType int
+
+const (
+	MessageInfo MessageType = iota
+	MessageSuccess
+	MessageWarning
+	MessageError
+	MessageProgress
+	MessageDebug
+)
+
+// emitTerminalMessage sends a basic message (for backward compatibility)
+func (a *App) emitTerminalMessage(sessionID, message string) {
+	a.messages.EmitMessage(sessionID, message, MessageInfo)
+}
+
+// addHostKeyToKnownHosts adds a new host key to the known_hosts file
+func (a *App) addHostKeyToKnownHosts(sessionID, knownHostsPath, hostname string, remote net.Addr, key ssh.PublicKey) error {
+	a.messages.EmitMessage(sessionID, fmt.Sprintf("Adding %s to known hosts", hostname), MessageProgress)
+
+	// Create the host entry
+	hostEntry := knownhosts.Line([]string{hostname}, key)
+
+	// Append to known_hosts file
+	file, err := os.OpenFile(knownHostsPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		return fmt.Errorf("failed to open known_hosts file: %w", err)
+	}
+	defer file.Close()
+
+	if _, err := file.WriteString(hostEntry + "\n"); err != nil {
+		return fmt.Errorf("failed to write to known_hosts file: %w", err)
+	}
+
+	a.messages.EmitMessage(sessionID, fmt.Sprintf("Host %s verified and added", hostname), MessageSuccess)
+	return nil
+}
+
+// handleHostKeyError handles various host key verification errors
+func (a *App) handleHostKeyError(sessionID, knownHostsPath, hostname string, remote net.Addr, key ssh.PublicKey, keyErr *knownhosts.KeyError) error {
+	if len(keyErr.Want) == 0 {
+		// Host not in known_hosts, add it
+		a.messages.EmitMessage(sessionID, fmt.Sprintf("New host: %s", hostname), MessageInfo)
+		return a.addHostKeyToKnownHosts(sessionID, knownHostsPath, hostname, remote, key)
+	}
+
+	// Host key has changed - this is potentially dangerous
+	a.messages.EmitMessage(sessionID, fmt.Sprintf("Host key changed for %s!", hostname), MessageWarning)
+	a.messages.EmitMessage(sessionID, "This could indicate a security issue - verify before continuing", MessageWarning)
+
+	// Get key fingerprints for display
+	oldFingerprint := ""
+	if len(keyErr.Want) > 0 {
+		oldFingerprint = ssh.FingerprintSHA256(keyErr.Want[0].Key)
+	}
+	newFingerprint := ssh.FingerprintSHA256(key)
+
+	a.messages.EmitMessage(sessionID, fmt.Sprintf("Old: %s", oldFingerprint), MessageInfo)
+	a.messages.EmitMessage(sessionID, fmt.Sprintf("New: %s", newFingerprint), MessageInfo)
+
+	// Store the pending host key info for user decision
+	a.storePendingHostKeyUpdate(sessionID, hostname, knownHostsPath, remote, key, keyErr)
+
+	// Mark that a host key prompt is active for this session
+	a.messages.SetHostKeyPromptActive(sessionID, true)
+
+	// Show interactive prompt in terminal
+	a.messages.EmitMessage(sessionID, "", MessageInfo)
+	a.messages.EmitMessage(sessionID, "Continue connecting? (ENTER=yes, ESC=no)", MessageWarning)
+
+	// Emit a special event for the frontend to handle keyboard input
+	if a.ctx != nil {
+		wailsRuntime.EventsEmit(a.ctx, "host-key-prompt", map[string]interface{}{
+			"sessionId":      sessionID,
+			"hostname":       hostname,
+			"oldFingerprint": oldFingerprint,
+			"newFingerprint": newFingerprint,
+			"type":           "keyboard-prompt",
+		})
+	}
+
+	// Return a specific error that indicates user intervention is needed
+	return fmt.Errorf("host key verification pending user approval")
+}
+
+// UpdateHostKey manually updates a host key in known_hosts (can be called from frontend)
+func (a *App) UpdateHostKey(sessionID, hostname string, acceptNewKey bool) error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("could not determine home directory: %w", err)
+	}
+
+	knownHostsPath := filepath.Join(homeDir, ".ssh", "known_hosts")
+
+	if !acceptNewKey {
+		a.emitTerminalMessage(sessionID, "Host key update cancelled by user")
+		return fmt.Errorf("host key update cancelled")
+	}
+
+	// This would typically be called after a host key verification failure
+	// For now, we'll just emit a message that the key would be updated
+	a.emitTerminalMessage(sessionID, fmt.Sprintf("Would update host key for %s in %s", hostname, knownHostsPath))
+	a.emitTerminalMessage(sessionID, "Note: Automatic host key updates not yet implemented for security")
+
+	return nil
+}
+
+// Package-level storage for pending host key updates (in production, this could be stored in App struct)
+var pendingHostKeyUpdates = make(map[string]*PendingHostKeyUpdate)
+var pendingHostKeyMutex sync.RWMutex
+
+// storePendingHostKeyUpdate stores a pending host key update for user approval
+func (a *App) storePendingHostKeyUpdate(sessionID, hostname, knownHostsPath string, remote net.Addr, key ssh.PublicKey, keyErr *knownhosts.KeyError) {
+	pendingHostKeyMutex.Lock()
+	defer pendingHostKeyMutex.Unlock()
+
+	pendingHostKeyUpdates[sessionID] = &PendingHostKeyUpdate{
+		SessionID:      sessionID,
+		Hostname:       hostname,
+		KnownHostsPath: knownHostsPath,
+		Remote:         remote,
+		NewKey:         key,
+		KeyError:       keyErr,
+	}
+}
+
+// ApproveHostKeyUpdate handles user approval/rejection of host key changes
+func (a *App) ApproveHostKeyUpdate(sessionID string, approved bool) error {
+	// Clear the host key prompt active flag first
+	a.messages.SetHostKeyPromptActive(sessionID, false)
+
+	pendingHostKeyMutex.Lock()
+	pending, exists := pendingHostKeyUpdates[sessionID]
+	if exists && approved {
+		// Keep the pending update for processing
+	} else {
+		// Remove the pending update
+		delete(pendingHostKeyUpdates, sessionID)
+	}
+	pendingHostKeyMutex.Unlock()
+
+	if !exists {
+		return fmt.Errorf("no pending host key update found for session %s", sessionID)
+	}
+
+	if !approved {
+		a.messages.EmitMessage(sessionID, "Connection cancelled", MessageWarning)
+		return fmt.Errorf("host key update rejected by user")
+	}
+
+	// User approved the update - overwrite the known_hosts entry
+	a.messages.EmitMessage(sessionID, "Updating known_hosts...", MessageProgress)
+
+	err := a.updateKnownHostsEntry(pending)
+	if err != nil {
+		a.messages.EmitMessage(sessionID, fmt.Sprintf("Failed to update: %v", err), MessageError)
+		return err
+	}
+
+	// Clean up the pending update
+	pendingHostKeyMutex.Lock()
+	delete(pendingHostKeyUpdates, sessionID)
+	pendingHostKeyMutex.Unlock()
+
+	a.messages.EmitMessage(sessionID, "Host key updated - retry connection", MessageSuccess)
+
+	return nil
+}
+
+// updateKnownHostsEntry updates a specific host entry in known_hosts file
+func (a *App) updateKnownHostsEntry(pending *PendingHostKeyUpdate) error {
+	// Read the current known_hosts file
+	content, err := os.ReadFile(pending.KnownHostsPath)
+	if err != nil {
+		return fmt.Errorf("failed to read known_hosts file: %w", err)
+	}
+
+	lines := strings.Split(string(content), "\n")
+	var updatedLines []string
+	hostname := pending.Hostname
+	newHostEntry := knownhosts.Line([]string{hostname}, pending.NewKey)
+
+	// Process each line
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			// Keep empty lines and comments
+			updatedLines = append(updatedLines, line)
+			continue
+		}
+
+		// Check if this line is for our hostname
+		parts := strings.Fields(line)
+		if len(parts) >= 3 {
+			hosts := strings.Split(parts[0], ",")
+			isOurHost := false
+			for _, host := range hosts {
+				if host == hostname || (strings.Contains(hostname, ":") && host == strings.Split(hostname, ":")[0]) {
+					isOurHost = true
+					break
+				}
+			}
+
+			if isOurHost {
+				// Skip this line (we'll replace it)
+				continue
+			}
+		}
+
+		updatedLines = append(updatedLines, line)
+	}
+
+	// Add the new host entry
+	updatedLines = append(updatedLines, newHostEntry)
+
+	// Write the updated content back
+	newContent := strings.Join(updatedLines, "\n")
+	if !strings.HasSuffix(newContent, "\n") {
+		newContent += "\n"
+	}
+
+	return os.WriteFile(pending.KnownHostsPath, []byte(newContent), 0600)
 }
 
 // CreateSSHSession creates a new SSH connection and session
@@ -62,25 +390,30 @@ func (a *App) CreateSSHSessionWithSize(sessionID string, config *SSHConfig, cols
 		cols, rows = 80, 24 // fallback to default
 	}
 
-	// Create SSH client configuration
+	// Create SSH client configuration with secure host key verification
 	sshConfig := &ssh.ClientConfig{
 		User:            config.Username,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // For now, accept all host keys
+		HostKeyCallback: a.createHostKeyCallback(sessionID),
 		Timeout:         10 * time.Second,
 	}
 
 	// Add authentication methods
 	authMethodsAdded := 0
+	var authMethods []string
+
 	if config.Password != "" {
+		authMethods = append(authMethods, "password")
 		sshConfig.Auth = append(sshConfig.Auth, ssh.Password(config.Password))
 		authMethodsAdded++
 	}
 
 	if config.KeyPath != "" {
+		a.messages.EmitMessage(sessionID, fmt.Sprintf("Loading key: %s", filepath.Base(config.KeyPath)), MessageProgress)
 		key, err := a.loadSSHKey(config.KeyPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load SSH key from %s: %w", config.KeyPath, err)
 		} else {
+			authMethods = append(authMethods, "private key")
 			sshConfig.Auth = append(sshConfig.Auth, ssh.PublicKeys(key))
 			authMethodsAdded++
 		}
@@ -88,11 +421,13 @@ func (a *App) CreateSSHSessionWithSize(sessionID string, config *SSHConfig, cols
 
 	// If no auth methods, try ssh-agent or default keys
 	if authMethodsAdded == 0 {
+		a.messages.EmitMessage(sessionID, "Discovering authentication methods...", MessageProgress)
+
 		// Try to add default authentication methods
 		if agentAuth, err := a.getSSHAgentAuth(); err == nil {
+			authMethods = append(authMethods, "SSH agent")
 			sshConfig.Auth = append(sshConfig.Auth, agentAuth)
 			authMethodsAdded++
-			fmt.Printf("Added SSH agent authentication\n")
 		}
 
 		// Try default key locations using platform-specific paths (only if allowed)
@@ -102,18 +437,15 @@ func (a *App) CreateSSHSessionWithSize(sessionID string, config *SSHConfig, cols
 			for _, keyPath := range defaultKeys {
 				if key, err := a.loadSSHKey(keyPath); err == nil {
 					validKeys = append(validKeys, key)
-					fmt.Printf("Successfully loaded SSH key: %s\n", keyPath)
-				} else {
-					fmt.Printf("Failed to load SSH key %s: %v\n", keyPath, err)
 				}
 			}
 		}
 
 		// Add all valid keys to authentication methods
 		if len(validKeys) > 0 {
+			authMethods = append(authMethods, fmt.Sprintf("%d local keys", len(validKeys)))
 			sshConfig.Auth = append(sshConfig.Auth, ssh.PublicKeys(validKeys...))
 			authMethodsAdded++
-			fmt.Printf("Added %d SSH private keys for authentication\n", len(validKeys))
 		}
 	}
 
@@ -122,8 +454,15 @@ func (a *App) CreateSSHSessionWithSize(sessionID string, config *SSHConfig, cols
 		return nil, fmt.Errorf("no authentication methods available: please provide password or SSH key")
 	}
 
+	// Show authentication methods being used
+	if len(authMethods) > 0 {
+		a.messages.EmitMessage(sessionID, fmt.Sprintf("Authentication: %s", strings.Join(authMethods, ", ")), MessageInfo)
+	}
+
 	// Connect to SSH server with more specific error handling
 	address := fmt.Sprintf("%s:%d", config.Host, config.Port)
+	// Don't emit "Connecting to..." here - it's already shown by StartConnectionFlow()
+
 	client, err := ssh.Dial("tcp", address, sshConfig)
 	if err != nil {
 		// Provide more specific error messages based on error type
@@ -152,7 +491,9 @@ func (a *App) CreateSSHSessionWithSize(sessionID string, config *SSHConfig, cols
 		return nil, fmt.Errorf("failed to connect to %s: %v", address, err)
 	}
 
-	// Create SSH session
+	// Use unified connection flow to stop animation properly
+	a.messages.ConnectionEstablished(sessionID)
+
 	session, err := client.NewSession()
 	if err != nil {
 		client.Close()
@@ -181,30 +522,28 @@ func (a *App) CreateSSHSessionWithSize(sessionID string, config *SSHConfig, cols
 		return nil, fmt.Errorf("failed to create stderr pipe: %w", err)
 	}
 
-	// Create SSH session wrapper
+	// Create SSH session wrapper with proper initialization
 	sshSession := &SSHSession{
-		client:    client,
-		session:   session,
-		stdin:     stdin,
-		stdout:    stdout,
-		stderr:    stderr,
-		done:      make(chan bool),
-		closed:    make(chan bool),
-		cols:      cols,
-		rows:      rows,
-		cleaning:  false,
-		sessionID: sessionID,
-		// Add connection monitoring fields
-		lastActivity: time.Now(),
-		isHanging:    false,
-		forceClose:   make(chan bool),
-		// Add monitoring session for system stats
-		monitoringClient:  nil,
+		client:            client,
+		session:           session,
+		stdin:             stdin,
+		stdout:            stdout,
+		stderr:            stderr,
+		done:              make(chan bool),
+		closed:            make(chan bool),
+		forceClose:        make(chan bool),
+		cols:              cols,
+		rows:              rows,
+		sessionID:         sessionID,
+		lastActivity:      time.Now(),
+		isHanging:         false,
 		monitoringEnabled: false,
 		monitoringCache:   make(map[string]string),
-		monitoringMutex:   sync.RWMutex{},
+		activeGoroutines:  0,
 	}
 
+	// Session is ready - this should be called from the tab management layer
+	// after StartSSHShell succeeds, so we don't call SessionReady here
 	return sshSession, nil
 }
 
@@ -255,7 +594,7 @@ func (a *App) handleSSHOutput(sshSession *SSHSession) {
 
 	buffer := make([]byte, 4096)
 	for {
-		if sshSession.cleaning {
+		if sshSession.IsCleaning() {
 			break
 		}
 
@@ -276,10 +615,10 @@ func (a *App) handleSSHOutput(sshSession *SSHSession) {
 		if err != nil {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 				// Check if session has been inactive too long
-				if time.Since(sshSession.lastActivity) > 60*time.Second {
+				if time.Since(sshSession.GetLastActivity()) > 60*time.Second {
 					fmt.Printf("SSH session %s appears to be hanging (no activity for %v)\n",
-						sshSession.sessionID, time.Since(sshSession.lastActivity))
-					sshSession.isHanging = true
+						sshSession.sessionID, time.Since(sshSession.GetLastActivity()))
+					sshSession.SetHanging(true)
 					a.handleHangingSession(sshSession)
 					return
 				}
@@ -293,9 +632,8 @@ func (a *App) handleSSHOutput(sshSession *SSHSession) {
 		}
 
 		if n > 0 {
-			// Update activity timestamp
-			sshSession.lastActivity = time.Now()
-			sshSession.isHanging = false
+			// Update activity timestamp using thread-safe method
+			sshSession.UpdateLastActivity()
 
 			if a.ctx != nil {
 				output := string(buffer[:n])
@@ -318,7 +656,7 @@ func (a *App) handleSSHErrors(sshSession *SSHSession) {
 
 	buffer := make([]byte, 4096)
 	for {
-		if sshSession.cleaning {
+		if sshSession.IsCleaning() {
 			break
 		}
 
@@ -352,53 +690,12 @@ func (a *App) waitForSSHSessionEnd(sshSession *SSHSession) {
 
 	err := sshSession.session.Wait()
 
-	// Find the tab associated with this session to update status
-	a.mutex.RLock()
-	var associatedTab *Tab
-	for _, tab := range a.terminal.tabs {
-		if tab.SessionID == sshSession.sessionID {
-			associatedTab = tab
-			break
-		}
-	}
-	a.mutex.RUnlock()
-
-	if err != nil && !sshSession.cleaning {
+	if err != nil && !sshSession.IsCleaning() {
 		fmt.Printf("SSH session ended with error: %v\n", err)
-
-		// Update tab status to disconnected with error
-		if associatedTab != nil {
-			a.mutex.Lock()
-			associatedTab.Status = "failed"
-			associatedTab.ErrorMessage = fmt.Sprintf("SSH connection lost: %v", err)
-			a.mutex.Unlock()
-
-			// Emit tab status update
-			if a.ctx != nil {
-				wailsRuntime.EventsEmit(a.ctx, "tab-status-update", map[string]interface{}{
-					"tabId":        associatedTab.ID,
-					"status":       "failed",
-					"errorMessage": associatedTab.ErrorMessage,
-				})
-			}
-		}
-	} else if !sshSession.cleaning {
+		a.messages.UpdateConnectionStatus(sshSession.sessionID, StatusFailed.String(), fmt.Sprintf("SSH connection lost: %v", err))
+	} else if !sshSession.IsCleaning() {
 		// Clean disconnection
-		if associatedTab != nil {
-			a.mutex.Lock()
-			associatedTab.Status = "disconnected"
-			associatedTab.ErrorMessage = ""
-			a.mutex.Unlock()
-
-			// Emit tab status update
-			if a.ctx != nil {
-				wailsRuntime.EventsEmit(a.ctx, "tab-status-update", map[string]interface{}{
-					"tabId":        associatedTab.ID,
-					"status":       "disconnected",
-					"errorMessage": "",
-				})
-			}
-		}
+		a.messages.UpdateConnectionStatus(sshSession.sessionID, StatusDisconnected.String(), "")
 	}
 
 	close(sshSession.done)
@@ -407,7 +704,7 @@ func (a *App) waitForSSHSessionEnd(sshSession *SSHSession) {
 
 // WriteToSSHSession writes data to SSH session
 func (a *App) WriteToSSHSession(sshSession *SSHSession, data string) error {
-	if sshSession.cleaning {
+	if sshSession.IsCleaning() {
 		return fmt.Errorf("SSH session is being cleaned up")
 	}
 
@@ -417,7 +714,7 @@ func (a *App) WriteToSSHSession(sshSession *SSHSession, data string) error {
 
 // ResizeSSHSession resizes the SSH session terminal
 func (a *App) ResizeSSHSession(sshSession *SSHSession, cols, rows int) error {
-	if sshSession.cleaning {
+	if sshSession.IsCleaning() {
 		return fmt.Errorf("SSH session is being cleaned up")
 	}
 
@@ -430,11 +727,11 @@ func (a *App) ResizeSSHSession(sshSession *SSHSession, cols, rows int) error {
 
 // CloseSSHSession closes an SSH session
 func (a *App) CloseSSHSession(sshSession *SSHSession) error {
-	if sshSession.cleaning {
+	if sshSession.IsCleaning() {
 		return nil
 	}
 
-	sshSession.cleaning = true
+	sshSession.SetCleaning(true)
 
 	// Close SFTP client if it exists for this session
 	a.CloseFileExplorerSession(sshSession.sessionID)
@@ -491,35 +788,7 @@ func (a *App) getSSHAgentAuth() (ssh.AuthMethod, error) {
 
 // handleHangingSession handles SSH sessions that appear to be hanging
 func (a *App) handleHangingSession(sshSession *SSHSession) {
-	if a.ctx == nil {
-		return
-	}
-
-	// Find the tab associated with this session
-	a.mutex.RLock()
-	var associatedTab *Tab
-	for _, tab := range a.terminal.tabs {
-		if tab.SessionID == sshSession.sessionID {
-			associatedTab = tab
-			break
-		}
-	}
-	a.mutex.RUnlock()
-
-	if associatedTab != nil {
-		// Update tab status to indicate hanging connection
-		a.mutex.Lock()
-		associatedTab.Status = "hanging"
-		associatedTab.ErrorMessage = "Connection appears to be hanging - no response from server"
-		a.mutex.Unlock()
-
-		// Emit tab status update
-		wailsRuntime.EventsEmit(a.ctx, "tab-status-update", map[string]interface{}{
-			"tabId":        associatedTab.ID,
-			"status":       "hanging",
-			"errorMessage": associatedTab.ErrorMessage,
-		})
-	}
+	a.messages.UpdateConnectionStatus(sshSession.sessionID, StatusHanging, "Connection appears to be hanging - no response from server")
 }
 
 // ForceDisconnectSSHSession forcefully disconnects a hanging SSH session
@@ -549,7 +818,7 @@ func (a *App) CreateMonitoringSession(sshSession *SSHSession, config *SSHConfig)
 	// Create SSH client configuration (same as main session)
 	sshConfig := &ssh.ClientConfig{
 		User:            config.Username,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: a.createHostKeyCallback(sshSession.sessionID),
 		Timeout:         5 * time.Second, // Shorter timeout for monitoring
 	}
 

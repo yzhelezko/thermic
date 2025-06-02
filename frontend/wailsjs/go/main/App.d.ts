@@ -3,6 +3,8 @@
 import {main} from '../models';
 import {frontend} from '../models';
 
+export function ApproveHostKeyUpdate(arg1:string,arg2:boolean):Promise<void>;
+
 export function CacheMonitoringResult(arg1:main.SSHSession,arg2:string,arg3:string):Promise<void>;
 
 export function CheckForUpdates():Promise<main.UpdateInfo>;
@@ -260,6 +262,8 @@ export function StartTabShellWithSize(arg1:string,arg2:number,arg3:number):Promi
 export function StopProfileWatcher():Promise<void>;
 
 export function ToggleFavoriteAPI(arg1:string):Promise<void>;
+
+export function UpdateHostKey(arg1:string,arg2:string,arg3:boolean):Promise<void>;
 
 export function UpdateProfile(arg1:main.Profile):Promise<void>;
 
