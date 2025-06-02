@@ -53,6 +53,8 @@ export function CreateTab(arg1:string,arg2:main.SSHConfig):Promise<main.Tab>;
 
 export function CreateTabFromProfile(arg1:string):Promise<main.Tab>;
 
+export function CreateVirtualFolder(arg1:string,arg2:string,arg3:string,arg4:main.VirtualFilter):Promise<main.VirtualFolder>;
+
 export function DeleteProfile(arg1:string):Promise<void>;
 
 export function DeleteProfileAPI(arg1:string):Promise<void>;
@@ -67,6 +69,8 @@ export function DeleteRemotePath(arg1:string,arg2:string):Promise<void>;
 
 export function DeleteRemotePathAdvanced(arg1:string,arg2:string,arg3:boolean):Promise<void>;
 
+export function DeleteVirtualFolder(arg1:string):Promise<void>;
+
 export function DownloadAndInstallUpdate(arg1:string):Promise<void>;
 
 export function DownloadRemoteFile(arg1:string,arg2:string,arg3:string):Promise<void>;
@@ -74,6 +78,8 @@ export function DownloadRemoteFile(arg1:string,arg2:string,arg3:string):Promise<
 export function DuplicateProfile(arg1:string):Promise<main.Profile>;
 
 export function ExecuteMonitoringCommand(arg1:main.SSHSession,arg2:string):Promise<string>;
+
+export function ExportMetrics(arg1:string):Promise<void>;
 
 export function ForceDisconnectSSHSession(arg1:string):Promise<void>;
 
@@ -97,11 +103,15 @@ export function GetFolderByID(arg1:string):Promise<main.ProfileFolder>;
 
 export function GetFolderByIDAPI(arg1:string):Promise<main.ProfileFolder>;
 
+export function GetMetrics():Promise<main.ProfileMetrics>;
+
 export function GetMetricsAPI():Promise<main.ProfileMetrics>;
 
 export function GetOSInfo():Promise<Record<string, any>>;
 
 export function GetPlatformInfo():Promise<Record<string, any>>;
+
+export function GetPopularTags():Promise<Array<Record<string, any>>>;
 
 export function GetPopularTagsAPI():Promise<Array<string>>;
 
@@ -117,9 +127,17 @@ export function GetProfileTree():Promise<Array<main.ProfileTreeNode>>;
 
 export function GetProfileTreeAPI():Promise<Array<main.ProfileTreeNode>>;
 
+export function GetProfileUsageStats(arg1:string):Promise<Record<string, any>>;
+
+export function GetProfilesByTag(arg1:string):Promise<Array<main.Profile>>;
+
+export function GetProfilesByType(arg1:string):Promise<Array<main.Profile>>;
+
 export function GetProfilesDirectory():Promise<string>;
 
 export function GetProfilesPath():Promise<string>;
+
+export function GetRecentProfiles(arg1:number,arg2:number):Promise<Array<main.Profile>>;
 
 export function GetRemoteFileContent(arg1:string,arg2:string):Promise<string>;
 
@@ -143,15 +161,23 @@ export function GetTabs():Promise<Array<main.Tab>>;
 
 export function GetTheme():Promise<string>;
 
+export function GetTopProfiles(arg1:number):Promise<Array<main.Profile>>;
+
+export function GetUsageTrends(arg1:number):Promise<Record<string, any>>;
+
 export function GetVersionInfo():Promise<main.VersionInfo>;
 
 export function GetVirtualFolderProfilesAPI(arg1:string):Promise<Array<main.Profile>>;
+
+export function GetVirtualFolders():Promise<Array<main.VirtualFolder>>;
 
 export function GetVirtualFoldersAPI():Promise<Array<main.VirtualFolder>>;
 
 export function GetWSLDistributions():Promise<Array<main.WSLDistribution>>;
 
 export function GetWSLInfo():Promise<Record<string, any>>;
+
+export function GetWatcherStatus():Promise<Record<string, any>>;
 
 export function GetWindowMaximizedState():Promise<boolean>;
 
@@ -195,15 +221,21 @@ export function RenameTab(arg1:string,arg2:string):Promise<void>;
 
 export function ReorderTabs(arg1:Array<string>):Promise<void>;
 
+export function ResetMetrics():Promise<void>;
+
 export function ResizeSSHSession(arg1:main.SSHSession,arg2:number,arg3:number):Promise<void>;
 
 export function ResizeShell(arg1:string,arg2:number,arg3:number):Promise<void>;
 
 export function RestartApplication():Promise<void>;
 
+export function RestartProfileWatcher():Promise<void>;
+
 export function SaveProfile(arg1:main.Profile):Promise<void>;
 
 export function SaveProfileFolder(arg1:main.ProfileFolder):Promise<void>;
+
+export function SearchProfiles(arg1:string,arg2:Array<string>):Promise<Array<main.Profile>>;
 
 export function SearchProfilesAPI(arg1:string,arg2:Array<string>):Promise<Array<main.Profile>>;
 
@@ -233,6 +265,8 @@ export function SetTheme(arg1:string):Promise<void>;
 
 export function ShowMessageDialog(arg1:string,arg2:string):Promise<void>;
 
+export function StartMetricsAutoSave():Promise<void>;
+
 export function StartProfileWatcher():Promise<void>;
 
 export function StartSSHShell(arg1:main.SSHSession):Promise<void>;
@@ -254,6 +288,8 @@ export function UpdateProfileFolder(arg1:main.ProfileFolder):Promise<void>;
 export function UpdateProfileTagsAPI(arg1:string,arg2:Array<string>):Promise<void>;
 
 export function UpdateRemoteFileContent(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function UpdateVirtualFolder(arg1:string,arg2:string,arg3:string,arg4:main.VirtualFilter):Promise<void>;
 
 export function UploadRemoteFiles(arg1:string,arg2:Array<string>,arg3:string):Promise<void>;
 

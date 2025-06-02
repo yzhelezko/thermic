@@ -13,83 +13,8 @@ import (
 
 // GetProfileTreeAPI returns the profile tree structure for the frontend
 func (a *App) GetProfileTreeAPI() []*ProfileTreeNode {
-	a.profiles.mutex.RLock()
-	defer a.profiles.mutex.RUnlock()
-
-	// Check profile limits
-	if len(a.profiles.profiles) > MaxProfiles {
-		fmt.Printf("Warning: Profile count (%d) exceeds maximum (%d)\n", len(a.profiles.profiles), MaxProfiles)
-	}
-
-	// Build tree structure
-	tree := make(map[string]*ProfileTreeNode)
-	var rootNodes []*ProfileTreeNode
-
-	// Add folders first
-	for _, folder := range a.profiles.profileFolders {
-		node := &ProfileTreeNode{
-			ID:       folder.ID,
-			Name:     folder.Name,
-			Icon:     folder.Icon,
-			Type:     "folder",
-			Path:     a.buildFolderPath(folder.ID),
-			Children: make([]*ProfileTreeNode, 0),
-			Expanded: folder.Expanded,
-		}
-		tree[folder.ID] = node
-	}
-
-	// Add profiles
-	for _, profile := range a.profiles.profiles {
-		node := &ProfileTreeNode{
-			ID:      profile.ID,
-			Name:    profile.Name,
-			Icon:    profile.Icon,
-			Type:    "profile",
-			Path:    a.buildFolderPath(profile.FolderID),
-			Profile: profile,
-		}
-
-		// Find parent folder - prioritize ID-based reference over path-based
-		var parentID string
-		if profile.FolderID != "" {
-			// Use new ID-based reference
-			parentID = profile.FolderID
-		}
-
-		if parentID != "" && tree[parentID] != nil {
-			tree[parentID].Children = append(tree[parentID].Children, node)
-		} else {
-			// Parent not found or profile is at root level
-			rootNodes = append(rootNodes, node)
-		}
-	}
-
-	// Add folders to their parents or root - prioritize ID-based reference over path-based
-	for folderID, folder := range a.profiles.profileFolders {
-		node := tree[folderID]
-
-		var parentID string
-		if folder.ParentFolderID != "" {
-			// Use new ID-based reference
-			parentID = folder.ParentFolderID
-		}
-
-		if parentID != "" && tree[parentID] != nil {
-			tree[parentID].Children = append(tree[parentID].Children, node)
-		} else {
-			// Parent not found or folder is at root level
-			rootNodes = append(rootNodes, node)
-		}
-	}
-
-	// Sort nodes
-	a.sortTreeNodes(rootNodes)
-	for _, node := range tree {
-		a.sortTreeNodes(node.Children)
-	}
-
-	return rootNodes
+	// Use the safer implementation from profile_tree.go
+	return a.GetProfileTree()
 }
 
 // CreateProfileAPI creates a new profile

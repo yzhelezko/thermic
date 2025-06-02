@@ -102,6 +102,10 @@ export function CreateTabFromProfile(arg1) {
   return window['go']['main']['App']['CreateTabFromProfile'](arg1);
 }
 
+export function CreateVirtualFolder(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['CreateVirtualFolder'](arg1, arg2, arg3, arg4);
+}
+
 export function DeleteProfile(arg1) {
   return window['go']['main']['App']['DeleteProfile'](arg1);
 }
@@ -130,6 +134,10 @@ export function DeleteRemotePathAdvanced(arg1, arg2, arg3) {
   return window['go']['main']['App']['DeleteRemotePathAdvanced'](arg1, arg2, arg3);
 }
 
+export function DeleteVirtualFolder(arg1) {
+  return window['go']['main']['App']['DeleteVirtualFolder'](arg1);
+}
+
 export function DownloadAndInstallUpdate(arg1) {
   return window['go']['main']['App']['DownloadAndInstallUpdate'](arg1);
 }
@@ -144,6 +152,10 @@ export function DuplicateProfile(arg1) {
 
 export function ExecuteMonitoringCommand(arg1, arg2) {
   return window['go']['main']['App']['ExecuteMonitoringCommand'](arg1, arg2);
+}
+
+export function ExportMetrics(arg1) {
+  return window['go']['main']['App']['ExportMetrics'](arg1);
 }
 
 export function ForceDisconnectSSHSession(arg1) {
@@ -190,6 +202,10 @@ export function GetFolderByIDAPI(arg1) {
   return window['go']['main']['App']['GetFolderByIDAPI'](arg1);
 }
 
+export function GetMetrics() {
+  return window['go']['main']['App']['GetMetrics']();
+}
+
 export function GetMetricsAPI() {
   return window['go']['main']['App']['GetMetricsAPI']();
 }
@@ -200,6 +216,10 @@ export function GetOSInfo() {
 
 export function GetPlatformInfo() {
   return window['go']['main']['App']['GetPlatformInfo']();
+}
+
+export function GetPopularTags() {
+  return window['go']['main']['App']['GetPopularTags']();
 }
 
 export function GetPopularTagsAPI() {
@@ -230,12 +250,28 @@ export function GetProfileTreeAPI() {
   return window['go']['main']['App']['GetProfileTreeAPI']();
 }
 
+export function GetProfileUsageStats(arg1) {
+  return window['go']['main']['App']['GetProfileUsageStats'](arg1);
+}
+
+export function GetProfilesByTag(arg1) {
+  return window['go']['main']['App']['GetProfilesByTag'](arg1);
+}
+
+export function GetProfilesByType(arg1) {
+  return window['go']['main']['App']['GetProfilesByType'](arg1);
+}
+
 export function GetProfilesDirectory() {
   return window['go']['main']['App']['GetProfilesDirectory']();
 }
 
 export function GetProfilesPath() {
   return window['go']['main']['App']['GetProfilesPath']();
+}
+
+export function GetRecentProfiles(arg1, arg2) {
+  return window['go']['main']['App']['GetRecentProfiles'](arg1, arg2);
 }
 
 export function GetRemoteFileContent(arg1, arg2) {
@@ -282,12 +318,24 @@ export function GetTheme() {
   return window['go']['main']['App']['GetTheme']();
 }
 
+export function GetTopProfiles(arg1) {
+  return window['go']['main']['App']['GetTopProfiles'](arg1);
+}
+
+export function GetUsageTrends(arg1) {
+  return window['go']['main']['App']['GetUsageTrends'](arg1);
+}
+
 export function GetVersionInfo() {
   return window['go']['main']['App']['GetVersionInfo']();
 }
 
 export function GetVirtualFolderProfilesAPI(arg1) {
   return window['go']['main']['App']['GetVirtualFolderProfilesAPI'](arg1);
+}
+
+export function GetVirtualFolders() {
+  return window['go']['main']['App']['GetVirtualFolders']();
 }
 
 export function GetVirtualFoldersAPI() {
@@ -300,6 +348,10 @@ export function GetWSLDistributions() {
 
 export function GetWSLInfo() {
   return window['go']['main']['App']['GetWSLInfo']();
+}
+
+export function GetWatcherStatus() {
+  return window['go']['main']['App']['GetWatcherStatus']();
 }
 
 export function GetWindowMaximizedState() {
@@ -386,6 +438,10 @@ export function ReorderTabs(arg1) {
   return window['go']['main']['App']['ReorderTabs'](arg1);
 }
 
+export function ResetMetrics() {
+  return window['go']['main']['App']['ResetMetrics']();
+}
+
 export function ResizeSSHSession(arg1, arg2, arg3) {
   return window['go']['main']['App']['ResizeSSHSession'](arg1, arg2, arg3);
 }
@@ -398,12 +454,20 @@ export function RestartApplication() {
   return window['go']['main']['App']['RestartApplication']();
 }
 
+export function RestartProfileWatcher() {
+  return window['go']['main']['App']['RestartProfileWatcher']();
+}
+
 export function SaveProfile(arg1) {
   return window['go']['main']['App']['SaveProfile'](arg1);
 }
 
 export function SaveProfileFolder(arg1) {
   return window['go']['main']['App']['SaveProfileFolder'](arg1);
+}
+
+export function SearchProfiles(arg1, arg2) {
+  return window['go']['main']['App']['SearchProfiles'](arg1, arg2);
 }
 
 export function SearchProfilesAPI(arg1, arg2) {
@@ -462,6 +526,10 @@ export function ShowMessageDialog(arg1, arg2) {
   return window['go']['main']['App']['ShowMessageDialog'](arg1, arg2);
 }
 
+export function StartMetricsAutoSave() {
+  return window['go']['main']['App']['StartMetricsAutoSave']();
+}
+
 export function StartProfileWatcher() {
   return window['go']['main']['App']['StartProfileWatcher']();
 }
@@ -504,6 +572,10 @@ export function UpdateProfileTagsAPI(arg1, arg2) {
 
 export function UpdateRemoteFileContent(arg1, arg2, arg3) {
   return window['go']['main']['App']['UpdateRemoteFileContent'](arg1, arg2, arg3);
+}
+
+export function UpdateVirtualFolder(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['UpdateVirtualFolder'](arg1, arg2, arg3, arg4);
 }
 
 export function UploadRemoteFiles(arg1, arg2, arg3) {

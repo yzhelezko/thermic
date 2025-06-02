@@ -50,3 +50,7 @@
 - Config timer management: Use config.mutex (not app mutex) for timer operations, safely replace timers to avoid race conditions, check app.ctx != nil before async saves
 - Platform-specific app files: Use proper error handling with structured types (ConfigError, DialogError), implement resource cleanup (timer.Stop(), sync.RWMutex), extract constants for validation limits and paths, cache shell detection results, use safer Windows registry operations with proper cleanup
 - Dialog operations: Validate context before operations, implement input validation (file path length, file count limits), use structured error types for better debugging and user feedback
+- Profile management refactored: Split monolithic profile_manager.go into focused modules - profile_core.go (CRUD operations), profile_storage.go (file I/O), profile_watcher.go (file monitoring), profile_tree.go (tree structure/virtual folders), profile_metrics.go (usage analytics) - use ProfileError for structured error handling
+- Profile security: All file operations validate paths within profiles directory, enforce resource limits (MaxProfiles, MaxFileSize, MaxProfileName), timeout protection for file operations
+- Profile concurrency: Use a.profiles.mutex for all profile operations, proper goroutine cleanup in file watcher with panic recovery, atomic file operations for metrics
+- Profile validation: Always call validateProfile/validateProfileFolder before operations, sanitizeFilename for all file operations, structured error types (ProfileError) for better debugging

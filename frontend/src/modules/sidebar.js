@@ -51,18 +51,36 @@ export class SidebarManager {
 
     async loadProfileTree() {
         try {
-            // Load regular profile tree
-            this.profileTree = await window.go.main.App.GetProfileTreeAPI();
+            // Add timeout wrapper function
+            const withTimeout = (promise, timeoutMs = 10000) => {
+                return Promise.race([
+                    promise,
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Operation timed out')), timeoutMs)
+                    )
+                ]);
+            };
+
+            // Load regular profile tree with timeout protection
+            console.log('Loading profile tree...');
+            this.profileTree = await withTimeout(window.go.main.App.GetProfileTreeAPI());
             console.log('Loaded profile tree:', this.profileTree);
+
+            // Safety check for null/undefined tree
+            if (!this.profileTree) {
+                console.warn('Profile tree is null/undefined, initializing as empty array');
+                this.profileTree = [];
+            }
 
             // Populate expandedFolders set based on loaded tree
             this.expandedFolders.clear(); // Clear existing state
             const populateExpanded = (nodes) => {
+                if (!nodes || !Array.isArray(nodes)) return;
                 for (const node of nodes) {
-                    if (node.type === 'folder' && node.expanded) {
+                    if (node && node.type === 'folder' && node.expanded) {
                         this.expandedFolders.add(node.id);
                     }
-                    if (node.children) {
+                    if (node && node.children) {
                         populateExpanded(node.children);
                     }
                 }
@@ -70,17 +88,27 @@ export class SidebarManager {
             populateExpanded(this.profileTree);
             console.log('Initialized expanded folders:', Array.from(this.expandedFolders));
             
-            // Load virtual folders
-            this.virtualFolders = await window.go.main.App.GetVirtualFoldersAPI();
-            console.log('Loaded virtual folders:', this.virtualFolders);
+            // Load virtual folders with timeout protection
+            try {
+                this.virtualFolders = await withTimeout(window.go.main.App.GetVirtualFoldersAPI(), 5000);
+                console.log('Loaded virtual folders:', this.virtualFolders);
+            } catch (vfError) {
+                console.error('Failed to load virtual folders:', vfError);
+                this.virtualFolders = [];
+            }
             
-            // Load metrics for display
-            this.metrics = await window.go.main.App.GetMetricsAPI();
-            console.log('Loaded metrics:', this.metrics);
+            // Load metrics for display with timeout protection
+            try {
+                this.metrics = await withTimeout(window.go.main.App.GetMetricsAPI(), 5000);
+                console.log('Loaded metrics:', this.metrics);
+            } catch (metricsError) {
+                console.error('Failed to load metrics:', metricsError);
+                this.metrics = {};
+            }
             
         } catch (error) {
             console.error('Failed to load profile tree:', error);
-            showNotification('Failed to load profiles', 'error');
+            showNotification('Failed to load profiles - check console for details', 'error');
             this.profileTree = [];
             this.virtualFolders = [];
             this.metrics = {};
