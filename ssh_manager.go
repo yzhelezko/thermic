@@ -95,16 +95,17 @@ func (a *App) CreateSSHSessionWithSize(sessionID string, config *SSHConfig, cols
 			fmt.Printf("Added SSH agent authentication\n")
 		}
 
-		// Try default key locations using platform-specific paths
-		defaultKeys := a.getDefaultSSHKeyPaths()
+		// Try default key locations using platform-specific paths (only if allowed)
 		var validKeys []ssh.Signer
-
-		for _, keyPath := range defaultKeys {
-			if key, err := a.loadSSHKey(keyPath); err == nil {
-				validKeys = append(validKeys, key)
-				fmt.Printf("Successfully loaded SSH key: %s\n", keyPath)
-			} else {
-				fmt.Printf("Failed to load SSH key %s: %v\n", keyPath, err)
+		if config.AllowKeyAutoDiscovery {
+			defaultKeys := a.getDefaultSSHKeyPaths()
+			for _, keyPath := range defaultKeys {
+				if key, err := a.loadSSHKey(keyPath); err == nil {
+					validKeys = append(validKeys, key)
+					fmt.Printf("Successfully loaded SSH key: %s\n", keyPath)
+				} else {
+					fmt.Printf("Failed to load SSH key %s: %v\n", keyPath, err)
+				}
 			}
 		}
 
@@ -570,13 +571,14 @@ func (a *App) CreateMonitoringSession(sshSession *SSHSession, config *SSHConfig)
 			sshConfig.Auth = append(sshConfig.Auth, agentAuth)
 		}
 
-		// Try default key locations using platform-specific paths
-		defaultKeys := a.getDefaultSSHKeyPaths()
+		// Try default key locations using platform-specific paths (only if allowed)
 		var validKeys []ssh.Signer
-
-		for _, keyPath := range defaultKeys {
-			if key, err := a.loadSSHKey(keyPath); err == nil {
-				validKeys = append(validKeys, key)
+		if config.AllowKeyAutoDiscovery {
+			defaultKeys := a.getDefaultSSHKeyPaths()
+			for _, keyPath := range defaultKeys {
+				if key, err := a.loadSSHKey(keyPath); err == nil {
+					validKeys = append(validKeys, key)
+				}
 			}
 		}
 

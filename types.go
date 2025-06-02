@@ -306,11 +306,12 @@ func (t *Tab) Validate() error {
 
 // SSHConfig represents SSH connection configuration
 type SSHConfig struct {
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Username string `json:"username"`
-	Password string `json:"password,omitempty"` // Optional, prefer key auth
-	KeyPath  string `json:"keyPath,omitempty"`  // Path to SSH private key
+	Host                  string `json:"host"`
+	Port                  int    `json:"port"`
+	Username              string `json:"username"`
+	Password              string `json:"password,omitempty"`              // Optional, prefer key auth
+	KeyPath               string `json:"keyPath,omitempty"`               // Path to SSH private key
+	AllowKeyAutoDiscovery bool   `json:"allowKeyAutoDiscovery,omitempty"` // Allow automatic SSH key discovery
 }
 
 // Validate implements the Validator interface for SSHConfig

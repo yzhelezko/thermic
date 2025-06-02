@@ -1403,6 +1403,20 @@ export function createProfileFormTemplate(mode, type, data = null) {
                         <button type="button" class="modern-button secondary" id="browse-ssh-key"><img src="./icons/folder-open.svg" class="svg-icon" alt="📂"> Browse</button>
                     </div>
                 </div>
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Auto-discover SSH keys</div>
+                            <div class="setting-item-description">Automatically scan ~/.ssh directory for private keys when connecting</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <label class="modern-toggle">
+                                <input type="checkbox" id="ssh-auto-discover" ${data?.sshConfig?.allowKeyAutoDiscovery ? 'checked' : ''}>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
             </div>
         `;
     }

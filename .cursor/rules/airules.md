@@ -17,7 +17,7 @@
 - Profile/folder renaming: saveProfileInternal/saveProfileFolderInternal automatically clean up old files to prevent duplicates with same ID
 - Theme toggle icon: always pass explicit isDark parameter to updateThemeToggleIcon() to avoid race conditions in production builds
 - Settings panel theme changes: must call terminalManager.updateTheme() and uiManager.onThemeChange() to update terminal output window
-- SSH key discovery: scans entire .ssh directory for valid private keys when no keyPath specified (Windows: %USERPROFILE%\.ssh, Unix: $HOME/.ssh)
+- SSH key auto-discovery: User-controlled per-profile setting (AllowKeyAutoDiscovery) determines if .ssh directory scanning occurs - respects user privacy by requiring explicit permission before scanning private keys
 - App structure: Core functionality split into app_core.go (startup/shutdown/basic methods) and app.go (business logic) - maintain this separation
 - Tab management: All tab-related functionality extracted to app_tabs.go (CreateTab, GetTabs, SetActiveTab, CloseTab, SSH connections, status management, reordering) - keep tab logic separate
 - Profile management: All profile-related functionality extracted to app_profiles.go (CRUD operations, folder management, tree structure, virtual folders, search, metrics, API methods) - keep profile logic separate
@@ -44,3 +44,9 @@
 - Profile limits: Check and warn when profile count exceeds MaxProfiles(1000) in GetProfileTreeAPI
 - SFTP limits: Check MaxSFTPClients(25) before creating new SFTP clients in InitializeFileExplorerSession
 - SSH/SFTP mutex separation: SSHManager has separate mutexes - sshSessionsMutex for SSH sessions, sftpClientsMutex for SFTP clients - NEVER use one for the other to prevent deadlocks
+- Config management safety: Use atomic file operations with backup (saveConfigAtomic), proper timer cleanup in markConfigDirty, and validate all config values before saving - ConfigError type provides structured error handling
+- Config validation: Always call config.Validate() before saving, implement validation functions for all setters (validateSidebarWidth, validateTheme, etc.), use proper bounds checking
+- Platform detection: Cache runtime.GOOS in currentPlatform variable and use constants (PlatformWindows, PlatformLinux, PlatformDarwin) instead of magic strings
+- Config timer management: Use config.mutex (not app mutex) for timer operations, safely replace timers to avoid race conditions, check app.ctx != nil before async saves
+- Platform-specific app files: Use proper error handling with structured types (ConfigError, DialogError), implement resource cleanup (timer.Stop(), sync.RWMutex), extract constants for validation limits and paths, cache shell detection results, use safer Windows registry operations with proper cleanup
+- Dialog operations: Validate context before operations, implement input validation (file path length, file count limits), use structured error types for better debugging and user feedback

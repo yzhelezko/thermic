@@ -65,6 +65,7 @@ export namespace main {
 	    username: string;
 	    password?: string;
 	    keyPath?: string;
+	    allowKeyAutoDiscovery?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new SSHConfig(source);
@@ -77,6 +78,7 @@ export namespace main {
 	        this.username = source["username"];
 	        this.password = source["password"];
 	        this.keyPath = source["keyPath"];
+	        this.allowKeyAutoDiscovery = source["allowKeyAutoDiscovery"];
 	    }
 	}
 	export class Profile {

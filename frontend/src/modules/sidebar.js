@@ -1327,7 +1327,8 @@ export class SidebarManager {
                 throw new Error('SSH host and username are required');
             }
 
-            sshConfig = { host, port, username, password, keyPath };
+            const allowKeyAutoDiscovery = document.getElementById('ssh-auto-discover').checked;
+            sshConfig = { host, port, username, password, keyPath, allowKeyAutoDiscovery };
         } else if (profileType === 'custom') {
             shell = document.getElementById('custom-command').value.trim();
             if (!shell) {
