@@ -36,14 +36,14 @@ func (a *App) GetDefaultShell() string {
 func (a *App) getPlatformDefaultShell() string {
 	switch runtime.GOOS {
 	case "windows":
-		return a.config.DefaultShellWindows
+		return a.config.config.DefaultShellWindows
 	case "darwin":
-		return a.config.DefaultShellDarwin
+		return a.config.config.DefaultShellDarwin
 	case "linux":
-		return a.config.DefaultShellLinux
+		return a.config.config.DefaultShellLinux
 	default:
 		// For other Unix-like systems, use Linux configuration
-		return a.config.DefaultShellLinux
+		return a.config.config.DefaultShellLinux
 	}
 }
 

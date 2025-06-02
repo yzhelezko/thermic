@@ -10,7 +10,7 @@ func TestNewApp(t *testing.T) {
 		t.Fatal("NewApp() returned nil")
 	}
 
-	if app.sessions == nil {
+	if app.terminal.sessions == nil {
 		t.Fatal("NewApp() did not initialize sessions map")
 	}
 }

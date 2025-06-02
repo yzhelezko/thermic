@@ -12,16 +12,21 @@ import (
 
 // CreateTab creates a new terminal tab
 func (a *App) CreateTab(shell string, sshConfig *SSHConfig) (*Tab, error) {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
+	a.terminal.mutex.Lock()
+	defer a.terminal.mutex.Unlock()
+
+	// Check tab limit
+	if len(a.terminal.tabs) >= MaxSessions {
+		return nil, fmt.Errorf("maximum number of tabs (%d) reached", MaxSessions)
+	}
 
 	// Generate unique IDs
 	tabId := fmt.Sprintf("tab_%d", time.Now().UnixNano())
 	sessionId := fmt.Sprintf("session_%d", time.Now().UnixNano())
 
 	// Determine connection type and title
-	connectionType := "local"
-	status := "connecting"
+	connectionType := ConnectionTypeLocal
+	status := StatusConnecting.String()
 	title := shell
 	if shell == "" {
 		shell = a.GetDefaultShell()
@@ -30,7 +35,11 @@ func (a *App) CreateTab(shell string, sshConfig *SSHConfig) (*Tab, error) {
 
 	// Handle SSH connections
 	if sshConfig != nil {
-		connectionType = "ssh"
+		// Validate SSH config
+		if err := sshConfig.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid SSH config: %w", err)
+		}
+		connectionType = ConnectionTypeSSH
 		title = fmt.Sprintf("%s@%s", sshConfig.Username, sshConfig.Host)
 		if sshConfig.Port != 22 {
 			title = fmt.Sprintf("%s@%s:%d", sshConfig.Username, sshConfig.Host, sshConfig.Port)
@@ -51,19 +60,24 @@ func (a *App) CreateTab(shell string, sshConfig *SSHConfig) (*Tab, error) {
 		ErrorMessage:   "",
 	}
 
+	// Validate tab
+	if err := tab.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid tab configuration: %w", err)
+	}
+
 	// Store tab
-	a.tabs[tabId] = tab
+	a.terminal.tabs[tabId] = tab
 
 	return tab, nil
 }
 
 // GetTabs returns all tabs
 func (a *App) GetTabs() []*Tab {
-	a.mutex.RLock()
-	defer a.mutex.RUnlock()
+	a.terminal.mutex.RLock()
+	defer a.terminal.mutex.RUnlock()
 
-	tabs := make([]*Tab, 0, len(a.tabs))
-	for _, tab := range a.tabs {
+	tabs := make([]*Tab, 0, len(a.terminal.tabs))
+	for _, tab := range a.terminal.tabs {
 		tabs = append(tabs, tab)
 	}
 
@@ -81,25 +95,25 @@ func (a *App) GetTabs() []*Tab {
 
 // SetActiveTab sets the active tab
 func (a *App) SetActiveTab(tabId string) error {
-	a.mutex.Lock()
+	a.terminal.mutex.Lock()
 
 	// Check if tab exists
-	tab, exists := a.tabs[tabId]
+	tab, exists := a.terminal.tabs[tabId]
 	if !exists {
-		a.mutex.Unlock()
+		a.terminal.mutex.Unlock()
 		return fmt.Errorf("tab %s not found", tabId)
 	}
 
 	// Deactivate current active tab
-	if a.activeTabId != "" {
-		if currentTab, exists := a.tabs[a.activeTabId]; exists {
+	if a.terminal.activeTabId != "" {
+		if currentTab, exists := a.terminal.tabs[a.terminal.activeTabId]; exists {
 			currentTab.IsActive = false
 		}
 	}
 
 	// Activate new tab
 	tab.IsActive = true
-	a.activeTabId = tabId
+	a.terminal.activeTabId = tabId
 
 	// Copy tab data for event emission outside of mutex
 	tabData := map[string]interface{}{
@@ -108,7 +122,7 @@ func (a *App) SetActiveTab(tabId string) error {
 		"status":         tab.Status,
 	}
 
-	a.mutex.Unlock()
+	a.terminal.mutex.Unlock()
 
 	// Emit tab switch event to update status bar (outside of mutex to prevent blocking)
 	if a.ctx != nil {
@@ -123,28 +137,28 @@ func (a *App) SetActiveTab(tabId string) error {
 
 // GetActiveTab returns the currently active tab
 func (a *App) GetActiveTab() *Tab {
-	a.mutex.RLock()
-	defer a.mutex.RUnlock()
+	a.terminal.mutex.RLock()
+	defer a.terminal.mutex.RUnlock()
 
-	if a.activeTabId == "" {
+	if a.terminal.activeTabId == "" {
 		return nil
 	}
 
-	return a.tabs[a.activeTabId]
+	return a.terminal.tabs[a.terminal.activeTabId]
 }
 
 // CloseTab closes a tab and its associated session
 func (a *App) CloseTab(tabId string) error {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
+	a.terminal.mutex.Lock()
+	defer a.terminal.mutex.Unlock()
 
-	tab, exists := a.tabs[tabId]
+	tab, exists := a.terminal.tabs[tabId]
 	if !exists {
 		return fmt.Errorf("tab %s not found", tabId)
 	}
 
 	// Remove tab first
-	delete(a.tabs, tabId)
+	delete(a.terminal.tabs, tabId)
 
 	// Close the associated session asynchronously to avoid blocking
 	if tab.SessionID != "" {
@@ -156,13 +170,13 @@ func (a *App) CloseTab(tabId string) error {
 	}
 
 	// If this was the active tab, find a new active tab
-	if a.activeTabId == tabId {
-		a.activeTabId = ""
+	if a.terminal.activeTabId == tabId {
+		a.terminal.activeTabId = ""
 
 		// Set first available tab as active
-		for id, t := range a.tabs {
+		for id, t := range a.terminal.tabs {
 			t.IsActive = true
-			a.activeTabId = id
+			a.terminal.activeTabId = id
 			break
 		}
 	}
@@ -177,9 +191,9 @@ func (a *App) StartTabShell(tabId string) error {
 
 // StartTabShellWithSize starts a shell for a tab with specified terminal dimensions
 func (a *App) StartTabShellWithSize(tabId string, cols, rows int) error {
-	a.mutex.RLock()
-	tab, exists := a.tabs[tabId]
-	a.mutex.RUnlock()
+	a.terminal.mutex.RLock()
+	tab, exists := a.terminal.tabs[tabId]
+	a.terminal.mutex.RUnlock()
 
 	if !exists {
 		return fmt.Errorf("tab %s not found", tabId)
@@ -190,10 +204,10 @@ func (a *App) StartTabShellWithSize(tabId string, cols, rows int) error {
 	// Handle SSH connections with status tracking and animation
 	if tab.ConnectionType == "ssh" && tab.SSHConfig != nil {
 		// Update tab status to connecting for SSH
-		a.mutex.Lock()
+		a.terminal.mutex.Lock()
 		tab.Status = "connecting"
 		tab.ErrorMessage = ""
-		a.mutex.Unlock()
+		a.terminal.mutex.Unlock()
 
 		// Emit tab update event for SSH
 		if a.ctx != nil {
@@ -212,7 +226,7 @@ func (a *App) StartTabShellWithSize(tabId string, cols, rows int) error {
 		err = a.startSSHSessionWithSize(tab, cols, rows)
 
 		// Update SSH tab status based on result
-		a.mutex.Lock()
+		a.terminal.mutex.Lock()
 		if err != nil {
 			tab.Status = "failed"
 			tab.ErrorMessage = err.Error()
@@ -220,7 +234,7 @@ func (a *App) StartTabShellWithSize(tabId string, cols, rows int) error {
 			tab.Status = "connected"
 			tab.ErrorMessage = ""
 		}
-		a.mutex.Unlock()
+		a.terminal.mutex.Unlock()
 
 		// Send SSH connection result to terminal
 		if a.ctx != nil {
@@ -245,7 +259,7 @@ func (a *App) StartTabShellWithSize(tabId string, cols, rows int) error {
 		err = a.StartShell(tab.Shell, tab.SessionID)
 
 		// Update local shell status based on result
-		a.mutex.Lock()
+		a.terminal.mutex.Lock()
 		if err != nil {
 			tab.Status = "failed"
 			tab.ErrorMessage = err.Error()
@@ -253,7 +267,7 @@ func (a *App) StartTabShellWithSize(tabId string, cols, rows int) error {
 			tab.Status = "connected"
 			tab.ErrorMessage = ""
 		}
-		a.mutex.Unlock()
+		a.terminal.mutex.Unlock()
 
 		// For local shells, only show errors in terminal if they occur
 		if err != nil && a.ctx != nil {
@@ -294,9 +308,9 @@ func (a *App) startSSHConnectionAnimation(tab *Tab) {
 		i := 0
 		for {
 			// Check if connection is still in progress
-			a.mutex.RLock()
+			a.terminal.mutex.RLock()
 			currentStatus := tab.Status
-			a.mutex.RUnlock()
+			a.terminal.mutex.RUnlock()
 			if currentStatus != "connecting" {
 				break
 			}
@@ -410,16 +424,16 @@ func (a *App) startSSHSessionWithSize(tab *Tab, cols, rows int) error {
 	}
 
 	// Store SSH session
-	a.mutex.Lock()
-	a.sshSessions[tab.SessionID] = sshSession
-	a.mutex.Unlock()
+	a.ssh.sshSessionsMutex.Lock()
+	a.ssh.sshSessions[tab.SessionID] = sshSession
+	a.ssh.sshSessionsMutex.Unlock()
 
 	// Start SSH shell
 	if err := a.StartSSHShell(sshSession); err != nil {
 		// Clean up on failure
-		a.mutex.Lock()
-		delete(a.sshSessions, tab.SessionID)
-		a.mutex.Unlock()
+		a.ssh.sshSessionsMutex.Lock()
+		delete(a.ssh.sshSessions, tab.SessionID)
+		a.ssh.sshSessionsMutex.Unlock()
 		a.CloseSSHSession(sshSession)
 		return fmt.Errorf("failed to start SSH shell: %w", err)
 	}
@@ -436,10 +450,10 @@ func (a *App) startSSHSessionWithSize(tab *Tab, cols, rows int) error {
 
 // RenameTab renames a tab
 func (a *App) RenameTab(tabId, newTitle string) error {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
+	a.terminal.mutex.Lock()
+	defer a.terminal.mutex.Unlock()
 
-	tab, exists := a.tabs[tabId]
+	tab, exists := a.terminal.tabs[tabId]
 	if !exists {
 		return fmt.Errorf("tab %s not found", tabId)
 	}
@@ -450,10 +464,10 @@ func (a *App) RenameTab(tabId, newTitle string) error {
 
 // GetTabStatus returns the status of a specific tab
 func (a *App) GetTabStatus(tabId string) (map[string]interface{}, error) {
-	a.mutex.RLock()
-	defer a.mutex.RUnlock()
+	a.terminal.mutex.RLock()
+	defer a.terminal.mutex.RUnlock()
 
-	tab, exists := a.tabs[tabId]
+	tab, exists := a.terminal.tabs[tabId]
 	if !exists {
 		return nil, fmt.Errorf("tab %s not found", tabId)
 	}
@@ -469,9 +483,9 @@ func (a *App) GetTabStatus(tabId string) (map[string]interface{}, error) {
 
 // ForceDisconnectTab forcefully disconnects a hanging SSH tab
 func (a *App) ForceDisconnectTab(tabId string) error {
-	a.mutex.RLock()
-	tab, exists := a.tabs[tabId]
-	a.mutex.RUnlock()
+	a.terminal.mutex.RLock()
+	tab, exists := a.terminal.tabs[tabId]
+	a.terminal.mutex.RUnlock()
 
 	if !exists {
 		return fmt.Errorf("tab %s not found", tabId)
@@ -487,10 +501,10 @@ func (a *App) ForceDisconnectTab(tabId string) error {
 	}
 
 	// Update tab status
-	a.mutex.Lock()
+	a.terminal.mutex.Lock()
 	tab.Status = "disconnected"
 	tab.ErrorMessage = "Forcefully disconnected"
-	a.mutex.Unlock()
+	a.terminal.mutex.Unlock()
 
 	// Emit status update
 	if a.ctx != nil {
@@ -506,23 +520,23 @@ func (a *App) ForceDisconnectTab(tabId string) error {
 
 // ReconnectTab reconnects a disconnected SSH tab
 func (a *App) ReconnectTab(tabId string) error {
-	a.mutex.Lock()
-	tab, exists := a.tabs[tabId]
+	a.terminal.mutex.Lock()
+	tab, exists := a.terminal.tabs[tabId]
 	if !exists {
-		a.mutex.Unlock()
+		a.terminal.mutex.Unlock()
 		return fmt.Errorf("tab %s not found", tabId)
 	}
 
 	// Only allow reconnection for SSH tabs
 	if tab.ConnectionType != "ssh" || tab.SSHConfig == nil {
-		a.mutex.Unlock()
+		a.terminal.mutex.Unlock()
 		return fmt.Errorf("tab %s is not an SSH connection", tabId)
 	}
 
 	// Update status to connecting
 	tab.Status = "connecting"
 	tab.ErrorMessage = ""
-	a.mutex.Unlock()
+	a.terminal.mutex.Unlock()
 
 	// Emit status update
 	if a.ctx != nil {
@@ -543,10 +557,10 @@ func (a *App) ReconnectTab(tabId string) error {
 	// Start SSH session with current dimensions
 	err := a.startSSHSessionWithSize(tab, cols, rows)
 	if err != nil {
-		a.mutex.Lock()
+		a.terminal.mutex.Lock()
 		tab.Status = "failed"
 		tab.ErrorMessage = err.Error()
-		a.mutex.Unlock()
+		a.terminal.mutex.Unlock()
 
 		// Send formatted error message to terminal
 		a.sendFormattedError(tab, err)
@@ -564,10 +578,10 @@ func (a *App) ReconnectTab(tabId string) error {
 	}
 
 	// Update status to connected
-	a.mutex.Lock()
+	a.terminal.mutex.Lock()
 	tab.Status = "connected"
 	tab.ErrorMessage = ""
-	a.mutex.Unlock()
+	a.terminal.mutex.Unlock()
 
 	// Send success message
 	a.sendSuccessMessage(tab)
@@ -585,26 +599,26 @@ func (a *App) ReconnectTab(tabId string) error {
 
 // ReorderTabs reorders tabs based on the provided tab IDs array
 func (a *App) ReorderTabs(tabIds []string) error {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
+	a.terminal.mutex.Lock()
+	defer a.terminal.mutex.Unlock()
 
 	// Validate that all provided tab IDs exist
 	for _, tabId := range tabIds {
-		if _, exists := a.tabs[tabId]; !exists {
+		if _, exists := a.terminal.tabs[tabId]; !exists {
 			return fmt.Errorf("tab %s not found", tabId)
 		}
 	}
 
 	// Validate that all existing tabs are included in the reorder
-	if len(tabIds) != len(a.tabs) {
-		return fmt.Errorf("tab count mismatch: expected %d, got %d", len(a.tabs), len(tabIds))
+	if len(tabIds) != len(a.terminal.tabs) {
+		return fmt.Errorf("tab count mismatch: expected %d, got %d", len(a.terminal.tabs), len(tabIds))
 	}
 
 	// Update the creation time of tabs to reflect the new order
 	// We'll use the current time as base and increment by nanoseconds
 	baseTime := time.Now()
 	for i, tabId := range tabIds {
-		if tab, exists := a.tabs[tabId]; exists {
+		if tab, exists := a.terminal.tabs[tabId]; exists {
 			// Set creation time to maintain the desired order
 			tab.Created = baseTime.Add(time.Duration(i) * time.Nanosecond)
 		}
@@ -615,9 +629,9 @@ func (a *App) ReorderTabs(tabIds []string) error {
 
 // CreateTabFromProfile creates a new tab using a profile
 func (a *App) CreateTabFromProfile(profileID string) (*Tab, error) {
-	a.mutex.RLock()
-	profile, exists := a.profiles[profileID]
-	a.mutex.RUnlock()
+	a.profiles.mutex.RLock()
+	profile, exists := a.profiles.profiles[profileID]
+	a.profiles.mutex.RUnlock()
 
 	if !exists {
 		return nil, fmt.Errorf("profile not found: %s", profileID)

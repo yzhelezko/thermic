@@ -53,9 +53,9 @@ func sanitizeFilename(filename string) string {
 // GetProfilesDirectory returns the full path to the profiles directory
 func (a *App) GetProfilesDirectory() (string, error) {
 	// Check if a custom profiles path is configured
-	if a.config != nil && a.config.ProfilesPath != "" {
+	if a.config != nil && a.config.config.ProfilesPath != "" {
 		// Use the configured custom path
-		return a.config.ProfilesPath, nil
+		return a.config.config.ProfilesPath, nil
 	}
 
 	// Fall back to default path
@@ -84,7 +84,7 @@ func (a *App) InitializeProfiles() error {
 	// Load metrics
 	if err := a.loadMetrics(); err != nil {
 		fmt.Printf("Warning: Failed to load metrics: %v\n", err)
-		a.metrics = &ProfileMetrics{}
+		a.profiles.metrics = &ProfileMetrics{}
 	}
 
 	// Load existing profiles
@@ -93,7 +93,7 @@ func (a *App) InitializeProfiles() error {
 	}
 
 	// Create default profiles if none exist
-	if len(a.profiles) == 0 {
+	if len(a.profiles.profiles) == 0 {
 		if err := a.CreateDefaultProfiles(); err != nil {
 			return fmt.Errorf("failed to create default profiles: %w", err)
 		}
@@ -118,8 +118,8 @@ func (a *App) LoadProfiles() error {
 	}
 
 	// Clear existing profiles
-	a.profiles = make(map[string]*Profile)
-	a.profileFolders = make(map[string]*ProfileFolder)
+	a.profiles.profiles = make(map[string]*Profile)
+	a.profiles.profileFolders = make(map[string]*ProfileFolder)
 
 	// Walk through all files in profiles directory
 	err = filepath.WalkDir(profilesDir, func(path string, d fs.DirEntry, err error) error {
@@ -146,7 +146,7 @@ func (a *App) LoadProfiles() error {
 				fmt.Printf("Warning: Failed to load profile folder %s: %v\n", path, err)
 				return nil // Continue loading other files
 			}
-			a.profileFolders[folder.ID] = folder
+			a.profiles.profileFolders[folder.ID] = folder
 		} else {
 			// Load profile
 			profile, err := a.LoadProfile(path)
@@ -154,7 +154,7 @@ func (a *App) LoadProfiles() error {
 				fmt.Printf("Warning: Failed to load profile %s: %v\n", path, err)
 				return nil // Continue loading other files
 			}
-			a.profiles[profile.ID] = profile
+			a.profiles.profiles[profile.ID] = profile
 		}
 
 		return nil
@@ -164,7 +164,7 @@ func (a *App) LoadProfiles() error {
 		return fmt.Errorf("failed to walk profiles directory: %w", err)
 	}
 
-	fmt.Printf("Loaded %d profiles and %d folders\n", len(a.profiles), len(a.profileFolders))
+	fmt.Printf("Loaded %d profiles and %d folders\n", len(a.profiles.profiles), len(a.profiles.profileFolders))
 	return nil
 }
 
@@ -311,7 +311,7 @@ func (a *App) saveProfileInternal(profile *Profile) error {
 	filePath := filepath.Join(profilesDir, filename)
 
 	// Temporarily stop the file watcher to prevent race conditions
-	wasWatcherRunning := a.profileWatcher != nil
+	wasWatcherRunning := a.profiles.profileWatcher != nil
 	if wasWatcherRunning {
 		a.StopProfileWatcher()
 	}
@@ -338,7 +338,7 @@ func (a *App) saveProfileInternal(profile *Profile) error {
 	}
 
 	// Update in memory
-	a.profiles[profile.ID] = profile
+	a.profiles.profiles[profile.ID] = profile
 
 	// Restart the file watcher
 	if wasWatcherRunning {
@@ -380,7 +380,7 @@ func (a *App) saveProfileFolderInternal(folder *ProfileFolder) error {
 	filePath := filepath.Join(profilesDir, filename)
 
 	// Temporarily stop the file watcher to prevent race conditions
-	wasWatcherRunning := a.profileWatcher != nil
+	wasWatcherRunning := a.profiles.profileWatcher != nil
 	if wasWatcherRunning {
 		a.StopProfileWatcher()
 	}
@@ -407,7 +407,7 @@ func (a *App) saveProfileFolderInternal(folder *ProfileFolder) error {
 	}
 
 	// Update in memory
-	a.profileFolders[folder.ID] = folder
+	a.profiles.profileFolders[folder.ID] = folder
 
 	// Restart the file watcher
 	if wasWatcherRunning {
@@ -442,7 +442,6 @@ func (a *App) CreateProfile(name, profileType, shell, icon, folderPath string) (
 		Icon:         icon,
 		Type:         profileType,
 		Shell:        shell,
-		FolderPath:   folderPath,
 		Environment:  make(map[string]string),
 		Created:      now,
 		LastModified: now,
@@ -471,7 +470,7 @@ func (a *App) CreateProfileWithFolderID(name, profileType, shell, icon, folderID
 
 	// Validate folder exists if folderID is provided
 	if folderID != "" {
-		if _, exists := a.profileFolders[folderID]; !exists {
+		if _, exists := a.profiles.profileFolders[folderID]; !exists {
 			return nil, fmt.Errorf("folder with ID %s not found", folderID)
 		}
 	}
@@ -486,11 +485,6 @@ func (a *App) CreateProfileWithFolderID(name, profileType, shell, icon, folderID
 		Environment:  make(map[string]string),
 		Created:      now,
 		LastModified: now,
-	}
-
-	// Set legacy path for backward compatibility
-	if folderID != "" {
-		profile.FolderPath = a.buildFolderPath(folderID)
 	}
 
 	if err := a.saveProfileInternal(profile); err != nil {
@@ -512,7 +506,6 @@ func (a *App) CreateProfileFolder(name, icon, parentPath string) (*ProfileFolder
 		ID:           id,
 		Name:         name,
 		Icon:         icon,
-		ParentPath:   parentPath,
 		Expanded:     true,
 		Created:      now,
 		LastModified: now,
@@ -541,7 +534,7 @@ func (a *App) CreateProfileFolderWithParentID(name, icon, parentFolderID string)
 
 	// Validate parent folder exists if parentFolderID is provided
 	if parentFolderID != "" {
-		if _, exists := a.profileFolders[parentFolderID]; !exists {
+		if _, exists := a.profiles.profileFolders[parentFolderID]; !exists {
 			return nil, fmt.Errorf("parent folder with ID %s not found", parentFolderID)
 		}
 	}
@@ -556,11 +549,6 @@ func (a *App) CreateProfileFolderWithParentID(name, icon, parentFolderID string)
 		LastModified:   now,
 	}
 
-	// Set legacy path for backward compatibility
-	if parentFolderID != "" {
-		folder.ParentPath = a.buildFolderPath(parentFolderID)
-	}
-
 	if err := a.saveProfileFolderInternal(folder); err != nil {
 		return nil, err
 	}
@@ -570,7 +558,7 @@ func (a *App) CreateProfileFolderWithParentID(name, icon, parentFolderID string)
 
 // DeleteProfile deletes a profile
 func (a *App) DeleteProfile(id string) error {
-	profile, exists := a.profiles[id]
+	profile, exists := a.profiles.profiles[id]
 	if !exists {
 		return fmt.Errorf("profile not found: %s", id)
 	}
@@ -590,14 +578,14 @@ func (a *App) DeleteProfile(id string) error {
 	}
 
 	// Remove from memory
-	delete(a.profiles, id)
+	delete(a.profiles.profiles, id)
 
 	return nil
 }
 
 // DeleteProfileFolder deletes a profile folder
 func (a *App) DeleteProfileFolder(id string) error {
-	folder, exists := a.profileFolders[id]
+	folder, exists := a.profiles.profileFolders[id]
 	if !exists {
 		return fmt.Errorf("profile folder not found: %s", id)
 	}
@@ -618,18 +606,18 @@ func (a *App) DeleteProfileFolder(id string) error {
 
 	// Move any profiles in this folder to root
 	folderPath := a.buildFolderPath(id)
-	for _, profile := range a.profiles {
-		if strings.HasPrefix(profile.FolderPath, folderPath) {
+	for _, profile := range a.profiles.profiles {
+		if strings.HasPrefix(a.buildFolderPath(profile.FolderID), folderPath) {
 			// Remove this folder from the path
-			newPath := strings.TrimPrefix(profile.FolderPath, folderPath)
+			newPath := strings.TrimPrefix(a.buildFolderPath(profile.FolderID), folderPath)
 			newPath = strings.TrimPrefix(newPath, "/")
-			profile.FolderPath = newPath
+			profile.FolderID = newPath
 			a.SaveProfile(profile)
 		}
 	}
 
 	// Remove from memory
-	delete(a.profileFolders, id)
+	delete(a.profiles.profileFolders, id)
 
 	return nil
 }
@@ -641,7 +629,7 @@ func (a *App) GetProfileTree() []*ProfileTreeNode {
 	var rootNodes []*ProfileTreeNode
 
 	// Add folders first
-	for _, folder := range a.profileFolders {
+	for _, folder := range a.profiles.profileFolders {
 		node := &ProfileTreeNode{
 			ID:       folder.ID,
 			Name:     folder.Name,
@@ -655,13 +643,13 @@ func (a *App) GetProfileTree() []*ProfileTreeNode {
 	}
 
 	// Add profiles
-	for _, profile := range a.profiles {
+	for _, profile := range a.profiles.profiles {
 		node := &ProfileTreeNode{
 			ID:      profile.ID,
 			Name:    profile.Name,
 			Icon:    profile.Icon,
 			Type:    "profile",
-			Path:    profile.FolderPath,
+			Path:    a.buildFolderPath(profile.FolderID),
 			Profile: profile,
 		}
 
@@ -670,9 +658,6 @@ func (a *App) GetProfileTree() []*ProfileTreeNode {
 		if profile.FolderID != "" {
 			// Use new ID-based reference
 			parentID = profile.FolderID
-		} else if profile.FolderPath != "" {
-			// Fall back to path-based reference for backward compatibility
-			parentID = a.findFolderByPath(profile.FolderPath)
 		}
 
 		if parentID != "" && tree[parentID] != nil {
@@ -684,7 +669,7 @@ func (a *App) GetProfileTree() []*ProfileTreeNode {
 	}
 
 	// Add folders to their parents or root
-	for folderID, folder := range a.profileFolders {
+	for folderID, folder := range a.profiles.profileFolders {
 		node := tree[folderID]
 
 		// Find parent folder - prioritize ID-based reference over path-based
@@ -692,9 +677,6 @@ func (a *App) GetProfileTree() []*ProfileTreeNode {
 		if folder.ParentFolderID != "" {
 			// Use new ID-based reference
 			parentID = folder.ParentFolderID
-		} else if folder.ParentPath != "" {
-			// Fall back to path-based reference for backward compatibility
-			parentID = a.findFolderByPath(folder.ParentPath)
 		}
 
 		if parentID != "" && tree[parentID] != nil {
@@ -717,20 +699,20 @@ func (a *App) GetProfileTree() []*ProfileTreeNode {
 // Helper functions
 
 func (a *App) buildFolderPath(folderID string) string {
-	folder, exists := a.profileFolders[folderID]
+	folder, exists := a.profiles.profileFolders[folderID]
 	if !exists {
 		return ""
 	}
 
-	if folder.ParentPath == "" {
+	if folder.ParentFolderID == "" {
 		return folder.Name
 	}
 
-	return folder.ParentPath + "/" + folder.Name
+	return a.buildFolderPath(folder.ParentFolderID) + "/" + folder.Name
 }
 
 func (a *App) findFolderByPath(path string) string {
-	for id := range a.profileFolders {
+	for id := range a.profiles.profileFolders {
 		if a.buildFolderPath(id) == path {
 			return id
 		}
@@ -815,11 +797,11 @@ func (a *App) StartProfileWatcher() error {
 		return fmt.Errorf("failed to watch profiles directory: %w", err)
 	}
 
-	a.profileWatcher = &ProfileWatcher{
+	a.profiles.profileWatcher = &ProfileWatcher{
 		watchDir:    profilesDir,
 		stopChan:    make(chan bool),
 		updatesChan: make(chan ProfileUpdate, 10),
-		app:         a,
+		manager:     a.profiles,
 	}
 
 	// Start watcher goroutine
@@ -839,7 +821,7 @@ func (a *App) StartProfileWatcher() error {
 				}
 				fmt.Printf("Profile watcher error: %v\n", err)
 
-			case <-a.profileWatcher.stopChan:
+			case <-a.profiles.profileWatcher.stopChan:
 				return
 			}
 		}
@@ -851,9 +833,9 @@ func (a *App) StartProfileWatcher() error {
 
 // StopProfileWatcher stops the profile file watcher
 func (a *App) StopProfileWatcher() {
-	if a.profileWatcher != nil {
-		close(a.profileWatcher.stopChan)
-		a.profileWatcher = nil
+	if a.profiles.profileWatcher != nil {
+		close(a.profiles.profileWatcher.stopChan)
+		a.profiles.profileWatcher = nil
 		fmt.Println("Profile file watcher stopped")
 	}
 }
@@ -914,21 +896,21 @@ func (a *App) handleProfileFileEvent(event fsnotify.Event) {
 		if strings.HasPrefix(filename, "folder-") {
 			folder, err := a.LoadProfileFolder(event.Name)
 			if err == nil {
-				a.profileFolders[folder.ID] = folder
+				a.profiles.profileFolders[folder.ID] = folder
 			}
 		} else {
 			profile, err := a.LoadProfile(event.Name)
 			if err == nil {
-				a.profiles[profile.ID] = profile
+				a.profiles.profiles[profile.ID] = profile
 			}
 		}
 
 	case "deleted":
 		// Remove from memory
 		if strings.HasPrefix(filename, "folder-") {
-			delete(a.profileFolders, profileID)
+			delete(a.profiles.profileFolders, profileID)
 		} else {
-			delete(a.profiles, profileID)
+			delete(a.profiles.profiles, profileID)
 		}
 	}
 
@@ -946,7 +928,7 @@ func (a *App) handleProfileFileEvent(event fsnotify.Event) {
 
 // Virtual Folder Management
 func (a *App) initializeVirtualFolders() {
-	a.virtualFolders = []*VirtualFolder{
+	a.profiles.virtualFolders = []*VirtualFolder{
 		{
 			ID:   "vf_favorites",
 			Name: "Favorites",
@@ -990,7 +972,7 @@ func (a *App) initializeVirtualFolders() {
 func (a *App) getVirtualFolderProfiles(vf *VirtualFolder) []*Profile {
 	var profiles []*Profile
 
-	for _, profile := range a.profiles {
+	for _, profile := range a.profiles.profiles {
 		switch vf.Filter.Type {
 		case "favorite":
 			if profile.IsFavorite {
@@ -1045,7 +1027,7 @@ func (a *App) updateProfileUsage(profileID string) error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 
-	profile, exists := a.profiles[profileID]
+	profile, exists := a.profiles.profiles[profileID]
 	if !exists {
 		return fmt.Errorf("profile not found: %s", profileID)
 	}
@@ -1071,17 +1053,17 @@ func (a *App) saveMetrics() error {
 	metricsPath := filepath.Join(profilesDir, "metrics.yaml")
 
 	// Update metrics
-	if a.metrics == nil {
-		a.metrics = &ProfileMetrics{}
+	if a.profiles.metrics == nil {
+		a.profiles.metrics = &ProfileMetrics{}
 	}
 
-	a.metrics.TotalProfiles = len(a.profiles)
-	a.metrics.TotalFolders = len(a.profileFolders)
-	a.metrics.LastSync = time.Now()
+	a.profiles.metrics.TotalProfiles = len(a.profiles.profiles)
+	a.profiles.metrics.TotalFolders = len(a.profiles.profileFolders)
+	a.profiles.metrics.LastSync = time.Now()
 
 	// Update most used and recent profiles
 	var allProfiles []*Profile
-	for _, profile := range a.profiles {
+	for _, profile := range a.profiles.profiles {
 		allProfiles = append(allProfiles, profile)
 	}
 
@@ -1090,13 +1072,13 @@ func (a *App) saveMetrics() error {
 		return allProfiles[i].UsageCount > allProfiles[j].UsageCount
 	})
 
-	a.metrics.MostUsedProfiles = []string{}
+	a.profiles.metrics.MostUsedProfiles = []string{}
 	for i, profile := range allProfiles {
 		if i >= 10 { // Top 10
 			break
 		}
 		if profile.UsageCount > 0 {
-			a.metrics.MostUsedProfiles = append(a.metrics.MostUsedProfiles, profile.ID)
+			a.profiles.metrics.MostUsedProfiles = append(a.profiles.metrics.MostUsedProfiles, profile.ID)
 		}
 	}
 
@@ -1105,34 +1087,34 @@ func (a *App) saveMetrics() error {
 		return allProfiles[i].LastUsed.After(allProfiles[j].LastUsed)
 	})
 
-	a.metrics.RecentProfiles = []string{}
+	a.profiles.metrics.RecentProfiles = []string{}
 	for i, profile := range allProfiles {
 		if i >= 10 { // Top 10
 			break
 		}
 		if !profile.LastUsed.IsZero() {
-			a.metrics.RecentProfiles = append(a.metrics.RecentProfiles, profile.ID)
+			a.profiles.metrics.RecentProfiles = append(a.profiles.metrics.RecentProfiles, profile.ID)
 		}
 	}
 
 	// Update favorites
-	a.metrics.FavoriteProfiles = []string{}
-	for _, profile := range a.profiles {
+	a.profiles.metrics.FavoriteProfiles = []string{}
+	for _, profile := range a.profiles.profiles {
 		if profile.IsFavorite {
-			a.metrics.FavoriteProfiles = append(a.metrics.FavoriteProfiles, profile.ID)
+			a.profiles.metrics.FavoriteProfiles = append(a.profiles.metrics.FavoriteProfiles, profile.ID)
 		}
 	}
 
 	// Update tag usage
-	a.metrics.TagUsage = make(map[string]int)
-	for _, profile := range a.profiles {
+	a.profiles.metrics.TagUsage = make(map[string]int)
+	for _, profile := range a.profiles.profiles {
 		for _, tag := range profile.Tags {
-			a.metrics.TagUsage[tag]++
+			a.profiles.metrics.TagUsage[tag]++
 		}
 	}
 
 	// Save to YAML file
-	data, err := yaml.Marshal(a.metrics)
+	data, err := yaml.Marshal(a.profiles.metrics)
 	if err != nil {
 		return err
 	}
@@ -1149,7 +1131,7 @@ func (a *App) loadMetrics() error {
 	metricsPath := filepath.Join(profilesDir, "metrics.yaml")
 
 	if _, err := os.Stat(metricsPath); os.IsNotExist(err) {
-		a.metrics = &ProfileMetrics{}
+		a.profiles.metrics = &ProfileMetrics{}
 		return nil
 	}
 
@@ -1158,8 +1140,8 @@ func (a *App) loadMetrics() error {
 		return err
 	}
 
-	a.metrics = &ProfileMetrics{}
-	return yaml.Unmarshal(data, a.metrics)
+	a.profiles.metrics = &ProfileMetrics{}
+	return yaml.Unmarshal(data, a.profiles.metrics)
 }
 
 // MoveFolder moves a folder to a different parent folder by ID
@@ -1167,14 +1149,14 @@ func (a *App) MoveFolder(folderID, targetParentFolderID string) error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
 
-	folder, exists := a.profileFolders[folderID]
+	folder, exists := a.profiles.profileFolders[folderID]
 	if !exists {
 		return fmt.Errorf("folder with ID %s not found", folderID)
 	}
 
 	// Validate target parent folder exists (empty string means root level)
 	if targetParentFolderID != "" {
-		if _, exists := a.profileFolders[targetParentFolderID]; !exists {
+		if _, exists := a.profiles.profileFolders[targetParentFolderID]; !exists {
 			return fmt.Errorf("target parent folder with ID %s not found", targetParentFolderID)
 		}
 
@@ -1187,13 +1169,6 @@ func (a *App) MoveFolder(folderID, targetParentFolderID string) error {
 	// Update folder's parent reference
 	folder.ParentFolderID = targetParentFolderID
 	folder.LastModified = time.Now()
-
-	// Update legacy path for backward compatibility
-	if targetParentFolderID != "" {
-		folder.ParentPath = a.buildFolderPath(targetParentFolderID)
-	} else {
-		folder.ParentPath = ""
-	}
 
 	// Save the updated folder using internal function to avoid deadlock
 	if err := a.saveProfileFolderInternal(folder); err != nil {
@@ -1212,7 +1187,7 @@ func (a *App) isFolderDescendant(candidateParentID, folderID string) bool {
 		return true
 	}
 
-	candidateParent, exists := a.profileFolders[candidateParentID]
+	candidateParent, exists := a.profiles.profileFolders[candidateParentID]
 	if !exists {
 		return false
 	}
@@ -1228,9 +1203,8 @@ func (a *App) isFolderDescendant(candidateParentID, folderID string) bool {
 // updateChildrenPaths updates legacy paths for all children of a moved folder
 func (a *App) updateChildrenPaths(folderID string) {
 	// Update child folders
-	for _, childFolder := range a.profileFolders {
+	for _, childFolder := range a.profiles.profileFolders {
 		if childFolder.ParentFolderID == folderID {
-			childFolder.ParentPath = a.buildFolderPath(folderID)
 			childFolder.LastModified = time.Now()
 			a.saveProfileFolderInternal(childFolder)
 			// Recursively update grandchildren
@@ -1239,9 +1213,8 @@ func (a *App) updateChildrenPaths(folderID string) {
 	}
 
 	// Update child profiles
-	for _, profile := range a.profiles {
+	for _, profile := range a.profiles.profiles {
 		if profile.FolderID == folderID {
-			profile.FolderPath = a.buildFolderPath(folderID)
 			profile.LastModified = time.Now()
 			a.saveProfileInternal(profile)
 		}
@@ -1253,7 +1226,7 @@ func (a *App) GetFolderByID(folderID string) (*ProfileFolder, error) {
 	a.mutex.RLock()
 	defer a.mutex.RUnlock()
 
-	folder, exists := a.profileFolders[folderID]
+	folder, exists := a.profiles.profileFolders[folderID]
 	if !exists {
 		return nil, fmt.Errorf("folder with ID %s not found", folderID)
 	}
@@ -1266,7 +1239,7 @@ func (a *App) GetProfileByID(profileID string) (*Profile, error) {
 	a.mutex.RLock()
 	defer a.mutex.RUnlock()
 
-	profile, exists := a.profiles[profileID]
+	profile, exists := a.profiles.profiles[profileID]
 	if !exists {
 		return nil, fmt.Errorf("profile with ID %s not found", profileID)
 	}

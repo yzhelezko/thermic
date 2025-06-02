@@ -26,12 +26,12 @@ func (a *App) startup(ctx context.Context) {
 	}
 
 	// Set initial window size and state using loaded/default config
-	if a.config != nil { // Ensure config is not nil
-		wailsRuntime.WindowSetSize(a.ctx, a.config.WindowWidth, a.config.WindowHeight)
-		fmt.Printf("Initial window size set to: %d x %d\n", a.config.WindowWidth, a.config.WindowHeight)
+	if a.config != nil && a.config.config != nil { // Ensure config is not nil
+		wailsRuntime.WindowSetSize(a.ctx, a.config.config.WindowWidth, a.config.config.WindowHeight)
+		fmt.Printf("Initial window size set to: %d x %d\n", a.config.config.WindowWidth, a.config.config.WindowHeight)
 
 		// Restore window maximized state if it was saved as maximized
-		if a.config.WindowMaximized {
+		if a.config.config.WindowMaximized {
 			wailsRuntime.WindowMaximise(a.ctx)
 			fmt.Println("Window restored to maximized state")
 		}
@@ -57,8 +57,8 @@ func (a *App) shutdown(ctx context.Context) {
 
 	// Stop the debounce timer if it's running
 	a.mutex.Lock()
-	if a.debounceTimer != nil {
-		a.debounceTimer.Stop()
+	if a.config.debounceTimer != nil {
+		a.config.debounceTimer.Stop()
 		fmt.Println("Debounce timer stopped.")
 	}
 	a.mutex.Unlock()
@@ -82,8 +82,8 @@ func (a *App) shutdown(ctx context.Context) {
 		// Safe window size retrieval with validation
 		width, height := wailsRuntime.WindowGetSize(a.ctx)
 		if width > 0 && height > 0 {
-			a.config.WindowWidth = width
-			a.config.WindowHeight = height
+			a.config.config.WindowWidth = width
+			a.config.config.WindowHeight = height
 			fmt.Printf("Final window size captured: %dx%d\n", width, height)
 		} else {
 			fmt.Printf("Invalid window dimensions during shutdown: %dx%d - keeping previous values\n", width, height)
@@ -91,7 +91,7 @@ func (a *App) shutdown(ctx context.Context) {
 
 		// Safe maximized state retrieval
 		isMaximized := wailsRuntime.WindowIsMaximised(a.ctx)
-		a.config.WindowMaximized = isMaximized
+		a.config.config.WindowMaximized = isMaximized
 		fmt.Printf("Final maximized state: %t\n", isMaximized)
 	}
 
@@ -103,8 +103,8 @@ func (a *App) shutdown(ctx context.Context) {
 
 	// Close all terminal sessions
 	a.mutex.Lock()
-	sessionIds := make([]string, 0, len(a.sessions))
-	for sessionId := range a.sessions {
+	sessionIds := make([]string, 0, len(a.terminal.sessions))
+	for sessionId := range a.terminal.sessions {
 		sessionIds = append(sessionIds, sessionId)
 	}
 	a.mutex.Unlock()

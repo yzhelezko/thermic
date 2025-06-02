@@ -88,7 +88,6 @@ export namespace main {
 	    workingDir: string;
 	    environment: Record<string, string>;
 	    sshConfig?: SSHConfig;
-	    folderPath: string;
 	    folderId?: string;
 	    sortOrder: number;
 	    // Go type: time
@@ -119,7 +118,6 @@ export namespace main {
 	        this.workingDir = source["workingDir"];
 	        this.environment = source["environment"];
 	        this.sshConfig = this.convertValues(source["sshConfig"], SSHConfig);
-	        this.folderPath = source["folderPath"];
 	        this.folderId = source["folderId"];
 	        this.sortOrder = source["sortOrder"];
 	        this.created = this.convertValues(source["created"], null);
@@ -156,7 +154,6 @@ export namespace main {
 	    id: string;
 	    name: string;
 	    icon: string;
-	    parentPath: string;
 	    parentFolderId?: string;
 	    sortOrder: number;
 	    expanded: boolean;
@@ -179,7 +176,6 @@ export namespace main {
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.icon = source["icon"];
-	        this.parentPath = source["parentPath"];
 	        this.parentFolderId = source["parentFolderId"];
 	        this.sortOrder = source["sortOrder"];
 	        this.expanded = source["expanded"];

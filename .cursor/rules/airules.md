@@ -21,3 +21,24 @@
 - Profile management: All profile-related functionality extracted to app_profiles.go (CRUD operations, folder management, tree structure, virtual folders, search, metrics, API methods) - keep profile logic separate
 - System monitoring: All system statistics and monitoring functionality extracted to app_system.go (local/remote system stats, CPU/memory/network monitoring, active tab info) - keep monitoring logic separate
 - SFTP file explorer: All SFTP file operations extracted to app_sftp.go (InitializeFileExplorerSession, ListRemoteFiles, file upload/download, directory operations, file content management) - keep SFTP logic separate
+- Type safety: Use strongly-typed IDs (SessionID, ProfileID, TabID, FolderID, SSHSessionID) instead of strings - prevents ID mixing bugs and improves code safety
+- Constants: Use defined constants for magic strings (ProfileTypeLocal, ConnectionTypeSSH, StatusConnecting, etc.) - improves maintainability and prevents typos
+- Resource limits: Respect MaxSessions(50), MaxProfiles(1000), MaxFileHistory(100) limits in all operations - prevents memory issues
+- Manager architecture: App uses focused managers (terminal, profiles, ssh, config) instead of monolithic struct - improves separation of concerns and maintainability
+- Manager access: Use a.terminal.*, a.profiles.*, a.ssh.*, a.config.* to access manager-specific functionality - maintains clear boundaries
+- Deprecated fields removed: FolderPath and ParentPath removed in favor of ID-based references (FolderID, ParentFolderID) - cleaner data model
+- Infrastructure management: Use BoundedMap/BoundedSlice for collections with automatic resource cleanup and size limits - prevents memory leaks
+- Resource management: All resources implement Cleanup interface with Close() method for proper lifecycle management
+- ResourceManager: Each manager has resourceManager for automatic cleanup registration - use Register() for tracked resources
+- Validation system: All user-facing types implement Validator interface with Validate() method - always validate before storage
+- Manager-specific mutexes: Use a.terminal.mutex, a.profiles.mutex, a.ssh.sshSessionsMutex/sftpClientsMutex, a.config.mutex instead of global App mutex - improves concurrency
+- Status type safety: Use StatusConnecting.String() for string conversion from ConnectionStatus enum - maintains type safety
+- Session registration: Always register new sessions with resourceManager.Register() for automatic cleanup
+- Bounded collections: MaxSSHSessions(25), MaxSFTPClients(25) automatically enforce limits in BoundedMap usage
+- Collection cleanup: BoundedMap/BoundedSlice automatically clean up oldest items when at capacity using FIFO pattern
+- Profile validation: Always call profile.Validate() before saving - validates limits, SSH config, tags, and file history
+- SFTP resource management: Use SFTPClientWrapper for automatic cleanup registration and resource limit enforcement
+- Tag limits: Enforce MaxTagsPerProfile(20) in UpdateProfileTagsAPI to prevent excessive tag usage
+- Profile limits: Check and warn when profile count exceeds MaxProfiles(1000) in GetProfileTreeAPI
+- SFTP limits: Check MaxSFTPClients(25) before creating new SFTP clients in InitializeFileExplorerSession
+- SSH/SFTP mutex separation: SSHManager has separate mutexes - sshSessionsMutex for SSH sessions, sftpClientsMutex for SFTP clients - NEVER use one for the other to prevent deadlocks

@@ -195,9 +195,9 @@ func (a *App) GetRemoteSystemStats(sessionID string) map[string]interface{} {
 	}
 
 	// Check if we have an active SSH session
-	a.mutex.RLock()
-	sshSession, exists := a.sshSessions[sessionID]
-	a.mutex.RUnlock()
+	a.ssh.sshSessionsMutex.RLock()
+	sshSession, exists := a.ssh.sshSessions[sessionID]
+	a.ssh.sshSessionsMutex.RUnlock()
 
 	if !exists || sshSession == nil || sshSession.cleaning {
 		return stats

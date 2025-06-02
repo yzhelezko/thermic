@@ -14,6 +14,10 @@ export function CheckWSLAvailable() {
   return window['go']['main']['App']['CheckWSLAvailable']();
 }
 
+export function Close() {
+  return window['go']['main']['App']['Close']();
+}
+
 export function CloseFileExplorerSession(arg1) {
   return window['go']['main']['App']['CloseFileExplorerSession'](arg1);
 }

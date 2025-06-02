@@ -13,15 +13,20 @@ import (
 
 // GetProfileTreeAPI returns the profile tree structure for the frontend
 func (a *App) GetProfileTreeAPI() []*ProfileTreeNode {
-	a.mutex.RLock()
-	defer a.mutex.RUnlock()
+	a.profiles.mutex.RLock()
+	defer a.profiles.mutex.RUnlock()
+
+	// Check profile limits
+	if len(a.profiles.profiles) > MaxProfiles {
+		fmt.Printf("Warning: Profile count (%d) exceeds maximum (%d)\n", len(a.profiles.profiles), MaxProfiles)
+	}
 
 	// Build tree structure
 	tree := make(map[string]*ProfileTreeNode)
 	var rootNodes []*ProfileTreeNode
 
 	// Add folders first
-	for _, folder := range a.profileFolders {
+	for _, folder := range a.profiles.profileFolders {
 		node := &ProfileTreeNode{
 			ID:       folder.ID,
 			Name:     folder.Name,
@@ -35,13 +40,13 @@ func (a *App) GetProfileTreeAPI() []*ProfileTreeNode {
 	}
 
 	// Add profiles
-	for _, profile := range a.profiles {
+	for _, profile := range a.profiles.profiles {
 		node := &ProfileTreeNode{
 			ID:      profile.ID,
 			Name:    profile.Name,
 			Icon:    profile.Icon,
 			Type:    "profile",
-			Path:    profile.FolderPath,
+			Path:    a.buildFolderPath(profile.FolderID),
 			Profile: profile,
 		}
 
@@ -50,9 +55,6 @@ func (a *App) GetProfileTreeAPI() []*ProfileTreeNode {
 		if profile.FolderID != "" {
 			// Use new ID-based reference
 			parentID = profile.FolderID
-		} else if profile.FolderPath != "" {
-			// Fall back to path-based reference for backward compatibility
-			parentID = a.findFolderByPath(profile.FolderPath)
 		}
 
 		if parentID != "" && tree[parentID] != nil {
@@ -64,16 +66,13 @@ func (a *App) GetProfileTreeAPI() []*ProfileTreeNode {
 	}
 
 	// Add folders to their parents or root - prioritize ID-based reference over path-based
-	for folderID, folder := range a.profileFolders {
+	for folderID, folder := range a.profiles.profileFolders {
 		node := tree[folderID]
 
 		var parentID string
 		if folder.ParentFolderID != "" {
 			// Use new ID-based reference
 			parentID = folder.ParentFolderID
-		} else if folder.ParentPath != "" {
-			// Fall back to path-based reference for backward compatibility
-			parentID = a.findFolderByPath(folder.ParentPath)
 		}
 
 		if parentID != "" && tree[parentID] != nil {
@@ -105,24 +104,29 @@ func (a *App) CreateProfileFolderAPI(name, icon, parentPath string) (*ProfileFol
 
 // UpdateProfile updates an existing profile
 func (a *App) UpdateProfile(profile *Profile) error {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
+	// Validate profile before updating
+	if err := profile.Validate(); err != nil {
+		return fmt.Errorf("invalid profile: %w", err)
+	}
+
+	a.profiles.mutex.Lock()
+	defer a.profiles.mutex.Unlock()
 	return a.saveProfileInternal(profile)
 }
 
 // UpdateProfileFolder updates an existing profile folder
 func (a *App) UpdateProfileFolder(folder *ProfileFolder) error {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
+	a.profiles.mutex.Lock()
+	defer a.profiles.mutex.Unlock()
 	return a.saveProfileFolderInternal(folder)
 }
 
 // DeleteProfileAPI deletes a profile
 func (a *App) DeleteProfileAPI(id string) error {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
+	a.profiles.mutex.Lock()
+	defer a.profiles.mutex.Unlock()
 
-	profile, exists := a.profiles[id]
+	profile, exists := a.profiles.profiles[id]
 	if !exists {
 		return fmt.Errorf("profile not found: %s", id)
 	}
@@ -133,7 +137,7 @@ func (a *App) DeleteProfileAPI(id string) error {
 	}
 
 	// Temporarily stop the file watcher to prevent conflicts
-	wasWatcherRunning := a.profileWatcher != nil
+	wasWatcherRunning := a.profiles.profileWatcher != nil
 	if wasWatcherRunning {
 		a.StopProfileWatcher()
 	}
@@ -157,7 +161,7 @@ func (a *App) DeleteProfileAPI(id string) error {
 	}
 
 	// Remove from memory
-	delete(a.profiles, id)
+	delete(a.profiles.profiles, id)
 
 	// Restart the file watcher
 	if wasWatcherRunning {
@@ -173,10 +177,10 @@ func (a *App) DeleteProfileAPI(id string) error {
 
 // DeleteProfileFolderAPI deletes a profile folder
 func (a *App) DeleteProfileFolderAPI(id string) error {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
+	a.profiles.mutex.Lock()
+	defer a.profiles.mutex.Unlock()
 
-	folder, exists := a.profileFolders[id]
+	folder, exists := a.profiles.profileFolders[id]
 	if !exists {
 		return fmt.Errorf("profile folder not found: %s", id)
 	}
@@ -187,7 +191,7 @@ func (a *App) DeleteProfileFolderAPI(id string) error {
 	}
 
 	// Temporarily stop the file watcher to prevent conflicts
-	wasWatcherRunning := a.profileWatcher != nil
+	wasWatcherRunning := a.profiles.profileWatcher != nil
 	if wasWatcherRunning {
 		a.StopProfileWatcher()
 	}
@@ -211,7 +215,7 @@ func (a *App) DeleteProfileFolderAPI(id string) error {
 	}
 
 	// Remove from memory
-	delete(a.profileFolders, id)
+	delete(a.profiles.profileFolders, id)
 
 	// Restart the file watcher
 	if wasWatcherRunning {
@@ -227,10 +231,10 @@ func (a *App) DeleteProfileFolderAPI(id string) error {
 
 // GetProfile returns a specific profile by ID
 func (a *App) GetProfile(id string) (*Profile, error) {
-	a.mutex.RLock()
-	defer a.mutex.RUnlock()
+	a.profiles.mutex.RLock()
+	defer a.profiles.mutex.RUnlock()
 
-	profile, exists := a.profiles[id]
+	profile, exists := a.profiles.profiles[id]
 	if !exists {
 		return nil, fmt.Errorf("profile not found: %s", id)
 	}
@@ -239,10 +243,10 @@ func (a *App) GetProfile(id string) (*Profile, error) {
 
 // GetProfileFolder returns a specific profile folder by ID
 func (a *App) GetProfileFolder(id string) (*ProfileFolder, error) {
-	a.mutex.RLock()
-	defer a.mutex.RUnlock()
+	a.profiles.mutex.RLock()
+	defer a.profiles.mutex.RUnlock()
 
-	folder, exists := a.profileFolders[id]
+	folder, exists := a.profiles.profileFolders[id]
 	if !exists {
 		return nil, fmt.Errorf("profile folder not found: %s", id)
 	}
@@ -251,16 +255,15 @@ func (a *App) GetProfileFolder(id string) (*ProfileFolder, error) {
 
 // MoveProfile moves a profile to a different folder
 func (a *App) MoveProfile(profileID, newFolderPath string) error {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
+	a.profiles.mutex.Lock()
+	defer a.profiles.mutex.Unlock()
 
-	profile, exists := a.profiles[profileID]
+	profile, exists := a.profiles.profiles[profileID]
 	if !exists {
 		return fmt.Errorf("profile not found: %s", profileID)
 	}
 
 	// Update both path and ID references
-	profile.FolderPath = newFolderPath
 	profile.LastModified = time.Now()
 
 	// If newFolderPath is provided, try to find the corresponding folder ID
@@ -277,17 +280,17 @@ func (a *App) MoveProfile(profileID, newFolderPath string) error {
 
 // MoveProfileByID moves a profile to a different folder using folder ID
 func (a *App) MoveProfileByID(profileID, targetFolderID string) error {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
+	a.profiles.mutex.Lock()
+	defer a.profiles.mutex.Unlock()
 
-	profile, exists := a.profiles[profileID]
+	profile, exists := a.profiles.profiles[profileID]
 	if !exists {
 		return fmt.Errorf("profile with ID %s not found", profileID)
 	}
 
 	// Validate target folder exists (empty string means root level)
 	if targetFolderID != "" {
-		if _, exists := a.profileFolders[targetFolderID]; !exists {
+		if _, exists := a.profiles.profileFolders[targetFolderID]; !exists {
 			return fmt.Errorf("target folder with ID %s not found", targetFolderID)
 		}
 	}
@@ -298,9 +301,9 @@ func (a *App) MoveProfileByID(profileID, targetFolderID string) error {
 
 	// Update legacy path for backward compatibility
 	if targetFolderID != "" {
-		profile.FolderPath = a.buildFolderPath(targetFolderID)
+		profile.FolderID = targetFolderID
 	} else {
-		profile.FolderPath = ""
+		profile.FolderID = ""
 	}
 
 	// Save the updated profile using internal function to avoid deadlock
@@ -313,10 +316,10 @@ func (a *App) MoveProfileByID(profileID, targetFolderID string) error {
 
 // DuplicateProfile creates a copy of an existing profile
 func (a *App) DuplicateProfile(profileID string) (*Profile, error) {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
+	a.profiles.mutex.Lock()
+	defer a.profiles.mutex.Unlock()
 
-	original, exists := a.profiles[profileID]
+	original, exists := a.profiles.profiles[profileID]
 	if !exists {
 		return nil, fmt.Errorf("profile not found: %s", profileID)
 	}
@@ -337,10 +340,10 @@ func (a *App) DuplicateProfile(profileID string) (*Profile, error) {
 
 // DeleteProfileFolderWithContentsAPI deletes a profile folder and all profiles inside it
 func (a *App) DeleteProfileFolderWithContentsAPI(id string) error {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
+	a.profiles.mutex.Lock()
+	defer a.profiles.mutex.Unlock()
 
-	folder, exists := a.profileFolders[id]
+	folder, exists := a.profiles.profileFolders[id]
 	if !exists {
 		return fmt.Errorf("profile folder not found: %s", id)
 	}
@@ -355,15 +358,15 @@ func (a *App) DeleteProfileFolderWithContentsAPI(id string) error {
 	profilesToDelete := make([]string, 0)
 
 	// Collect profiles to delete
-	for profileID, profile := range a.profiles {
-		if strings.HasPrefix(profile.FolderPath, folderPath) {
+	for profileID, profile := range a.profiles.profiles {
+		if strings.HasPrefix(a.buildFolderPath(profile.FolderID), folderPath) {
 			profilesToDelete = append(profilesToDelete, profileID)
 		}
 	}
 
 	// Delete each profile file and remove from memory
 	for _, profileID := range profilesToDelete {
-		profile := a.profiles[profileID]
+		profile := a.profiles.profiles[profileID]
 
 		// Delete profile file
 		filename := fmt.Sprintf("%s-%s.yaml", profile.Name, profileID)
@@ -375,7 +378,7 @@ func (a *App) DeleteProfileFolderWithContentsAPI(id string) error {
 		}
 
 		// Remove from memory
-		delete(a.profiles, profileID)
+		delete(a.profiles.profiles, profileID)
 	}
 
 	// Delete the folder file
@@ -388,23 +391,23 @@ func (a *App) DeleteProfileFolderWithContentsAPI(id string) error {
 	}
 
 	// Remove folder from memory
-	delete(a.profileFolders, id)
+	delete(a.profiles.profileFolders, id)
 
 	return nil
 }
 
 // Virtual Folder APIs
 func (a *App) GetVirtualFoldersAPI() []*VirtualFolder {
-	a.mutex.RLock()
-	defer a.mutex.RUnlock()
-	return a.virtualFolders
+	a.profiles.mutex.RLock()
+	defer a.profiles.mutex.RUnlock()
+	return a.profiles.virtualFolders
 }
 
 func (a *App) GetVirtualFolderProfilesAPI(folderID string) []*Profile {
-	a.mutex.RLock()
-	defer a.mutex.RUnlock()
+	a.profiles.mutex.RLock()
+	defer a.profiles.mutex.RUnlock()
 
-	for _, vf := range a.virtualFolders {
+	for _, vf := range a.profiles.virtualFolders {
 		if vf.ID == folderID {
 			return a.getVirtualFolderProfiles(vf)
 		}
@@ -414,10 +417,10 @@ func (a *App) GetVirtualFolderProfilesAPI(folderID string) []*Profile {
 
 // Enhanced Profile APIs
 func (a *App) ToggleFavoriteAPI(profileID string) error {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
+	a.profiles.mutex.Lock()
+	defer a.profiles.mutex.Unlock()
 
-	profile, exists := a.profiles[profileID]
+	profile, exists := a.profiles.profiles[profileID]
 	if !exists {
 		return fmt.Errorf("profile not found: %s", profileID)
 	}
@@ -431,12 +434,17 @@ func (a *App) ToggleFavoriteAPI(profileID string) error {
 }
 
 func (a *App) UpdateProfileTagsAPI(profileID string, tags []string) error {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
+	a.profiles.mutex.Lock()
+	defer a.profiles.mutex.Unlock()
 
-	profile, exists := a.profiles[profileID]
+	profile, exists := a.profiles.profiles[profileID]
 	if !exists {
 		return fmt.Errorf("profile not found: %s", profileID)
+	}
+
+	// Validate tag limits
+	if len(tags) > MaxTagsPerProfile {
+		return fmt.Errorf("too many tags: %d, maximum allowed: %d", len(tags), MaxTagsPerProfile)
 	}
 
 	profile.Tags = tags
@@ -448,13 +456,13 @@ func (a *App) UpdateProfileTagsAPI(profileID string, tags []string) error {
 }
 
 func (a *App) SearchProfilesAPI(query string, tags []string) []*Profile {
-	a.mutex.RLock()
-	defer a.mutex.RUnlock()
+	a.profiles.mutex.RLock()
+	defer a.profiles.mutex.RUnlock()
 
 	var results []*Profile
 	query = strings.ToLower(query)
 
-	for _, profile := range a.profiles {
+	for _, profile := range a.profiles.profiles {
 		// Text search
 		if query != "" {
 			nameMatch := strings.Contains(strings.ToLower(profile.Name), query)
@@ -500,16 +508,16 @@ func (a *App) SearchProfilesAPI(query string, tags []string) []*Profile {
 }
 
 func (a *App) GetMetricsAPI() *ProfileMetrics {
-	a.mutex.RLock()
-	defer a.mutex.RUnlock()
-	return a.metrics
+	a.profiles.mutex.RLock()
+	defer a.profiles.mutex.RUnlock()
+	return a.profiles.metrics
 }
 
 func (a *App) GetPopularTagsAPI() []string {
-	a.mutex.RLock()
-	defer a.mutex.RUnlock()
+	a.profiles.mutex.RLock()
+	defer a.profiles.mutex.RUnlock()
 
-	if a.metrics == nil || len(a.metrics.TagUsage) == 0 {
+	if a.profiles.metrics == nil || len(a.profiles.metrics.TagUsage) == 0 {
 		return []string{}
 	}
 
@@ -520,7 +528,7 @@ func (a *App) GetPopularTagsAPI() []string {
 	}
 
 	var tags []tagCount
-	for tag, count := range a.metrics.TagUsage {
+	for tag, count := range a.profiles.metrics.TagUsage {
 		tags = append(tags, tagCount{tag, count})
 	}
 

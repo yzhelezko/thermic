@@ -9,6 +9,8 @@ export function CheckForUpdates():Promise<main.UpdateInfo>;
 
 export function CheckWSLAvailable():Promise<boolean>;
 
+export function Close():Promise<void>;
+
 export function CloseFileExplorerSession(arg1:string):Promise<void>;
 
 export function CloseMonitoringSession(arg1:main.SSHSession):Promise<void>;

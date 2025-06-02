@@ -18,16 +18,21 @@ func (a *App) StartShell(shell string, sessionId string) error {
 		shell = a.GetDefaultShell()
 	}
 
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
+	a.terminal.mutex.Lock()
+	defer a.terminal.mutex.Unlock()
+
+	// Check session limit
+	if len(a.terminal.sessions) >= MaxSessions {
+		return fmt.Errorf("maximum number of sessions (%d) reached", MaxSessions)
+	}
 
 	// Check if session already exists and clean it up if needed
-	if existingSession, exists := a.sessions[sessionId]; exists {
+	if existingSession, exists := a.terminal.sessions[sessionId]; exists {
 		existingSession.cleaning = true
 		if existingSession.pty != nil {
 			existingSession.pty.Close()
 		}
-		delete(a.sessions, sessionId)
+		delete(a.terminal.sessions, sessionId)
 	}
 
 	// Create a new PTY (this is what VS Code does with node-pty)
@@ -116,7 +121,10 @@ func (a *App) StartShell(shell string, sessionId string) error {
 	}
 
 	// Store session
-	a.sessions[sessionId] = session
+	a.terminal.sessions[sessionId] = session
+
+	// Register session for resource cleanup
+	a.terminal.resourceManager.Register(session)
 
 	// Start reading from PTY (VS Code style - raw byte streaming)
 	go a.streamPtyOutput(sessionId, ptty)
@@ -131,23 +139,23 @@ func (a *App) StartShell(shell string, sessionId string) error {
 func (a *App) streamPtyOutput(sessionId string, ptty pty.Pty) {
 	defer func() {
 		// Signal that streaming has ended
-		a.mutex.RLock()
-		if session, exists := a.sessions[sessionId]; exists && !session.cleaning {
+		a.terminal.mutex.RLock()
+		if session, exists := a.terminal.sessions[sessionId]; exists && !session.cleaning {
 			session.closed <- true
 		}
-		a.mutex.RUnlock()
+		a.terminal.mutex.RUnlock()
 	}()
 
 	buffer := make([]byte, 1024)
 	for {
 		// Check if session is being cleaned up
-		a.mutex.RLock()
-		session, exists := a.sessions[sessionId]
+		a.terminal.mutex.RLock()
+		session, exists := a.terminal.sessions[sessionId]
 		if !exists || session.cleaning {
-			a.mutex.RUnlock()
+			a.terminal.mutex.RUnlock()
 			break
 		}
-		a.mutex.RUnlock()
+		a.terminal.mutex.RUnlock()
 
 		n, err := ptty.Read(buffer)
 		if err != nil {
@@ -181,85 +189,86 @@ func (a *App) monitorProcess(sessionId string, cmd *pty.Cmd) {
 
 // WriteToShell writes data to the PTY or SSH session
 func (a *App) WriteToShell(sessionId string, data string) error {
-	a.mutex.RLock()
+	a.terminal.mutex.RLock()
 
 	// Check if it's a PTY session
-	if session, exists := a.sessions[sessionId]; exists {
-		a.mutex.RUnlock()
+	if session, exists := a.terminal.sessions[sessionId]; exists {
+		a.terminal.mutex.RUnlock()
 		_, err := session.pty.Write([]byte(data))
 		return err
 	}
+	a.terminal.mutex.RUnlock()
 
 	// Check if it's an SSH session
-	if sshSession, exists := a.sshSessions[sessionId]; exists {
-		a.mutex.RUnlock()
+	a.ssh.sshSessionsMutex.RLock()
+	if sshSession, exists := a.ssh.sshSessions[sessionId]; exists {
+		a.ssh.sshSessionsMutex.RUnlock()
 		return a.WriteToSSHSession(sshSession, data)
 	}
+	a.ssh.sshSessionsMutex.RUnlock()
 
-	a.mutex.RUnlock()
 	return fmt.Errorf("session %s not found", sessionId)
 }
 
 // ResizeShell resizes the PTY or SSH session
 func (a *App) ResizeShell(sessionId string, cols, rows int) error {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
-
+	a.terminal.mutex.Lock()
 	// Check if it's a PTY session
-	if session, exists := a.sessions[sessionId]; exists {
+	if session, exists := a.terminal.sessions[sessionId]; exists {
 		session.cols = cols
 		session.rows = rows
+		a.terminal.mutex.Unlock()
 		return session.pty.Resize(cols, rows)
 	}
+	a.terminal.mutex.Unlock()
 
 	// Check if it's an SSH session
-	if sshSession, exists := a.sshSessions[sessionId]; exists {
+	a.ssh.sshSessionsMutex.Lock()
+	if sshSession, exists := a.ssh.sshSessions[sessionId]; exists {
+		a.ssh.sshSessionsMutex.Unlock()
 		return a.ResizeSSHSession(sshSession, cols, rows)
 	}
+	a.ssh.sshSessionsMutex.Unlock()
 
 	return fmt.Errorf("session %s not found", sessionId)
 }
 
 // CloseShell closes a PTY or SSH session
 func (a *App) CloseShell(sessionId string) error {
-	a.mutex.Lock()
+	a.terminal.mutex.Lock()
 
 	// Check if it's a PTY session
-	if session, exists := a.sessions[sessionId]; exists {
+	if session, exists := a.terminal.sessions[sessionId]; exists {
 		session.cleaning = true
-		delete(a.sessions, sessionId)
-		a.mutex.Unlock()
+		delete(a.terminal.sessions, sessionId)
+		a.terminal.mutex.Unlock()
 
 		// Do cleanup asynchronously to avoid blocking
 		go func() {
-			if session.pty != nil {
-				session.pty.Close()
-			}
-			if session.cmd != nil && session.cmd.Process != nil {
-				time.Sleep(1 * time.Second)
-				session.cmd.Process.Kill()
-			}
+			session.Close() // Use the new Close method
 		}()
 		return nil
 	}
+	a.terminal.mutex.Unlock()
 
 	// Check if it's an SSH session
-	if sshSession, exists := a.sshSessions[sessionId]; exists {
-		delete(a.sshSessions, sessionId)
-		a.mutex.Unlock()
+	a.ssh.sshSessionsMutex.Lock()
+	if sshSession, exists := a.ssh.sshSessions[sessionId]; exists {
+		delete(a.ssh.sshSessions, sessionId)
+		a.ssh.sshSessionsMutex.Unlock()
 		return a.CloseSSHSession(sshSession)
 	}
+	a.ssh.sshSessionsMutex.Unlock()
 
-	a.mutex.Unlock()
 	return fmt.Errorf("session %s not found", sessionId)
 }
 
 // IsSessionClosed checks if a session is completely closed and cleaned up
 func (a *App) IsSessionClosed(sessionId string) bool {
-	a.mutex.RLock()
-	defer a.mutex.RUnlock()
+	a.terminal.mutex.RLock()
+	defer a.terminal.mutex.RUnlock()
 
-	session, exists := a.sessions[sessionId]
+	session, exists := a.terminal.sessions[sessionId]
 	if !exists {
 		return true // Session doesn't exist, so it's "closed"
 	}
@@ -279,9 +288,9 @@ func (a *App) WaitForSessionClose(sessionId string) error {
 		case <-timeout:
 			return fmt.Errorf("timeout waiting for session %s to close", sessionId)
 		case <-ticker.C:
-			a.mutex.RLock()
-			_, exists := a.sessions[sessionId]
-			a.mutex.RUnlock()
+			a.terminal.mutex.RLock()
+			_, exists := a.terminal.sessions[sessionId]
+			a.terminal.mutex.RUnlock()
 
 			if !exists {
 				return nil // Session is fully closed

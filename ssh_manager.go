@@ -354,7 +354,7 @@ func (a *App) waitForSSHSessionEnd(sshSession *SSHSession) {
 	// Find the tab associated with this session to update status
 	a.mutex.RLock()
 	var associatedTab *Tab
-	for _, tab := range a.tabs {
+	for _, tab := range a.terminal.tabs {
 		if tab.SessionID == sshSession.sessionID {
 			associatedTab = tab
 			break
@@ -497,7 +497,7 @@ func (a *App) handleHangingSession(sshSession *SSHSession) {
 	// Find the tab associated with this session
 	a.mutex.RLock()
 	var associatedTab *Tab
-	for _, tab := range a.tabs {
+	for _, tab := range a.terminal.tabs {
 		if tab.SessionID == sshSession.sessionID {
 			associatedTab = tab
 			break
@@ -523,9 +523,9 @@ func (a *App) handleHangingSession(sshSession *SSHSession) {
 
 // ForceDisconnectSSHSession forcefully disconnects a hanging SSH session
 func (a *App) ForceDisconnectSSHSession(sessionID string) error {
-	a.mutex.RLock()
-	sshSession, exists := a.sshSessions[sessionID]
-	a.mutex.RUnlock()
+	a.ssh.sshSessionsMutex.RLock()
+	sshSession, exists := a.ssh.sshSessions[sessionID]
+	a.ssh.sshSessionsMutex.RUnlock()
 
 	if !exists {
 		return fmt.Errorf("SSH session %s not found", sessionID)

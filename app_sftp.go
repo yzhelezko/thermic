@@ -11,22 +11,41 @@ import (
 	"github.com/pkg/sftp"
 )
 
+// SFTPClientWrapper wraps an SFTP client for resource management
+type SFTPClientWrapper struct {
+	client    *sftp.Client
+	sessionID string
+}
+
+// Close implements the Cleanup interface for SFTPClientWrapper
+func (w *SFTPClientWrapper) Close() error {
+	if w.client != nil {
+		return w.client.Close()
+	}
+	return nil
+}
+
 // SFTP File Explorer Methods
 
 // InitializeFileExplorerSession initializes an SFTP client for the given SSH session
 func (a *App) InitializeFileExplorerSession(sessionID string) error {
-	a.sftpClientsMutex.Lock()
-	defer a.sftpClientsMutex.Unlock()
+	a.ssh.sftpClientsMutex.Lock()
+	defer a.ssh.sftpClientsMutex.Unlock()
 
 	// Check if SFTP client already exists
-	if _, exists := a.sftpClients[sessionID]; exists {
+	if _, exists := a.ssh.sftpClients[sessionID]; exists {
 		return nil // Already initialized
 	}
 
-	// Get the SSH session
-	a.mutex.RLock()
-	sshSession, exists := a.sshSessions[sessionID]
-	a.mutex.RUnlock()
+	// Check SFTP client limit
+	if len(a.ssh.sftpClients) >= MaxSFTPClients {
+		return fmt.Errorf("maximum number of SFTP clients (%d) reached", MaxSFTPClients)
+	}
+
+	// Get the SSH session using its dedicated mutex
+	a.ssh.sshSessionsMutex.RLock()
+	sshSession, exists := a.ssh.sshSessions[sessionID]
+	a.ssh.sshSessionsMutex.RUnlock()
 
 	if !exists || sshSession == nil {
 		return fmt.Errorf("SSH session %s not found", sessionID)
@@ -42,8 +61,18 @@ func (a *App) InitializeFileExplorerSession(sessionID string) error {
 		return fmt.Errorf("failed to create SFTP client: %w", err)
 	}
 
+	// Create wrapper for resource management
+	wrapper := &SFTPClientWrapper{
+		client:    sftpClient,
+		sessionID: sessionID,
+	}
+
 	// Store the SFTP client
-	a.sftpClients[sessionID] = sftpClient
+	a.ssh.sftpClients[sessionID] = sftpClient
+
+	// Register for resource cleanup
+	a.ssh.resourceManager.Register(wrapper)
+
 	fmt.Printf("SFTP client initialized for session %s\n", sessionID)
 
 	return nil
@@ -51,9 +80,9 @@ func (a *App) InitializeFileExplorerSession(sessionID string) error {
 
 // GetRemoteWorkingDirectory gets the current working directory for an SSH session
 func (a *App) GetRemoteWorkingDirectory(sessionID string) (string, error) {
-	a.mutex.RLock()
-	sshSession, exists := a.sshSessions[sessionID]
-	a.mutex.RUnlock()
+	a.ssh.sshSessionsMutex.RLock()
+	sshSession, exists := a.ssh.sshSessions[sessionID]
+	a.ssh.sshSessionsMutex.RUnlock()
 
 	if !exists || sshSession == nil {
 		return "", fmt.Errorf("SSH session %s not found", sessionID)
@@ -85,12 +114,12 @@ func (a *App) GetRemoteWorkingDirectory(sessionID string) (string, error) {
 
 // CloseFileExplorerSession closes and removes the SFTP client for the given session
 func (a *App) CloseFileExplorerSession(sessionID string) error {
-	a.sftpClientsMutex.Lock()
-	defer a.sftpClientsMutex.Unlock()
+	a.ssh.sftpClientsMutex.Lock()
+	defer a.ssh.sftpClientsMutex.Unlock()
 
-	if sftpClient, exists := a.sftpClients[sessionID]; exists {
+	if sftpClient, exists := a.ssh.sftpClients[sessionID]; exists {
 		sftpClient.Close()
-		delete(a.sftpClients, sessionID)
+		delete(a.ssh.sftpClients, sessionID)
 		fmt.Printf("SFTP client closed for session %s\n", sessionID)
 	}
 
@@ -99,9 +128,9 @@ func (a *App) CloseFileExplorerSession(sessionID string) error {
 
 // ListRemoteFiles lists files and directories in the specified remote path
 func (a *App) ListRemoteFiles(sessionID string, remotePath string) ([]RemoteFileEntry, error) {
-	a.sftpClientsMutex.RLock()
-	sftpClient, exists := a.sftpClients[sessionID]
-	a.sftpClientsMutex.RUnlock()
+	a.ssh.sftpClientsMutex.RLock()
+	sftpClient, exists := a.ssh.sftpClients[sessionID]
+	a.ssh.sftpClientsMutex.RUnlock()
 
 	if !exists {
 		return nil, fmt.Errorf("SFTP client not initialized for session %s", sessionID)
@@ -151,9 +180,9 @@ func (a *App) ListRemoteFiles(sessionID string, remotePath string) ([]RemoteFile
 
 // DownloadRemoteFile downloads a file from the remote server to local path
 func (a *App) DownloadRemoteFile(sessionID string, remotePath string, localPath string) error {
-	a.sftpClientsMutex.RLock()
-	sftpClient, exists := a.sftpClients[sessionID]
-	a.sftpClientsMutex.RUnlock()
+	a.ssh.sftpClientsMutex.RLock()
+	sftpClient, exists := a.ssh.sftpClients[sessionID]
+	a.ssh.sftpClientsMutex.RUnlock()
 
 	if !exists {
 		return fmt.Errorf("SFTP client not initialized for session %s", sessionID)
@@ -184,9 +213,9 @@ func (a *App) DownloadRemoteFile(sessionID string, remotePath string, localPath 
 
 // UploadRemoteFiles uploads local files to the remote directory
 func (a *App) UploadRemoteFiles(sessionID string, localFilePaths []string, remotePath string) error {
-	a.sftpClientsMutex.RLock()
-	sftpClient, exists := a.sftpClients[sessionID]
-	a.sftpClientsMutex.RUnlock()
+	a.ssh.sftpClientsMutex.RLock()
+	sftpClient, exists := a.ssh.sftpClients[sessionID]
+	a.ssh.sftpClientsMutex.RUnlock()
 
 	if !exists {
 		return fmt.Errorf("SFTP client not initialized for session %s", sessionID)
@@ -227,9 +256,9 @@ func (a *App) UploadRemoteFiles(sessionID string, localFilePaths []string, remot
 
 // CreateRemoteDirectory creates a new directory on the remote server
 func (a *App) CreateRemoteDirectory(sessionID string, remotePath string) error {
-	a.sftpClientsMutex.RLock()
-	sftpClient, exists := a.sftpClients[sessionID]
-	a.sftpClientsMutex.RUnlock()
+	a.ssh.sftpClientsMutex.RLock()
+	sftpClient, exists := a.ssh.sftpClients[sessionID]
+	a.ssh.sftpClientsMutex.RUnlock()
 
 	if !exists {
 		return fmt.Errorf("SFTP client not initialized for session %s", sessionID)
@@ -245,9 +274,9 @@ func (a *App) CreateRemoteDirectory(sessionID string, remotePath string) error {
 
 // DeleteRemotePath deletes a file or directory on the remote server (auto-detects recursion)
 func (a *App) DeleteRemotePath(sessionID string, remotePath string) error {
-	a.sftpClientsMutex.RLock()
-	sftpClient, exists := a.sftpClients[sessionID]
-	a.sftpClientsMutex.RUnlock()
+	a.ssh.sftpClientsMutex.RLock()
+	sftpClient, exists := a.ssh.sftpClients[sessionID]
+	a.ssh.sftpClientsMutex.RUnlock()
 
 	if !exists {
 		return fmt.Errorf("SFTP client not initialized for session %s", sessionID)
@@ -275,9 +304,9 @@ func (a *App) DeleteRemotePath(sessionID string, remotePath string) error {
 
 // DeleteRemotePathAdvanced deletes a file or directory with explicit recursion control
 func (a *App) DeleteRemotePathAdvanced(sessionID string, remotePath string, isRecursive bool) error {
-	a.sftpClientsMutex.RLock()
-	sftpClient, exists := a.sftpClients[sessionID]
-	a.sftpClientsMutex.RUnlock()
+	a.ssh.sftpClientsMutex.RLock()
+	sftpClient, exists := a.ssh.sftpClients[sessionID]
+	a.ssh.sftpClientsMutex.RUnlock()
 
 	if !exists {
 		return fmt.Errorf("SFTP client not initialized for session %s", sessionID)
@@ -342,9 +371,9 @@ func (a *App) deleteRemoteDirectoryRecursive(sftpClient *sftp.Client, remotePath
 
 // RenameRemotePath renames a file or directory on the remote server
 func (a *App) RenameRemotePath(sessionID string, oldPath string, newPath string) error {
-	a.sftpClientsMutex.RLock()
-	sftpClient, exists := a.sftpClients[sessionID]
-	a.sftpClientsMutex.RUnlock()
+	a.ssh.sftpClientsMutex.RLock()
+	sftpClient, exists := a.ssh.sftpClients[sessionID]
+	a.ssh.sftpClientsMutex.RUnlock()
 
 	if !exists {
 		return fmt.Errorf("SFTP client not initialized for session %s", sessionID)
@@ -360,9 +389,9 @@ func (a *App) RenameRemotePath(sessionID string, oldPath string, newPath string)
 
 // GetRemoteFileContent reads the content of a remote file
 func (a *App) GetRemoteFileContent(sessionID string, remotePath string) (string, error) {
-	a.sftpClientsMutex.RLock()
-	sftpClient, exists := a.sftpClients[sessionID]
-	a.sftpClientsMutex.RUnlock()
+	a.ssh.sftpClientsMutex.RLock()
+	sftpClient, exists := a.ssh.sftpClients[sessionID]
+	a.ssh.sftpClientsMutex.RUnlock()
 
 	if !exists {
 		return "", fmt.Errorf("SFTP client not initialized for session %s", sessionID)
@@ -393,9 +422,9 @@ func (a *App) GetRemoteFileContent(sessionID string, remotePath string) (string,
 
 // UpdateRemoteFileContent updates the content of a remote file
 func (a *App) UpdateRemoteFileContent(sessionID string, remotePath string, content string) error {
-	a.sftpClientsMutex.RLock()
-	sftpClient, exists := a.sftpClients[sessionID]
-	a.sftpClientsMutex.RUnlock()
+	a.ssh.sftpClientsMutex.RLock()
+	sftpClient, exists := a.ssh.sftpClients[sessionID]
+	a.ssh.sftpClientsMutex.RUnlock()
 
 	if !exists {
 		return fmt.Errorf("SFTP client not initialized for session %s", sessionID)
