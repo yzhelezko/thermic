@@ -1683,7 +1683,23 @@ export class RemoteExplorerManager {
         
         try {
             // Download file content for preview
-            const content = await window.go.main.App.GetRemoteFileContent(this.currentSessionID, filePath);
+            let content = await window.go.main.App.GetRemoteFileContent(this.currentSessionID, filePath);
+            
+            // Check if we received base64 content for a file that should be text
+            const fileExtension = fileName.split('.').pop().toLowerCase();
+            const shouldBeText = this.isTextFile(fileExtension);
+            
+            if (shouldBeText && this.isBase64String(content)) {
+                console.log(`⚠️ Received base64 content for text file ${fileName}, attempting to decode...`);
+                try {
+                    // Decode base64 to get the actual text content
+                    content = atob(content);
+                    console.log(`✅ Successfully decoded base64 content for ${fileName}`);
+                } catch (decodeError) {
+                    console.warn(`❌ Failed to decode base64 content for ${fileName}:`, decodeError);
+                    // Keep original base64 content as fallback
+                }
+            }
             
             // Track file in history
             await this.addToFileHistory(filePath, fileName);
@@ -2402,6 +2418,39 @@ export class RemoteExplorerManager {
         ];
         
         return configPatterns.some(pattern => lowercaseName.includes(pattern));
+    }
+
+    // Helper method to detect if a string is base64 encoded
+    isBase64String(str) {
+        // Basic checks for base64 content
+        if (!str || typeof str !== 'string') {
+            return false;
+        }
+        
+        // Base64 strings should only contain valid base64 characters
+        const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+        if (!base64Regex.test(str)) {
+            return false;
+        }
+        
+        // Base64 strings should be divisible by 4 (with padding)
+        if (str.length % 4 !== 0) {
+            return false;
+        }
+        
+        // Additional check: base64 strings usually don't contain normal text patterns
+        // If it looks like normal text, it's probably not base64
+        const hasNormalTextPattern = /\s+/.test(str) || // Contains whitespace
+                                   /[a-z]{3,}/.test(str.toLowerCase()) || // Contains lowercase words
+                                   str.includes('\n') || str.includes('\r'); // Contains line breaks
+        
+        if (hasNormalTextPattern && str.length < 200) {
+            return false; // Short strings with text patterns are likely not base64
+        }
+        
+        // For longer strings or strings without obvious text patterns, 
+        // they might be base64
+        return str.length > 50; // Only consider as base64 if reasonably long
     }
 
     // File History Management Methods

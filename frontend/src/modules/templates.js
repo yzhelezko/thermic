@@ -299,24 +299,11 @@ export function createTerminalSettingsContent() {
                             <div class="setting-item-description">Number of lines to keep in scrollback buffer</div>
                         </div>
                         <div class="setting-item-control">
-                            <input type="number" class="modern-input" value="10000" min="100" max="100000" disabled>
+                            <input type="number" id="scrollback-lines-input" class="modern-input" value="10000" min="100" max="100000">
                         </div>
                     </div>
                 </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Clear Scrollback on Clear</div>
-                            <div class="setting-item-description">Clear scrollback buffer when terminal is cleared</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <label class="modern-toggle">
-                                <input type="checkbox" disabled>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
+
                 <div class="setting-item">
                     <div class="setting-item-content">
                         <div class="setting-item-info">

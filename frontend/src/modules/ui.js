@@ -35,8 +35,8 @@ export class UIManager {
     async loadSidebarState() {
         try {
             // Load sidebar state from backend
-            const collapsed = await window.go.main.App.GetSidebarCollapsed();
-            const width = await window.go.main.App.GetSidebarWidth();
+                    const collapsed = await window.go.main.App.ConfigGet("SidebarCollapsed");
+        const width = await window.go.main.App.ConfigGet("SidebarWidth");
             
             this.sidebarCollapsed = collapsed;
             this.sidebarWidth = width;
@@ -52,7 +52,7 @@ export class UIManager {
 
     async saveSidebarCollapsed() {
         try {
-            await window.go.main.App.SetSidebarCollapsed(this.sidebarCollapsed);
+            await window.go.main.App.ConfigSet("SidebarCollapsed", this.sidebarCollapsed);
             console.log(`Saved sidebar collapsed state: ${this.sidebarCollapsed}`);
         } catch (error) {
             console.warn('Failed to save sidebar collapsed state to config:', error);
@@ -61,7 +61,7 @@ export class UIManager {
 
     async saveSidebarWidth() {
         try {
-            await window.go.main.App.SetSidebarWidth(this.sidebarWidth);
+            await window.go.main.App.ConfigSet("SidebarWidth", this.sidebarWidth);
             console.log(`Saved sidebar width: ${this.sidebarWidth}`);
         } catch (error) {
             console.warn('Failed to save sidebar width to config:', error);
@@ -70,8 +70,8 @@ export class UIManager {
 
     async saveSidebarState() {
         try {
-            await window.go.main.App.SetSidebarCollapsed(this.sidebarCollapsed);
-            await window.go.main.App.SetSidebarWidth(this.sidebarWidth);
+            await window.go.main.App.ConfigSet("SidebarCollapsed", this.sidebarCollapsed);
+            await window.go.main.App.ConfigSet("SidebarWidth", this.sidebarWidth);
             console.log(`Saved sidebar state: collapsed=${this.sidebarCollapsed}, width=${this.sidebarWidth}`);
         } catch (error) {
             console.warn('Failed to save sidebar state to config:', error);

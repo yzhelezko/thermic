@@ -449,8 +449,8 @@ func (a *App) GetRemoteFileContent(sessionID string, remotePath string) (string,
 		return "", fmt.Errorf("failed to read file content: %w", err)
 	}
 
-	// Check if it's a binary file
-	if !isTextContent(content) {
+	// Check if it's a binary file - consider both extension and content
+	if !isTextContentWithExtension(remotePath, content) {
 		// For binary files, return base64 encoded content
 		return base64.StdEncoding.EncodeToString(content), nil
 	}
@@ -485,7 +485,68 @@ func (a *App) UpdateRemoteFileContent(sessionID string, remotePath string, conte
 	return nil
 }
 
-// isTextContent checks if the content is likely text (not binary)
+// isTextContentWithExtension checks if the content is likely text considering both file extension and content
+func isTextContentWithExtension(filePath string, content []byte) bool {
+	// Extract file extension
+	ext := strings.ToLower(filepath.Ext(filePath))
+	if ext != "" {
+		ext = ext[1:] // Remove the dot
+	}
+
+	// Define known text file extensions
+	textExtensions := map[string]bool{
+		"txt": true, "md": true, "json": true, "yaml": true, "yml": true, "xml": true,
+		"html": true, "htm": true, "css": true, "js": true, "ts": true, "jsx": true,
+		"tsx": true, "py": true, "java": true, "c": true, "cpp": true, "h": true,
+		"hpp": true, "cs": true, "php": true, "rb": true, "go": true, "rs": true,
+		"sh": true, "bash": true, "zsh": true, "fish": true, "ps1": true, "bat": true,
+		"cmd": true, "sql": true, "r": true, "swift": true, "kt": true, "scala": true,
+		"clj": true, "hs": true, "elm": true, "erl": true, "ex": true, "exs": true,
+		"lua": true, "pl": true, "pm": true, "tcl": true, "vim": true, "conf": true,
+		"config": true, "cfg": true, "ini": true, "toml": true, "properties": true,
+		"env": true, "log": true, "csv": true, "tsv": true, "dockerfile": true,
+		"makefile": true, "gradle": true, "pom": true, "sbt": true, "rc": true,
+		"profile": true, "aliases": true, "exports": true, "functions": true,
+		"path": true, "extra": true, "gitignore": true, "gitattributes": true,
+		"gitmodules": true, "editorconfig": true, "eslintrc": true, "prettierrc": true,
+		"babelrc": true, "npmrc": true, "yarnrc": true, "nvmrc": true, "rvmrc": true,
+		"rbenv-version": true, "gemfile": true, "rakefile": true, "procfile": true,
+		"cmakelists": true, "cmakecache": true, "requirements": true, "pipfile": true,
+		"setup": true, "manifest": true, "license": true, "readme": true,
+		"changelog": true, "authors": true, "contributors": true, "copying": true,
+		"install": true, "news": true, "todo": true, "bugs": true, "thanks": true,
+		"acknowledgments": true, "credits": true,
+	}
+
+	// If it's a known text extension, always treat as text
+	if textExtensions[ext] {
+		return true
+	}
+
+	// Check filename without extension for common text files
+	fileName := strings.ToLower(filepath.Base(filePath))
+	commonTextFiles := map[string]bool{
+		"dockerfile": true, "makefile": true, "rakefile": true, "gemfile": true,
+		"procfile": true, "vagrantfile": true, "license": true, "readme": true,
+		"changelog": true, "authors": true, "contributors": true, "copying": true,
+		"install": true, "news": true, "todo": true, "bugs": true, "thanks": true,
+		"acknowledgments": true, "credits": true,
+	}
+
+	if commonTextFiles[fileName] {
+		return true
+	}
+
+	// Check for files starting with dots (config files)
+	if strings.HasPrefix(fileName, ".") && !strings.Contains(fileName[1:], ".") {
+		return true
+	}
+
+	// For other files, fall back to content-based detection
+	return isTextContent(content)
+}
+
+// isTextContent checks if the content is likely text (not binary) - legacy function for fallback
 func isTextContent(content []byte) bool {
 	// Check for null bytes which indicate binary content
 	for _, b := range content {
@@ -494,16 +555,24 @@ func isTextContent(content []byte) bool {
 		}
 	}
 
-	// Check if most characters are printable
+	// Check if most characters are printable (including UTF-8)
 	printableCount := 0
+	nonASCIICount := 0
+
 	for _, b := range content {
 		if (b >= 32 && b <= 126) || b == 9 || b == 10 || b == 13 {
+			// Standard ASCII printable characters, tabs, newlines, carriage returns
 			printableCount++
+		} else if b >= 128 {
+			// Non-ASCII bytes (could be UTF-8)
+			nonASCIICount++
 		}
 	}
 
-	// If less than 95% are printable, consider it binary
-	if len(content) > 0 && float64(printableCount)/float64(len(content)) < 0.95 {
+	totalPrintable := printableCount + nonASCIICount
+
+	// If less than 90% are printable (lowered threshold to accommodate UTF-8), consider it binary
+	if len(content) > 0 && float64(totalPrintable)/float64(len(content)) < 0.90 {
 		return false
 	}
 

@@ -42,6 +42,14 @@ export function CloseWindow() {
   return window['go']['main']['App']['CloseWindow']();
 }
 
+export function ConfigGet(arg1) {
+  return window['go']['main']['App']['ConfigGet'](arg1);
+}
+
+export function ConfigSet(arg1, arg2) {
+  return window['go']['main']['App']['ConfigSet'](arg1, arg2);
+}
+
 export function CreateDefaultProfiles() {
   return window['go']['main']['App']['CreateDefaultProfiles']();
 }
@@ -186,10 +194,6 @@ export function GetCachedMonitoringResult(arg1, arg2) {
   return window['go']['main']['App']['GetCachedMonitoringResult'](arg1, arg2);
 }
 
-export function GetCurrentDefaultShellSetting() {
-  return window['go']['main']['App']['GetCurrentDefaultShellSetting']();
-}
-
 export function GetDefaultShell() {
   return window['go']['main']['App']['GetDefaultShell']();
 }
@@ -266,10 +270,6 @@ export function GetProfilesDirectory() {
   return window['go']['main']['App']['GetProfilesDirectory']();
 }
 
-export function GetProfilesPath() {
-  return window['go']['main']['App']['GetProfilesPath']();
-}
-
 export function GetRecentProfiles(arg1, arg2) {
   return window['go']['main']['App']['GetRecentProfiles'](arg1, arg2);
 }
@@ -286,20 +286,8 @@ export function GetRemoteWorkingDirectory(arg1) {
   return window['go']['main']['App']['GetRemoteWorkingDirectory'](arg1);
 }
 
-export function GetSelectToCopyEnabled() {
-  return window['go']['main']['App']['GetSelectToCopyEnabled']();
-}
-
 export function GetShellsForUI() {
   return window['go']['main']['App']['GetShellsForUI']();
-}
-
-export function GetSidebarCollapsed() {
-  return window['go']['main']['App']['GetSidebarCollapsed']();
-}
-
-export function GetSidebarWidth() {
-  return window['go']['main']['App']['GetSidebarWidth']();
 }
 
 export function GetSystemStats() {
@@ -312,10 +300,6 @@ export function GetTabStatus(arg1) {
 
 export function GetTabs() {
   return window['go']['main']['App']['GetTabs']();
-}
-
-export function GetTheme() {
-  return window['go']['main']['App']['GetTheme']();
 }
 
 export function GetTopProfiles(arg1) {
@@ -496,30 +480,6 @@ export function SelectSaveLocation(arg1) {
 
 export function SetActiveTab(arg1) {
   return window['go']['main']['App']['SetActiveTab'](arg1);
-}
-
-export function SetDefaultShell(arg1) {
-  return window['go']['main']['App']['SetDefaultShell'](arg1);
-}
-
-export function SetProfilesPath(arg1) {
-  return window['go']['main']['App']['SetProfilesPath'](arg1);
-}
-
-export function SetSelectToCopyEnabled(arg1) {
-  return window['go']['main']['App']['SetSelectToCopyEnabled'](arg1);
-}
-
-export function SetSidebarCollapsed(arg1) {
-  return window['go']['main']['App']['SetSidebarCollapsed'](arg1);
-}
-
-export function SetSidebarWidth(arg1) {
-  return window['go']['main']['App']['SetSidebarWidth'](arg1);
-}
-
-export function SetTheme(arg1) {
-  return window['go']['main']['App']['SetTheme'](arg1);
 }
 
 export function ShowMessageDialog(arg1, arg2) {

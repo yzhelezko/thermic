@@ -1,5 +1,5 @@
 import '@xterm/xterm/css/xterm.css';
-import { GetDefaultShell } from '../wailsjs/go/main/App';
+import { ConfigGet } from '../wailsjs/go/main/App';
 
 // Import all modules
 import { DOMManager } from './modules/dom.js';
@@ -141,6 +141,10 @@ class ThermicTerminal {
             
             console.log('Initializing activity bar manager...');
             await this.activityBarManager.init();
+            
+            // Sync terminal theme with activity bar's loaded theme
+            console.log('Syncing terminal theme with loaded config...');
+            this.terminalManager.updateTheme(this.activityBarManager.isDarkTheme);
             
             // Initialize remote explorer
             console.log('Initializing remote explorer manager...');

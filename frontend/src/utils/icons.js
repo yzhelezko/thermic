@@ -529,35 +529,35 @@ export async function testThemeConfig() {
     console.log('🔧 Testing theme configuration system...');
     
     try {
-        // Test GetTheme
-        if (window.go?.main?.App?.GetTheme) {
-            const currentTheme = await window.go.main.App.GetTheme();
+        // Test ConfigGet for theme
+        if (window.go?.main?.App?.ConfigGet) {
+            const currentTheme = await window.go.main.App.ConfigGet("Theme");
             console.log('Current theme from config:', currentTheme);
             
-            // Test SetTheme
-            if (window.go?.main?.App?.SetTheme) {
+            // Test ConfigSet for theme
+            if (window.go?.main?.App?.ConfigSet) {
                 const testTheme = currentTheme === 'dark' ? 'light' : 'dark';
                 console.log('Testing theme change to:', testTheme);
                 
-                await window.go.main.App.SetTheme(testTheme);
+                await window.go.main.App.ConfigSet("Theme", testTheme);
                 console.log('Theme set successfully');
                 
                 // Verify the change
-                const newTheme = await window.go.main.App.GetTheme();
+                const newTheme = await window.go.main.App.ConfigGet("Theme");
                 console.log('New theme from config:', newTheme);
                 console.log('Theme change successful:', newTheme === testTheme);
                 
                 // Revert back
                 setTimeout(async () => {
-                    await window.go.main.App.SetTheme(currentTheme);
+                    await window.go.main.App.ConfigSet("Theme", currentTheme);
                     console.log('Reverted theme back to:', currentTheme);
                     console.log('✅ Theme configuration test completed');
                 }, 2000);
             } else {
-                console.error('❌ SetTheme method not available');
+                console.error('❌ ConfigSet method not available');
             }
         } else {
-            console.error('❌ GetTheme method not available');
+            console.error('❌ ConfigGet method not available');
         }
     } catch (error) {
         console.error('❌ Theme configuration test failed:', error);
@@ -605,12 +605,12 @@ export async function debugSettingsThemeSave() {
         
         // Check if Wails bindings are available
         console.log('Wails App available:', !!window.go?.main?.App);
-        console.log('SetTheme available:', !!window.go?.main?.App?.SetTheme);
-        console.log('GetTheme available:', !!window.go?.main?.App?.GetTheme);
+        console.log('ConfigSet available:', !!window.go?.main?.App?.ConfigSet);
+        console.log('ConfigGet available:', !!window.go?.main?.App?.ConfigGet);
         
-        if (window.go?.main?.App?.GetTheme) {
+        if (window.go?.main?.App?.ConfigGet) {
             try {
-                const currentConfigTheme = await window.go.main.App.GetTheme();
+                const currentConfigTheme = await window.go.main.App.ConfigGet("Theme");
                 console.log('Current config theme:', currentConfigTheme);
             } catch (error) {
                 console.error('Error reading current config theme:', error);
@@ -628,9 +628,9 @@ export async function debugSettingsThemeSave() {
             console.log('  Toggle state:', finalDarkModeToggle.checked);
             console.log('  DOM theme:', document.documentElement.getAttribute('data-theme'));
             
-            if (window.go?.main?.App?.GetTheme) {
+            if (window.go?.main?.App?.ConfigGet) {
                 try {
-                    const newConfigTheme = await window.go.main.App.GetTheme();
+                    const newConfigTheme = await window.go.main.App.ConfigGet("Theme");
                     console.log('  Config theme:', newConfigTheme);
                     console.log('  ✅ Save successful:', newConfigTheme === (finalDarkModeToggle.checked ? 'dark' : 'light'));
                 } catch (error) {

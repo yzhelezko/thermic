@@ -27,7 +27,7 @@ export class ContextMenuManager {
 
     async loadContextMenuSettings() {
         try {
-            this.selectToCopyEnabled = await window.go.main.App.GetSelectToCopyEnabled();
+            this.selectToCopyEnabled = await window.go.main.App.ConfigGet("EnableSelectToCopy");
         } catch (error) {
             console.error('Error loading context menu settings:', error);
             // Use defaults if loading fails
@@ -685,7 +685,8 @@ export class ContextMenuManager {
     async handleClear() {
         if (this.terminalManager.isConnected && this.terminalManager.sessionId) {
             try {
-                await WriteToShell(this.terminalManager.sessionId, '\x0C'); // Ctrl+L
+                // Use frontend terminal clearing that respects clearScrollback setting
+                this.terminalManager.clearTerminal(this.terminalManager.sessionId);
                 showNotification('Terminal cleared', 1500);
             } catch (error) {
                 console.error('Failed to clear terminal:', error);

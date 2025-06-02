@@ -14,9 +14,9 @@ export class ActivityBarManager {
 
     async detectCurrentTheme() {
         // First check if we can load theme from backend config
-        if (window.go?.main?.App?.GetTheme) {
-            try {
-                const savedTheme = await window.go.main.App.GetTheme();
+                    if (window.go?.main?.App?.ConfigGet) {
+                try {
+                    const savedTheme = await window.go.main.App.ConfigGet("Theme");
                 console.log('Loaded theme from config:', savedTheme);
                 if (savedTheme === 'dark' || savedTheme === 'light') {
                     return savedTheme === 'dark';
@@ -321,10 +321,10 @@ export class ActivityBarManager {
         this.syncSettingsDarkModeToggle(this.isDarkTheme);
 
         // Save theme preference to config
-        if (window.go?.main?.App?.SetTheme) {
+        if (window.go?.main?.App?.ConfigSet) {
             try {
                 const themeValue = this.isDarkTheme ? 'dark' : 'light';
-                await window.go.main.App.SetTheme(themeValue);
+                await window.go.main.App.ConfigSet("Theme", themeValue);
                 console.log('Theme preference saved to config:', themeValue);
             } catch (error) {
                 console.warn('Failed to save theme to config:', error);

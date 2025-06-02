@@ -23,6 +23,10 @@ export function CloseTab(arg1:string):Promise<void>;
 
 export function CloseWindow():Promise<void>;
 
+export function ConfigGet(arg1:string):Promise<main.SettingValue>;
+
+export function ConfigSet(arg1:string,arg2:main.SettingValue):Promise<void>;
+
 export function CreateDefaultProfiles():Promise<void>;
 
 export function CreateMonitoringSession(arg1:main.SSHSession,arg2:main.SSHConfig):Promise<void>;
@@ -95,8 +99,6 @@ export function GetAvailableShellsFormatted():Promise<Array<Record<string, strin
 
 export function GetCachedMonitoringResult(arg1:main.SSHSession,arg2:string):Promise<string|boolean>;
 
-export function GetCurrentDefaultShellSetting():Promise<string>;
-
 export function GetDefaultShell():Promise<string>;
 
 export function GetFolderByID(arg1:string):Promise<main.ProfileFolder>;
@@ -135,8 +137,6 @@ export function GetProfilesByType(arg1:string):Promise<Array<main.Profile>>;
 
 export function GetProfilesDirectory():Promise<string>;
 
-export function GetProfilesPath():Promise<string>;
-
 export function GetRecentProfiles(arg1:number,arg2:number):Promise<Array<main.Profile>>;
 
 export function GetRemoteFileContent(arg1:string,arg2:string):Promise<string>;
@@ -145,21 +145,13 @@ export function GetRemoteSystemStats(arg1:string):Promise<Record<string, any>>;
 
 export function GetRemoteWorkingDirectory(arg1:string):Promise<string>;
 
-export function GetSelectToCopyEnabled():Promise<boolean>;
-
 export function GetShellsForUI():Promise<Array<Record<string, any>>>;
-
-export function GetSidebarCollapsed():Promise<boolean>;
-
-export function GetSidebarWidth():Promise<number>;
 
 export function GetSystemStats():Promise<Record<string, any>>;
 
 export function GetTabStatus(arg1:string):Promise<Record<string, any>>;
 
 export function GetTabs():Promise<Array<main.Tab>>;
-
-export function GetTheme():Promise<string>;
 
 export function GetTopProfiles(arg1:number):Promise<Array<main.Profile>>;
 
@@ -250,18 +242,6 @@ export function SelectSSHPrivateKey():Promise<string>;
 export function SelectSaveLocation(arg1:string):Promise<string>;
 
 export function SetActiveTab(arg1:string):Promise<void>;
-
-export function SetDefaultShell(arg1:string):Promise<void>;
-
-export function SetProfilesPath(arg1:string):Promise<void>;
-
-export function SetSelectToCopyEnabled(arg1:boolean):Promise<void>;
-
-export function SetSidebarCollapsed(arg1:boolean):Promise<void>;
-
-export function SetSidebarWidth(arg1:number):Promise<void>;
-
-export function SetTheme(arg1:string):Promise<void>;
 
 export function ShowMessageDialog(arg1:string,arg2:string):Promise<void>;
 

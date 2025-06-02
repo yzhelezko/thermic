@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/aymanbagabas/go-pty"
@@ -241,15 +242,30 @@ type TerminalSession struct {
 	closed   chan bool
 	cols     int
 	rows     int
-	cleaning bool
+	cleaning int32              // Using atomic int32 for thread-safe access
+	ctx      context.Context    // Context for cancellation
+	cancel   context.CancelFunc // Cancel function
+}
+
+// requestClose atomically sets the session as closing
+func (ts *TerminalSession) requestClose() {
+	atomic.StoreInt32(&ts.cleaning, 1)
+	if ts.cancel != nil {
+		ts.cancel()
+	}
+}
+
+// isClosing atomically checks if the session is closing
+func (ts *TerminalSession) isClosing() bool {
+	return atomic.LoadInt32(&ts.cleaning) == 1
 }
 
 // Close implements the Cleanup interface for TerminalSession
 func (ts *TerminalSession) Close() error {
-	if ts.cleaning {
+	if ts.isClosing() {
 		return nil // Already cleaning
 	}
-	ts.cleaning = true
+	ts.requestClose()
 
 	if ts.pty != nil {
 		ts.pty.Close()

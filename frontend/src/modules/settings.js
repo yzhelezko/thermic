@@ -175,8 +175,8 @@ export class SettingsManager {
                     let initialTheme = 'dark'; // default
                     
                     try {
-                        if (window.go?.main?.App?.GetTheme) {
-                            initialTheme = await window.go.main.App.GetTheme();
+                                if (window.go?.main?.App?.ConfigGet) {
+            initialTheme = await window.go.main.App.ConfigGet("Theme");
                             console.log('Loaded initial theme from config for settings toggle:', initialTheme);
                         } else {
                             // Fallback to DOM
@@ -231,10 +231,10 @@ export class SettingsManager {
                             }
                             
                             // Save theme preference to config with improved error handling
-                            if (window.go?.main?.App?.SetTheme) {
+                            if (window.go?.main?.App?.ConfigSet) {
                                 try {
                                     const themeValue = isDarkMode ? 'dark' : 'light';
-                                    await window.go.main.App.SetTheme(themeValue);
+                                    await window.go.main.App.ConfigSet("Theme", themeValue);
                                     console.log('✅ Theme preference saved to config from settings:', themeValue);
                                 } catch (configError) {
                                     console.error('❌ Failed to save theme to config from settings:', configError);
@@ -242,7 +242,7 @@ export class SettingsManager {
                                     // Retry once after a short delay
                                     setTimeout(async () => {
                                         try {
-                                            await window.go.main.App.SetTheme(themeValue);
+                                            await window.go.main.App.ConfigSet("Theme", themeValue);
                                             console.log('✅ Theme preference saved to config (retry successful):', themeValue);
                                         } catch (retryError) {
                                             console.error('❌ Failed to save theme to config (retry failed):', retryError);
@@ -250,20 +250,20 @@ export class SettingsManager {
                                     }, 500);
                                 }
                             } else {
-                                console.warn('⚠️ SetTheme method not available - Wails bindings may not be ready');
+                                console.warn('⚠️ ConfigSet method not available - Wails bindings may not be ready');
                                 
                                 // Wait a bit and try again
                                 setTimeout(async () => {
-                                    if (window.go?.main?.App?.SetTheme) {
+                                    if (window.go?.main?.App?.ConfigSet) {
                                         try {
                                             const themeValue = isDarkMode ? 'dark' : 'light';
-                                            await window.go.main.App.SetTheme(themeValue);
+                                            await window.go.main.App.ConfigSet("Theme", themeValue);
                                             console.log('✅ Theme preference saved to config (delayed save):', themeValue);
                                         } catch (delayedError) {
                                             console.error('❌ Failed delayed save to config:', delayedError);
                                         }
                                     } else {
-                                        console.error('❌ SetTheme still not available after delay');
+                                        console.error('❌ ConfigSet still not available after delay');
                                     }
                                 }, 1000);
                             }
@@ -323,7 +323,7 @@ export class SettingsManager {
                 const osInfo = await window.go.main.App.GetOSInfo();
                 const osName = this.getOSDisplayName(osInfo.os);
                 
-                await window.go.main.App.SetDefaultShell(newShell);
+                await window.go.main.App.ConfigSet("DefaultShell", newShell);
                 
                 const displayValue = newShell ? this.formatShellName(newShell) : `System Default (${this.formatShellName(osInfo.defaultShell || 'auto')})`;
                 showNotification(`Default shell for ${osName} updated to: ${displayValue}. New tabs will use this shell.`, 'info');
@@ -345,6 +345,11 @@ export class SettingsManager {
             console.error('Error setting up context menu settings:', error);
         });
 
+        // --- Terminal Settings Logic ---
+        this.setupTerminalSettings().catch(error => {
+            console.error('Error setting up terminal settings:', error);
+        });
+
         // --- Profiles Path Settings Logic ---
         this.setupProfilesPathSettings().catch(error => {
             console.error('Error setting up profiles path settings:', error);
@@ -362,7 +367,7 @@ export class SettingsManager {
             }
 
             // Load current setting
-            const selectToCopyEnabled = await window.go.main.App.GetSelectToCopyEnabled();
+            const selectToCopyEnabled = await window.go.main.App.ConfigGet("EnableSelectToCopy");
 
             // Set initial toggle state
             selectToCopyToggle.checked = selectToCopyEnabled;
@@ -371,7 +376,7 @@ export class SettingsManager {
             selectToCopyToggle.addEventListener('change', async (event) => {
                 try {
                     const enabled = event.target.checked;
-                    await window.go.main.App.SetSelectToCopyEnabled(enabled);
+                    await window.go.main.App.ConfigSet("EnableSelectToCopy", enabled);
                     showNotification(`Select-to-copy ${enabled ? 'enabled' : 'disabled'}`, 'info');
                     
                     // Notify context menu manager about the change
@@ -388,6 +393,54 @@ export class SettingsManager {
 
         } catch (error) {
             console.error('Error in setupContextMenuSettings:', error);
+        }
+    }
+
+    async setupTerminalSettings() {
+        try {
+            // Get terminal settings elements
+            const scrollbackLinesInput = document.getElementById('scrollback-lines-input');
+
+            if (!scrollbackLinesInput) {
+                console.warn('Terminal settings elements not found in DOM');
+                return;
+            }
+
+            // Load current settings from backend
+            const scrollbackLines = await window.go.main.App.ConfigGet("ScrollbackLines");
+
+            // Set initial values
+            scrollbackLinesInput.value = scrollbackLines;
+
+            // Scrollback lines input handler with debouncing
+            let scrollbackDebounceTimeout;
+            scrollbackLinesInput.addEventListener('input', (event) => {
+                clearTimeout(scrollbackDebounceTimeout);
+                scrollbackDebounceTimeout = setTimeout(async () => {
+                    try {
+                        const lines = parseInt(event.target.value, 10);
+                        if (isNaN(lines) || lines < 100 || lines > 100000) {
+                            showNotification('Scrollback lines must be between 100 and 100,000', 'error');
+                            // Reset to current value
+                            event.target.value = await window.go.main.App.ConfigGet("ScrollbackLines");
+                            return;
+                        }
+                        
+                        await window.go.main.App.ConfigSet("ScrollbackLines", lines);
+                        showNotification(`Scrollback lines updated to ${lines}`, 'info');
+                    } catch (error) {
+                        console.error('Error updating scrollback lines:', error);
+                        showNotification(`Failed to update scrollback lines: ${error.message}`, 'error');
+                        // Reset to current value
+                        event.target.value = await window.go.main.App.ConfigGet("ScrollbackLines");
+                    }
+                }, 1000); // 1 second debounce
+            });
+
+
+
+        } catch (error) {
+            console.error('Error in setupTerminalSettings:', error);
         }
     }
 
@@ -424,7 +477,7 @@ export class SettingsManager {
             saveProfilesPathBtn.addEventListener('click', async () => {
                 try {
                     const newPath = profilesPathInput.value.trim();
-                    await window.go.main.App.SetProfilesPath(newPath);
+                    await window.go.main.App.ConfigSet("ProfilesPath", newPath);
                     await this.loadCurrentProfilesPath(); // Refresh current path display
                     
                     // Refresh the sidebar to reflect the new profiles directory
@@ -489,7 +542,7 @@ export class SettingsManager {
             // Fetch OS info, available shells, and current configured shell
             const osInfo = await window.go.main.App.GetOSInfo();
             const availableShells = await window.go.main.App.GetAvailableShellsFormatted();
-            const currentConfiguredShell = await window.go.main.App.GetCurrentDefaultShellSetting();
+            const currentConfiguredShell = await window.go.main.App.ConfigGet("DefaultShell");
             
             // Update the shell selector label to show which platform we're configuring
             const shellSelectorLabel = document.querySelector('label[for="shell-selector"]');

@@ -222,6 +222,9 @@ func (a *App) StartTabShellWithSize(tabId string, cols, rows int) error {
 			a.startSSHConnectionAnimation(tab)
 		}
 
+		// Log dimensions for debugging SSH sizing issues
+		fmt.Printf("SSH Connection Debug: Starting SSH session with dimensions %dx%d for %s\n", cols, rows, tab.SSHConfig.Host)
+
 		// Attempt SSH connection with terminal dimensions
 		err = a.startSSHSessionWithSize(tab, cols, rows)
 
@@ -243,6 +246,26 @@ func (a *App) StartTabShellWithSize(tabId string, cols, rows int) error {
 			} else {
 				// Clear the connecting animation and show clean success message
 				a.sendSuccessMessage(tab)
+
+				// For SSH connections, ensure proper terminal sizing immediately
+				go func() {
+					// Wait for SSH session to establish and terminal to be ready
+					time.Sleep(500 * time.Millisecond)
+
+					// Send multiple resize attempts to ensure proper SSH terminal sizing
+					for i := 0; i < 3; i++ {
+						// Request terminal size sync from frontend
+						wailsRuntime.EventsEmit(a.ctx, "terminal-size-sync-request", map[string]interface{}{
+							"sessionId": tab.SessionID,
+							"immediate": true,
+						})
+
+						// Small delay between attempts
+						if i < 2 {
+							time.Sleep(200 * time.Millisecond)
+						}
+					}
+				}()
 			}
 		}
 

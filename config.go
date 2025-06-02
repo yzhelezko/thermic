@@ -5,17 +5,20 @@ import (
 )
 
 const (
-	DefaultWindowWidth  = 1024
-	DefaultWindowHeight = 768
-	DefaultSidebarWidth = 250
-	DefaultTheme        = "dark" // "dark", "light", or "system"
+	DefaultWindowWidth     = 1024
+	DefaultWindowHeight    = 768
+	DefaultSidebarWidth    = 250
+	DefaultTheme           = "dark" // "dark", "light", or "system"
+	DefaultScrollbackLines = 10000
 
-	MinWindowWidth  = 800
-	MinWindowHeight = 600
-	MinSidebarWidth = 100
-	MaxSidebarWidth = 1000
-	MaxWindowWidth  = 10000 // Arbitrary large value for upper bound
-	MaxWindowHeight = 10000 // Arbitrary large value for upper bound
+	MinWindowWidth     = 800
+	MinWindowHeight    = 600
+	MinSidebarWidth    = 100
+	MaxSidebarWidth    = 1000
+	MaxWindowWidth     = 10000 // Arbitrary large value for upper bound
+	MaxWindowHeight    = 10000 // Arbitrary large value for upper bound
+	MinScrollbackLines = 100
+	MaxScrollbackLines = 100000
 )
 
 // ThemeSystem represents the system theme preference.
@@ -52,6 +55,8 @@ type AppConfig struct {
 	SidebarWidth     int  `yaml:"sidebar_width"`     // Width of the sidebar when expanded
 	// Theme settings
 	Theme string `yaml:"theme"` // Theme preference: "dark", "light", or "system"
+	// Terminal settings
+	ScrollbackLines int `yaml:"scrollback_lines"` // Number of lines to keep in scrollback buffer
 }
 
 // DefaultConfig returns a new AppConfig with default values
@@ -74,6 +79,8 @@ func DefaultConfig() *AppConfig {
 		SidebarWidth:     DefaultSidebarWidth,
 		// Default theme settings
 		Theme: DefaultTheme,
+		// Default terminal settings
+		ScrollbackLines: DefaultScrollbackLines,
 	}
 }
 
@@ -87,6 +94,9 @@ func (c *AppConfig) Validate() error {
 	}
 	if c.SidebarWidth < MinSidebarWidth || c.SidebarWidth > MaxSidebarWidth {
 		return fmt.Errorf("sidebar width %d is out of range (%d-%d)", c.SidebarWidth, MinSidebarWidth, MaxSidebarWidth)
+	}
+	if c.ScrollbackLines < MinScrollbackLines || c.ScrollbackLines > MaxScrollbackLines {
+		return fmt.Errorf("scrollback lines %d is out of range (%d-%d)", c.ScrollbackLines, MinScrollbackLines, MaxScrollbackLines)
 	}
 
 	validTheme := false
