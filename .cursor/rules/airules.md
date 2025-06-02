@@ -1,6 +1,8 @@
 - Always use command "wails dev" to test the app
 - Add there only super important things, and only if user confirm that everthing is working good now it should be super short description here, just append new line if needed
 - Always work with setupGlobalOutputListener() in terminal.js if you need to extend terminal features
+- Window resize handling: TerminalManager must have handleResize() method that fits terminals and emits 'frontend:window:resized' event to backend for config save
+- SFTP path handling: Always validate paths for undefined/null in navigateToPath() and loadDirectoryContent() - backend constructs absolute paths consistently using sftpClient.Getwd()
 - Profiles and folders now use ID-based references (FolderID, ParentFolderID)
 - Sidebar save button uses only handleProfileSave() method - avoid duplicate event handlers to prevent multiple API calls
 - Use universal Modal component (components/Modal.js) for all dialogs - modal.confirm(), modal.confirmDelete(), modal.info(), modal.error()

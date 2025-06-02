@@ -72,10 +72,15 @@ func (a *App) shutdown(ctx context.Context) {
 	}()
 
 	// Update final window state if possible
-	if a.ctx != nil && a.config != nil {
+	if a.ctx != nil && a.config != nil && a.config.config != nil { // Added check for a.config.config
+		// Capture previous state for comparison
+		prevWidth := a.config.config.WindowWidth
+		prevHeight := a.config.config.WindowHeight
+		prevMaximized := a.config.config.WindowMaximized
+
 		defer func() {
 			if r := recover(); r != nil {
-				fmt.Printf("Recovered from panic during WindowGetSize: %v\n", r)
+				fmt.Printf("Recovered from panic during WindowGetSize or state update in shutdown: %v\n", r)
 			}
 		}()
 
@@ -86,13 +91,24 @@ func (a *App) shutdown(ctx context.Context) {
 			a.config.config.WindowHeight = height
 			fmt.Printf("Final window size captured: %dx%d\n", width, height)
 		} else {
-			fmt.Printf("Invalid window dimensions during shutdown: %dx%d - keeping previous values\n", width, height)
+			fmt.Printf("Invalid window dimensions during shutdown: %dx%d - keeping previous values (%dx%d)\n", width, height, prevWidth, prevHeight)
 		}
 
 		// Safe maximized state retrieval
 		isMaximized := wailsRuntime.WindowIsMaximised(a.ctx)
 		a.config.config.WindowMaximized = isMaximized
 		fmt.Printf("Final maximized state: %t\n", isMaximized)
+
+		// Check if the state actually changed during this shutdown capture
+		// and if so, mark configDirty = true to ensure it's saved by saveConfigIfDirty()
+		if a.config.config.WindowWidth != prevWidth ||
+			a.config.config.WindowHeight != prevHeight ||
+			a.config.config.WindowMaximized != prevMaximized {
+			a.mutex.Lock() // App's main mutex, which protects config.configDirty
+			a.config.configDirty = true
+			a.mutex.Unlock()
+			fmt.Println("Window state changed during shutdown, explicitly marked config dirty for final save.")
+		}
 	}
 
 	// Force save any pending config changes

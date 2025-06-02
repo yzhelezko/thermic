@@ -136,23 +136,61 @@ func (a *App) ListRemoteFiles(sessionID string, remotePath string) ([]RemoteFile
 		return nil, fmt.Errorf("SFTP client not initialized for session %s", sessionID)
 	}
 
-	// Use default path if empty
+	// Normalize path - use "." as fallback for empty path
 	if remotePath == "" {
 		remotePath = "."
 	}
 
+	// Log the path being accessed for debugging
+	fmt.Printf("SFTP: Listing files for session %s, path: %s\n", sessionID, remotePath)
+
 	// Read directory contents
 	fileInfos, err := sftpClient.ReadDir(remotePath)
 	if err != nil {
+		fmt.Printf("SFTP: Failed to read directory %s: %v\n", remotePath, err)
 		return nil, fmt.Errorf("failed to read directory %s: %w", remotePath, err)
+	}
+
+	// Get the working directory to resolve relative paths consistently
+	var baseDir string
+	if remotePath == "." {
+		// Try to get the absolute working directory
+		if wd, err := sftpClient.Getwd(); err == nil && wd != "" {
+			baseDir = wd
+			fmt.Printf("SFTP: Resolved working directory to: %s\n", baseDir)
+		} else {
+			// Fallback to relative path
+			baseDir = "."
+			fmt.Printf("SFTP: Using relative path fallback\n")
+		}
+	} else {
+		baseDir = remotePath
 	}
 
 	var entries []RemoteFileEntry
 	for _, fileInfo := range fileInfos {
-		fullPath := filepath.Join(remotePath, fileInfo.Name())
-		if remotePath == "." {
+		var fullPath string
+
+		// Construct consistent paths
+		if baseDir == "." {
+			// For relative paths, just use the filename
 			fullPath = fileInfo.Name()
+		} else if baseDir == "/" {
+			// For root directory
+			fullPath = "/" + fileInfo.Name()
+		} else {
+			// For absolute paths, join properly
+			if strings.HasSuffix(baseDir, "/") {
+				fullPath = baseDir + fileInfo.Name()
+			} else {
+				fullPath = baseDir + "/" + fileInfo.Name()
+			}
 		}
+
+		// Clean the path to remove any double slashes
+		fullPath = strings.ReplaceAll(fullPath, "//", "/")
+
+		fmt.Printf("SFTP: File: %s -> Path: %s\n", fileInfo.Name(), fullPath)
 
 		entry := RemoteFileEntry{
 			Name:         fileInfo.Name(),
@@ -175,6 +213,7 @@ func (a *App) ListRemoteFiles(sessionID string, remotePath string) ([]RemoteFile
 		entries = append(entries, entry)
 	}
 
+	fmt.Printf("SFTP: Successfully listed %d entries for path: %s\n", len(entries), remotePath)
 	return entries, nil
 }
 

@@ -34,16 +34,23 @@ func (a *App) GetDefaultShell() string {
 
 // getPlatformDefaultShell returns the platform-specific default shell configuration
 func (a *App) getPlatformDefaultShell() string {
+	if a.config == nil || a.config.config == nil {
+		// This case should ideally not be hit if config is loaded properly,
+		// but as a safeguard, return system default.
+		// Or, could log an error and return empty string if that's more appropriate.
+		fmt.Println("getPlatformDefaultShell: config or a.config.config is nil, falling back to system default.")
+		return getSystemDefaultShell()
+	}
 	switch runtime.GOOS {
 	case "windows":
-		return a.config.config.DefaultShellWindows
+		return a.config.config.DefaultShells.Windows
 	case "darwin":
-		return a.config.config.DefaultShellDarwin
+		return a.config.config.DefaultShells.Darwin
 	case "linux":
-		return a.config.config.DefaultShellLinux
+		return a.config.config.DefaultShells.Linux
 	default:
 		// For other Unix-like systems, use Linux configuration
-		return a.config.config.DefaultShellLinux
+		return a.config.config.DefaultShells.Linux
 	}
 }
 

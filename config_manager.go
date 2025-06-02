@@ -199,16 +199,24 @@ func (a *App) SetDefaultShell(shellPath string) error {
 
 // setPlatformDefaultShell sets the platform-specific default shell configuration
 func (a *App) setPlatformDefaultShell(shellPath string) {
+	// The calling function SetDefaultShell already checks if a.config is nil.
+	// However, a.config.config could still be nil if DefaultConfig() wasn't called
+	// or if it was reset. Adding a check for robustness.
+	if a.config == nil || a.config.config == nil {
+		fmt.Println("setPlatformDefaultShell: config or a.config.config is nil. Cannot set shell.")
+		return
+	}
+
 	switch runtime.GOOS {
 	case "windows":
-		a.config.config.DefaultShellWindows = shellPath
+		a.config.config.DefaultShells.Windows = shellPath
 	case "darwin":
-		a.config.config.DefaultShellDarwin = shellPath
+		a.config.config.DefaultShells.Darwin = shellPath
 	case "linux":
-		a.config.config.DefaultShellLinux = shellPath
+		a.config.config.DefaultShells.Linux = shellPath
 	default:
 		// For other Unix-like systems, use Linux configuration
-		a.config.config.DefaultShellLinux = shellPath
+		a.config.config.DefaultShells.Linux = shellPath
 	}
 }
 

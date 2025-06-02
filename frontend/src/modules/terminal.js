@@ -3,7 +3,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { GetAvailableShells, GetDefaultShell, StartShell, WriteToShell, ResizeShell, CloseShell, ShowMessageDialog, WaitForSessionClose } from '../../wailsjs/go/main/App';
-import { EventsOn } from '../../wailsjs/runtime/runtime';
+import { EventsOn, EventsEmit } from '../../wailsjs/runtime/runtime';
 import { THEMES, DEFAULT_TERMINAL_OPTIONS, generateSessionId, formatShellName, updateStatus } from './utils.js';
 
 export class TerminalManager {
@@ -845,6 +845,43 @@ export class TerminalManager {
             }
         } else if (this.fitAddon) {
             this.fitAddon.fit();
+        }
+    }
+
+    handleResize() {
+        // Handle window resize - fit terminals and notify backend of window state change
+        console.log('Handling window resize...');
+        
+        // Fit all terminal sessions to their containers
+        this.fit();
+        
+        // Also fit any other active terminals
+        for (const [sessionId, terminalSession] of this.terminals) {
+            if (terminalSession && terminalSession.fitAddon) {
+                try {
+                    terminalSession.fitAddon.fit();
+                    
+                    // Update shell size if connected
+                    if (terminalSession.isConnected) {
+                        const cols = terminalSession.terminal.cols;
+                        const rows = terminalSession.terminal.rows;
+                        ResizeShell(sessionId, cols, rows).catch(error => {
+                            console.warn(`Error resizing shell ${sessionId}:`, error);
+                        });
+                    }
+                } catch (error) {
+                    console.warn(`Error resizing terminal session ${sessionId}:`, error);
+                }
+            }
+        }
+        
+        // Emit resize event to backend to save window state
+        try {
+            EventsEmit('frontend:window:resized').catch(error => {
+                console.warn('Error emitting window resize event:', error);
+            });
+        } catch (error) {
+            console.warn('Error emitting resize event to backend:', error);
         }
     }
 

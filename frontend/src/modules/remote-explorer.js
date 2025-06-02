@@ -601,13 +601,23 @@ export class RemoteExplorerManager {
         
         if (!this.currentSessionID) {
             console.error('📂 No current session ID');
+            this.showErrorState('No active SSH session');
             return;
         }
 
+        // Validate and normalize the remote path
+        if (!remotePath || remotePath === 'undefined' || remotePath === 'null') {
+            console.error('📂 Invalid remote path provided:', remotePath);
+            console.log('📂 Falling back to current working directory');
+            remotePath = '.';
+        }
+        
+        // Ensure remotePath is a string
+        remotePath = String(remotePath).trim();
+        
         if (!remotePath) {
-            console.error('📂 No remote path provided');
-            this.showErrorState('Invalid path: undefined');
-            return;
+            console.error('📂 Empty remote path after trimming');
+            remotePath = '.';
         }
 
         try {
@@ -661,7 +671,35 @@ export class RemoteExplorerManager {
             }
 
             console.log('🌐 Loading fresh content for path:', remotePath);
-            const files = await window.go.main.App.ListRemoteFiles(this.currentSessionID, remotePath);
+            
+            // Add more detailed error handling for the API call
+            let files;
+            try {
+                files = await window.go.main.App.ListRemoteFiles(this.currentSessionID, remotePath);
+                console.log('🌐 API call successful, received files:', files);
+            } catch (apiError) {
+                console.error('🌐 API call failed:', apiError);
+                
+                // Check if the error is due to invalid path and try fallback
+                if (apiError.message && apiError.message.includes('failed to read directory')) {
+                    console.log('🌐 Directory read failed, trying to fallback to working directory');
+                    if (remotePath !== '.') {
+                        // Try fallback to current working directory
+                        try {
+                            files = await window.go.main.App.ListRemoteFiles(this.currentSessionID, '.');
+                            remotePath = '.'; // Update path to reflect the fallback
+                            console.log('🌐 Fallback successful');
+                        } catch (fallbackError) {
+                            console.error('🌐 Fallback also failed:', fallbackError);
+                            throw apiError; // Throw original error
+                        }
+                    } else {
+                        throw apiError; // Already at working directory, can't fallback further
+                    }
+                } else {
+                    throw apiError; // Re-throw other types of errors
+                }
+            }
             
             // Handle null/undefined response as empty directory
             let fileList = files;
@@ -675,11 +713,13 @@ export class RemoteExplorerManager {
             }
             
             console.log('🌐 Received files:', fileList.length);
+            console.log('🌐 Sample file data:', fileList.length > 0 ? fileList[0] : 'none');
             
             // Add parent directory entry if not at absolute root
             const processedFiles = [...fileList];
             if (remotePath !== '/') {
                 const parentPath = this.getParentPath(remotePath);
+                console.log('🌐 Adding parent directory with path:', parentPath);
                 processedFiles.unshift({
                     name: '..',
                     path: parentPath,
@@ -711,6 +751,12 @@ export class RemoteExplorerManager {
 
         } catch (error) {
             console.error('Failed to load directory:', error);
+            console.error('Error details:', {
+                message: error.message,
+                stack: error.stack,
+                remotePath,
+                sessionID: this.currentSessionID
+            });
             this.showErrorState(`Failed to load directory: ${error.message}`);
         }
     }
@@ -918,13 +964,31 @@ export class RemoteExplorerManager {
     }
 
     handleFileItemDoubleClick(fileItem) {
+        console.log('🖱️ Double-click detected on file item');
+        
         const isDir = fileItem.dataset.isDir === 'true';
         const path = fileItem.dataset.path;
         const isParent = fileItem.dataset.isParent === 'true';
         const fileName = fileItem.dataset.name;
 
+        console.log('🖱️ File item data:', {
+            isDir,
+            path,
+            isParent,
+            fileName
+        });
+
+        // Validate path before proceeding
+        if (!path || path === 'undefined' || path === 'null') {
+            console.error('🖱️ Invalid path detected in file item:', path);
+            console.error('🖱️ File item element:', fileItem);
+            updateStatus('Error: Invalid file path');
+            return;
+        }
+
         if (isDir) {
             // Navigate to directory (works for both regular directories and parent directory)
+            console.log('🖱️ Navigating to directory:', path);
             this.navigateToPath(path);
             
             if (isParent) {
@@ -942,11 +1006,32 @@ export class RemoteExplorerManager {
         } else {
             // For files, show file preview on double-click
             console.log('📄 Double-click on file, showing preview:', fileName);
+            console.log('📄 File path:', path);
             this.showFilePreview(path, fileName);
         }
     }
 
     async navigateToPath(path) {
+        console.log('🧭 navigateToPath called with:', path);
+        console.log('🧭 Current path:', this.currentRemotePath);
+        
+        // Validate the path parameter
+        if (!path || path === 'undefined' || path === 'null') {
+            console.error('🧭 Invalid path provided to navigateToPath:', path);
+            console.log('🧭 Staying at current path:', this.currentRemotePath);
+            return;
+        }
+        
+        // Ensure path is a string
+        path = String(path).trim();
+        
+        if (!path) {
+            console.error('🧭 Empty path after trimming');
+            return;
+        }
+        
+        console.log('🧭 Normalized path:', path);
+        
         if (path !== this.currentRemotePath) {
             // Clear cache when navigating to force refresh
             const cacheKey = `${this.currentSessionID}:${path}`;
@@ -955,8 +1040,10 @@ export class RemoteExplorerManager {
             const pathDescription = path === '/' ? 'root (/)' : 
                                    path === '.' ? 'home' : 
                                    `"${path}"`;
-            console.log(`Navigating from ${this.currentRemotePath} to ${pathDescription}`);
+            console.log(`🧭 Navigating from ${this.currentRemotePath} to ${pathDescription}`);
             await this.loadDirectoryContent(path);
+        } else {
+            console.log('🧭 Already at target path, no navigation needed');
         }
     }
 
