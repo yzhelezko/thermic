@@ -1,6 +1,8 @@
 - Always use command "wails dev" to test the app
-- Add there only super important things, and only if user confirm that everthing is working good now it should be super short description here, just append new line if needed
+- Add there only super important things, and only if user confirm that evertything is working good now it should be super short description here, just append new line if needed
 - Always work with setupGlobalOutputListener() in terminal.js if you need to extend terminal features
+- Window resize handling: TerminalManager must have handleResize() method that fits terminals and emits 'frontend:window:resized' event to backend for config save
+- SFTP path handling: Always validate paths for undefined/null in navigateToPath() and loadDirectoryContent() - backend constructs absolute paths consistently using sftpClient.Getwd()
 - Profiles and folders now use ID-based references (FolderID, ParentFolderID)
 - Sidebar save button uses only handleProfileSave() method - avoid duplicate event handlers to prevent multiple API calls
 - Use universal Modal component (components/Modal.js) for all dialogs - modal.confirm(), modal.confirmDelete(), modal.info(), modal.error()
@@ -15,4 +17,48 @@
 - Profile/folder renaming: saveProfileInternal/saveProfileFolderInternal automatically clean up old files to prevent duplicates with same ID
 - Theme toggle icon: always pass explicit isDark parameter to updateThemeToggleIcon() to avoid race conditions in production builds
 - Settings panel theme changes: must call terminalManager.updateTheme() and uiManager.onThemeChange() to update terminal output window
-- SSH key discovery: scans entire .ssh directory for valid private keys when no keyPath specified (Windows: %USERPROFILE%\.ssh, Unix: $HOME/.ssh)
+- SSH key auto-discovery: User-controlled per-profile setting (AllowKeyAutoDiscovery) determines if .ssh directory scanning occurs - respects user privacy by requiring explicit permission before scanning private keys
+- App structure: Core functionality split into app_core.go (startup/shutdown/basic methods) and app.go (business logic) - maintain this separation
+- Tab management: All tab-related functionality extracted to app_tabs.go (CreateTab, GetTabs, SetActiveTab, CloseTab, SSH connections, status management, reordering) - keep tab logic separate
+- Profile management: All profile-related functionality extracted to app_profiles.go (CRUD operations, folder management, tree structure, virtual folders, search, metrics, API methods) - keep profile logic separate
+- System monitoring: All system statistics and monitoring functionality extracted to app_system.go (local/remote system stats, CPU/memory/network monitoring, active tab info) - keep monitoring logic separate
+- SFTP file explorer: All SFTP file operations extracted to app_sftp.go (InitializeFileExplorerSession, ListRemoteFiles, file upload/download, directory operations, file content management) - keep SFTP logic separate
+- Type safety: Use strongly-typed IDs (SessionID, ProfileID, TabID, FolderID, SSHSessionID) instead of strings - prevents ID mixing bugs and improves code safety
+- Constants: Use defined constants for magic strings (ProfileTypeLocal, ConnectionTypeSSH, StatusConnecting, etc.) - improves maintainability and prevents typos
+- Resource limits: Respect MaxSessions(50), MaxProfiles(1000), MaxFileHistory(100) limits in all operations - prevents memory issues
+- Manager architecture: App uses focused managers (terminal, profiles, ssh, config) instead of monolithic struct - improves separation of concerns and maintainability
+- Manager access: Use a.terminal.*, a.profiles.*, a.ssh.*, a.config.* to access manager-specific functionality - maintains clear boundaries
+- Deprecated fields removed: FolderPath and ParentPath removed in favor of ID-based references (FolderID, ParentFolderID) - cleaner data model
+- Infrastructure management: Use BoundedMap/BoundedSlice for collections with automatic resource cleanup and size limits - prevents memory leaks
+- Resource management: All resources implement Cleanup interface with Close() method for proper lifecycle management
+- ResourceManager: Each manager has resourceManager for automatic cleanup registration - use Register() for tracked resources
+- Validation system: All user-facing types implement Validator interface with Validate() method - always validate before storage
+- Manager-specific mutexes: Use a.terminal.mutex, a.profiles.mutex, a.ssh.sshSessionsMutex/sftpClientsMutex, a.config.mutex instead of global App mutex - improves concurrency
+- Status type safety: Use StatusConnecting.String() for string conversion from ConnectionStatus enum - maintains type safety
+- Session registration: Always register new sessions with resourceManager.Register() for automatic cleanup
+- Bounded collections: MaxSSHSessions(25), MaxSFTPClients(25) automatically enforce limits in BoundedMap usage
+- Collection cleanup: BoundedMap/BoundedSlice automatically clean up oldest items when at capacity using FIFO pattern
+- Profile validation: Always call profile.Validate() before saving - validates limits, SSH config, tags, and file history
+- SFTP resource management: Use SFTPClientWrapper for automatic cleanup registration and resource limit enforcement
+- Tag limits: Enforce MaxTagsPerProfile(20) in UpdateProfileTagsAPI to prevent excessive tag usage
+- Profile limits: Check and warn when profile count exceeds MaxProfiles(1000) in GetProfileTreeAPI
+- SFTP limits: Check MaxSFTPClients(25) before creating new SFTP clients in InitializeFileExplorerSession
+- SSH/SFTP mutex separation: SSHManager has separate mutexes - sshSessionsMutex for SSH sessions, sftpClientsMutex for SFTP clients - NEVER use one for the other to prevent deadlocks
+- Config management safety: Use atomic file operations with backup (saveConfigAtomic), proper timer cleanup in markConfigDirty, and validate all config values before saving - ConfigError type provides structured error handling
+- Config validation: Always call config.Validate() before saving, implement validation functions for all setters (validateSidebarWidth, validateTheme, etc.), use proper bounds checking
+- Platform detection: Cache runtime.GOOS in currentPlatform variable and use constants (PlatformWindows, PlatformLinux, PlatformDarwin) instead of magic strings
+- Config timer management: Use config.mutex (not app mutex) for timer operations, safely replace timers to avoid race conditions, check app.ctx != nil before async saves
+- Platform-specific app files: Use proper error handling with structured types (ConfigError, DialogError), implement resource cleanup (timer.Stop(), sync.RWMutex), extract constants for validation limits and paths, cache shell detection results, use safer Windows registry operations with proper cleanup
+- Dialog operations: Validate context before operations, implement input validation (file path length, file count limits), use structured error types for better debugging and user feedback
+- Profile management refactored: Split monolithic profile_manager.go into focused modules - profile_core.go (CRUD operations), profile_storage.go (file I/O), profile_watcher.go (file monitoring), profile_tree.go (tree structure/virtual folders), profile_metrics.go (usage analytics) - use ProfileError for structured error handling
+- Profile security: All file operations validate paths within profiles directory, enforce resource limits (MaxProfiles, MaxFileSize, MaxProfileName), timeout protection for file operations
+- Profile concurrency: Use a.profiles.mutex for all profile operations, proper goroutine cleanup in file watcher with panic recovery, atomic file operations for metrics
+- Profile validation: Always call validateProfile/validateProfileFolder before operations, sanitizeFilename for all file operations, structured error types (ProfileError) for better debugging
+- Terminal configuration: ScrollbackLines setting managed via config.yaml with real-time updates - frontend TerminalManager loads config from backend, listens for config changes via EventsOn, applies updates to all terminal sessions
+- Terminal clearing: Use clearTerminal(sessionId) method (not WriteToShell with \x0C) for Ctrl+L and context menu clear - always uses terminal.reset() which clears everything including scrollback
+- Terminal buffer management: Never auto-clear terminals in performResourceCleanup() - xterm.js handles buffer limits naturally by scrolling old content out, auto-clearing disrupts user experience
+- Universal settings system: Use ConfigGet(settingName) and ConfigSet(settingName, value) for all config operations instead of individual getters/setters - uses unified SettingConfig struct with type-based validation and field mapping (ConfigField) for direct config updates, only requires CustomUpdate for special cases like DefaultShell (platform-specific) - automatic event emission and mutex handling based on configuration flags
+- Remote file content handling: Backend GetRemoteFileContent uses isTextContentWithExtension() to check both file extension (yaml, yml, txt, etc.) and content for text detection - frontend RemoteExplorerManager has base64 auto-detection and decoding for known text files to handle cases where backend incorrectly returns base64 for text files
+- Unified messaging system: Use MessageManager (a.messages.*) for ALL terminal messaging and status updates - replaces old separate SSH and tab messaging systems with unified EmitMessage(), UpdateConnectionStatus(), StartConnectionFlow(), ConnectionEstablished(), SessionReady(), ConnectionFailed() methods - provides consistent status management and clean terminal output with icons (● ✓ ⚠ ✗ ⏳) - handles host key prompts and connection animations centrally
+- Activity bar refactored: ActivityBarManager (88 lines) now orchestrates specialized managers - ViewManager (view switching), SidebarStateManager (collapse/expand logic), ActivityEventHandler (unified event delegation), uses existing theme-manager singleton - eliminates code duplication and improves maintainability through manager pattern
+- SVG icon system: Theme-manager handles icon updates with proper initialization timing (init() after DOM ready), loadSvgContent() fetches and caches SVG files, updateThemeToggleIcon() uses proper HTML cleaning to prevent nested SVG corruption - use clearIconCache() and fixThemeIcon() for debugging corrupted icon states, avoid coordinate scaling which breaks SVG path data

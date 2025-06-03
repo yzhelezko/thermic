@@ -11,11 +11,34 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// Platform constants to avoid repeated runtime.GOOS calls
+const (
+	PlatformWindows = "windows"
+	PlatformLinux   = "linux"
+	PlatformDarwin  = "darwin"
+)
+
+var currentPlatform = runtime.GOOS // Cache platform detection
+
+// ConfigError represents configuration-related errors with context
+type ConfigError struct {
+	Op   string
+	Path string
+	Err  error
+}
+
+func (e *ConfigError) Error() string {
+	if e.Path != "" {
+		return fmt.Sprintf("config %s %s: %v", e.Op, e.Path, e.Err)
+	}
+	return fmt.Sprintf("config %s: %v", e.Op, e.Err)
+}
+
 // getConfigPath returns the full path to the config file
 func (a *App) getConfigPath() (string, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
-		return "", fmt.Errorf("failed to get user config directory: %w", err)
+		return "", &ConfigError{Op: "get_user_config_dir", Err: err}
 	}
 	return filepath.Join(configDir, ConfigDirName, ConfigFileName), nil
 }
@@ -29,8 +52,52 @@ func (a *App) ensureConfigDir() error {
 
 	configDir := filepath.Dir(configPath)
 	if err := os.MkdirAll(configDir, ConfigDirMode); err != nil {
-		return fmt.Errorf("failed to create config directory %s: %w", configDir, err)
+		return &ConfigError{Op: "create_directory", Path: configDir, Err: err}
 	}
+	return nil
+}
+
+// createConfigBackup creates a backup of the existing config file
+func (a *App) createConfigBackup(configPath, backupPath string) error {
+	// Check if config file exists
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		return nil // No backup needed if file doesn't exist
+	}
+
+	// Read existing config
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return &ConfigError{Op: "read_for_backup", Path: configPath, Err: err}
+	}
+
+	// Write backup
+	if err := os.WriteFile(backupPath, data, ConfigFileMode); err != nil {
+		return &ConfigError{Op: "write_backup", Path: backupPath, Err: err}
+	}
+
+	return nil
+}
+
+// writeConfigToFile writes the config to a specific file path
+func (a *App) writeConfigToFile(filePath string) error {
+	if a.config == nil || a.config.config == nil {
+		return &ConfigError{Op: "write", Err: fmt.Errorf("config is nil")}
+	}
+
+	// Validate config before writing
+	if err := a.config.config.Validate(); err != nil {
+		return &ConfigError{Op: "validate", Err: err}
+	}
+
+	data, err := yaml.Marshal(a.config.config)
+	if err != nil {
+		return &ConfigError{Op: "marshal", Err: err}
+	}
+
+	if err := os.WriteFile(filePath, data, ConfigFileMode); err != nil {
+		return &ConfigError{Op: "write", Path: filePath, Err: err}
+	}
+
 	return nil
 }
 
@@ -61,9 +128,16 @@ func (a *App) loadConfig() error {
 		return nil
 	}
 
-	if err := yaml.Unmarshal(data, a.config); err != nil {
+	if err := yaml.Unmarshal(data, a.config.config); err != nil {
 		fmt.Printf("Warning: Failed to parse config file %s: %v. Using default config.\n", configPath, err)
-		a.config = DefaultConfig() // Reset to default on parse error
+		a.config.config = DefaultConfig() // Reset to default on parse error
+		return nil
+	}
+
+	// Validate loaded config
+	if err := a.config.config.Validate(); err != nil {
+		fmt.Printf("Warning: Invalid config loaded from %s: %v. Using default config.\n", configPath, err)
+		a.config.config = DefaultConfig() // Reset to default on validation error
 		return nil
 	}
 
@@ -77,58 +151,79 @@ func (a *App) loadConfig() error {
 	return nil
 }
 
-// saveConfig saves the current application configuration to a file
-func (a *App) saveConfig() error {
-	if a.config == nil {
-		return fmt.Errorf("config is nil, cannot save")
-	}
-
+// saveConfigAtomic saves the config using atomic operations with backup
+func (a *App) saveConfigAtomic() error {
 	configPath, err := a.getConfigPath()
 	if err != nil {
-		return fmt.Errorf("failed to get config path: %w", err)
+		return err
 	}
 
 	if err := a.ensureConfigDir(); err != nil {
-		return fmt.Errorf("failed to ensure config directory: %w", err)
+		return err
 	}
 
-	data, err := yaml.Marshal(a.config)
-	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
+	// Create backup before save
+	backupPath := configPath + ".backup"
+	if err := a.createConfigBackup(configPath, backupPath); err != nil {
+		return fmt.Errorf("create backup: %w", err)
 	}
 
-	if err := os.WriteFile(configPath, data, ConfigFileMode); err != nil {
-		return fmt.Errorf("failed to write config file %s: %w", configPath, err)
+	// Write to temporary file first
+	tempPath := configPath + ".tmp"
+	if err := a.writeConfigToFile(tempPath); err != nil {
+		return err
+	}
+
+	// Atomic replace
+	if err := os.Rename(tempPath, configPath); err != nil {
+		os.Remove(tempPath) // Cleanup temp file on error
+		return &ConfigError{Op: "atomic_replace", Path: configPath, Err: err}
 	}
 
 	return nil
 }
 
-// markConfigDirty flags the configuration as needing a save and resets the debounce timer.
-func (a *App) markConfigDirty() {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
-
-	a.configDirty = true
-	if a.debounceTimer != nil {
-		a.debounceTimer.Stop()
+// saveConfig saves the current application configuration to a file
+func (a *App) saveConfig() error {
+	if a.config == nil {
+		return &ConfigError{Op: "save", Err: fmt.Errorf("config is nil")}
 	}
 
-	a.debounceTimer = time.AfterFunc(DebounceDelay, func() {
-		if a.ctx != nil { // Check if app is still running
-			fmt.Println("Debounce timer fired. Attempting to save config.")
-			a.saveConfigIfDirty()
-		}
+	return a.saveConfigAtomic()
+}
+
+// markConfigDirty flags the configuration as needing a save and resets the debounce timer.
+// Fixed race condition in timer management.
+func (a *App) markConfigDirty() {
+	a.config.mutex.Lock()
+	defer a.config.mutex.Unlock()
+
+	a.config.configDirty = true
+
+	// Safely replace timer to avoid race conditions
+	if a.config.debounceTimer != nil {
+		a.config.debounceTimer.Stop()
+		a.config.debounceTimer = nil
+	}
+
+	a.config.debounceTimer = time.AfterFunc(DebounceDelay, func() {
+		a.saveConfigIfDirtyAsync()
 	})
 }
 
-// saveConfigIfDirty checks the dirty flag and saves the configuration if it's set.
-func (a *App) saveConfigIfDirty() {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
+// saveConfigIfDirtyAsync handles async config saving with proper error handling
+func (a *App) saveConfigIfDirtyAsync() {
+	a.config.mutex.Lock()
+	defer a.config.mutex.Unlock()
 
-	if !a.configDirty {
+	if !a.config.configDirty {
 		return // Nothing to save
+	}
+
+	// Check if app is still running
+	if a.ctx == nil {
+		fmt.Println("Warning: App context is nil, skipping config save")
+		return
 	}
 
 	if err := a.saveConfig(); err != nil {
@@ -138,7 +233,12 @@ func (a *App) saveConfigIfDirty() {
 	}
 
 	fmt.Println("Config saved successfully.")
-	a.configDirty = false
+	a.config.configDirty = false
+}
+
+// saveConfigIfDirty checks the dirty flag and saves the configuration if it's set.
+func (a *App) saveConfigIfDirty() {
+	a.saveConfigIfDirtyAsync()
 }
 
 // updateWindowState updates the config with current window state and marks dirty if changed
@@ -152,15 +252,15 @@ func (a *App) updateWindowState() bool {
 
 	configChanged := false
 
-	if a.config.WindowWidth != width || a.config.WindowHeight != height {
-		a.config.WindowWidth = width
-		a.config.WindowHeight = height
+	if a.config.config.WindowWidth != width || a.config.config.WindowHeight != height {
+		a.config.config.WindowWidth = width
+		a.config.config.WindowHeight = height
 		fmt.Printf("Window dimensions updated to %dx%d\n", width, height)
 		configChanged = true
 	}
 
-	if a.config.WindowMaximized != isMaximized {
-		a.config.WindowMaximized = isMaximized
+	if a.config.config.WindowMaximized != isMaximized {
+		a.config.config.WindowMaximized = isMaximized
 		fmt.Printf("Window maximized state updated to %t\n", isMaximized)
 		configChanged = true
 	}
@@ -181,222 +281,369 @@ func (a *App) handleFrontendResizeEvent(optionalData ...interface{}) {
 	}
 }
 
-// SetDefaultShell updates the platform-specific default shell in the configuration and marks it dirty.
-func (a *App) SetDefaultShell(shellPath string) error {
-	if a.config == nil {
-		return fmt.Errorf("config not initialized, cannot set default shell")
+// SettingValue represents a setting value that can be of any type
+type SettingValue interface{}
+
+// SettingType represents the data type of a setting
+type SettingType string
+
+const (
+	SettingTypeBool   SettingType = "bool"
+	SettingTypeInt    SettingType = "int"
+	SettingTypeString SettingType = "string"
+	SettingTypePath   SettingType = "path"
+)
+
+// SettingConfig contains all configuration options for a setting
+type SettingConfig struct {
+	Name string
+	Type SettingType
+
+	// Validation options
+	Min           *int
+	Max           *int
+	AllowedValues []string
+	MaxLength     *int
+
+	// Event options
+	RequiresEvent bool
+	EventName     string
+
+	// Update options
+	ConfigField   string                                 // Field name in config struct
+	RequiresMutex bool                                   // Whether this field requires mutex locking
+	CustomUpdate  func(a *App, value SettingValue) error // Only for special cases
+}
+
+// Validate validates a setting value according to its configuration
+func (c *SettingConfig) Validate(value SettingValue) error {
+	switch c.Type {
+	case SettingTypeBool:
+		if _, ok := value.(bool); !ok {
+			return fmt.Errorf("invalid type for %s: expected bool, got %T", c.Name, value)
+		}
+
+	case SettingTypeInt:
+		var intVal int
+
+		// Handle both int and float64 types (JavaScript sends numbers as float64)
+		switch val := value.(type) {
+		case int:
+			intVal = val
+		case float64:
+			// Convert float64 to int, ensuring it's a whole number
+			if val != float64(int(val)) {
+				return fmt.Errorf("%s must be a whole number, got %v", c.Name, val)
+			}
+			intVal = int(val)
+		default:
+			return fmt.Errorf("invalid type for %s: expected int or number, got %T", c.Name, value)
+		}
+
+		if c.Min != nil && intVal < *c.Min {
+			return fmt.Errorf("%s %d below minimum %d", c.Name, intVal, *c.Min)
+		}
+		if c.Max != nil && intVal > *c.Max {
+			return fmt.Errorf("%s %d above maximum %d", c.Name, intVal, *c.Max)
+		}
+
+	case SettingTypeString, SettingTypePath:
+		strVal, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("invalid type for %s: expected string, got %T", c.Name, value)
+		}
+
+		// For paths, empty values are allowed (means use default)
+		if c.Type == SettingTypePath && strVal == "" {
+			return nil
+		}
+
+		if c.MaxLength != nil && len(strVal) > *c.MaxLength {
+			return fmt.Errorf("%s too long (max %d characters)", c.Name, *c.MaxLength)
+		}
+
+		if len(c.AllowedValues) > 0 {
+			for _, allowed := range c.AllowedValues {
+				if strVal == allowed {
+					return nil
+				}
+			}
+			return fmt.Errorf("invalid %s '%s', allowed values: %v", c.Name, strVal, c.AllowedValues)
+		}
+
+	default:
+		return fmt.Errorf("unknown setting type: %s", c.Type)
 	}
 
-	// Set the platform-specific shell configuration
+	return nil
+}
+
+// Update updates the setting value using universal logic or custom function
+func (c *SettingConfig) Update(a *App, value SettingValue) error {
+	// Use custom update function if provided
+	if c.CustomUpdate != nil {
+		return c.CustomUpdate(a, value)
+	}
+
+	// Universal update logic based on field mapping
+	if c.ConfigField == "" {
+		return fmt.Errorf("no config field or custom update function defined for setting %s", c.Name)
+	}
+
+	// Apply mutex if required
+	if c.RequiresMutex {
+		a.config.mutex.Lock()
+		defer a.config.mutex.Unlock()
+	}
+
+	// Convert value to proper type for integers (handle JavaScript float64)
+	if c.Type == SettingTypeInt {
+		switch val := value.(type) {
+		case float64:
+			value = int(val)
+		case int:
+			// Already correct type
+		default:
+			return fmt.Errorf("invalid type for %s: expected int or number, got %T", c.Name, value)
+		}
+	}
+
+	// Update the appropriate config field
+	switch c.ConfigField {
+	case "EnableSelectToCopy":
+		a.config.config.EnableSelectToCopy = value.(bool)
+	case "ProfilesPath":
+		path := value.(string)
+		if a.config.config.ProfilesPath != path {
+			a.config.config.ProfilesPath = path
+			fmt.Printf("Profiles path updated to: %s\n", path)
+			// Reload profiles from new path
+			if err := a.LoadProfiles(); err != nil {
+				fmt.Printf("Warning: Failed to reload profiles from new path: %v\n", err)
+			}
+		}
+		return nil
+	case "SidebarCollapsed":
+		a.config.config.SidebarCollapsed = value.(bool)
+	case "SidebarWidth":
+		a.config.config.SidebarWidth = value.(int)
+	case "SidebarProfilesWidth":
+		a.config.config.SidebarProfilesWidth = value.(int)
+	case "SidebarFilesWidth":
+		a.config.config.SidebarFilesWidth = value.(int)
+	case "Theme":
+		a.config.config.Theme = value.(string)
+	case "ScrollbackLines":
+		a.config.config.ScrollbackLines = value.(int)
+
+	default:
+		return fmt.Errorf("unknown config field: %s", c.ConfigField)
+	}
+
+	fmt.Printf("%s updated to: %v\n", c.Name, value)
+	return nil
+}
+
+// GetEventData returns event data for settings that require events
+func (c *SettingConfig) GetEventData(value SettingValue) map[string]interface{} {
+	if !c.RequiresEvent {
+		return nil
+	}
+	return map[string]interface{}{c.Name: value}
+}
+
+// Custom update function for DefaultShell (needs platform-specific handling)
+func updateDefaultShell(a *App, value SettingValue) error {
+	shellPath := value.(string)
 	currentShell := a.getPlatformDefaultShell()
 	if currentShell != shellPath {
 		a.setPlatformDefaultShell(shellPath)
 		fmt.Printf("Default shell for %s set to: %s\n", getOSName(), shellPath)
-		a.markConfigDirty()
 	}
 	return nil
+}
+
+// Helper function to create pointer to int
+func intPtr(i int) *int {
+	return &i
+}
+
+// Initialize setting configurations
+var settingConfigs = map[string]*SettingConfig{
+	"DefaultShell": {
+		Name:         "DefaultShell",
+		Type:         SettingTypePath,
+		MaxLength:    intPtr(1024),
+		CustomUpdate: updateDefaultShell, // Needs special platform handling
+	},
+	"EnableSelectToCopy": {
+		Name:        "EnableSelectToCopy",
+		Type:        SettingTypeBool,
+		ConfigField: "EnableSelectToCopy",
+	},
+	"ProfilesPath": {
+		Name:        "ProfilesPath",
+		Type:        SettingTypePath,
+		MaxLength:   intPtr(1024),
+		ConfigField: "ProfilesPath", // Has special reload logic in Update method
+	},
+	"SidebarCollapsed": {
+		Name:        "SidebarCollapsed",
+		Type:        SettingTypeBool,
+		ConfigField: "SidebarCollapsed",
+	},
+	"SidebarWidth": {
+		Name:        "SidebarWidth",
+		Type:        SettingTypeInt,
+		Min:         intPtr(MinSidebarWidth),
+		Max:         intPtr(MaxSidebarWidth),
+		ConfigField: "SidebarWidth",
+	},
+	"SidebarProfilesWidth": {
+		Name:        "SidebarProfilesWidth",
+		Type:        SettingTypeInt,
+		Min:         intPtr(MinSidebarWidth),
+		Max:         intPtr(MaxSidebarWidth),
+		ConfigField: "SidebarProfilesWidth",
+	},
+	"SidebarFilesWidth": {
+		Name:        "SidebarFilesWidth",
+		Type:        SettingTypeInt,
+		Min:         intPtr(MinSidebarWidth),
+		Max:         intPtr(MaxSidebarWidth),
+		ConfigField: "SidebarFilesWidth",
+	},
+	"Theme": {
+		Name:          "Theme",
+		Type:          SettingTypeString,
+		AllowedValues: AllowedThemes,
+		ConfigField:   "Theme",
+	},
+	"ScrollbackLines": {
+		Name:          "ScrollbackLines",
+		Type:          SettingTypeInt,
+		Min:           intPtr(MinScrollbackLines),
+		Max:           intPtr(MaxScrollbackLines),
+		RequiresEvent: true,
+		EventName:     "config:scrollback-lines-changed",
+		ConfigField:   "ScrollbackLines",
+		RequiresMutex: true,
+	},
+}
+
+// ConfigSet is a universal method for updating any configuration setting
+func (a *App) ConfigSet(settingName string, value SettingValue) error {
+	if a.config == nil || a.config.config == nil {
+		return &ConfigError{Op: "set_setting", Err: fmt.Errorf("config not initialized")}
+	}
+
+	// Get setting configuration
+	config, exists := settingConfigs[settingName]
+	if !exists {
+		return &ConfigError{Op: "set_setting", Err: fmt.Errorf("unknown setting: %s", settingName)}
+	}
+
+	// Validate the value
+	if err := config.Validate(value); err != nil {
+		return &ConfigError{Op: "validate_setting", Err: err}
+	}
+
+	// Update the setting
+	if err := config.Update(a, value); err != nil {
+		return &ConfigError{Op: "set_setting", Err: err}
+	}
+
+	// Mark config as dirty to save changes
+	a.markConfigDirty()
+
+	// Emit events if required
+	if config.RequiresEvent && a.ctx != nil {
+		eventData := config.GetEventData(value)
+		wailsRuntime.EventsEmit(a.ctx, config.EventName, eventData)
+	}
+
+	return nil
+}
+
+// ConfigGet is a universal method for retrieving any configuration setting
+func (a *App) ConfigGet(settingName string) (SettingValue, error) {
+	if a.config == nil || a.config.config == nil {
+		return nil, &ConfigError{Op: "get_setting", Err: fmt.Errorf("config not initialized")}
+	}
+
+	// Check if setting exists
+	if _, exists := settingConfigs[settingName]; !exists {
+		return nil, &ConfigError{Op: "get_setting", Err: fmt.Errorf("unknown setting: %s", settingName)}
+	}
+
+	// Return the appropriate setting value
+	switch settingName {
+	case "DefaultShell":
+		return a.getPlatformDefaultShell(), nil
+	case "EnableSelectToCopy":
+		return a.config.config.EnableSelectToCopy, nil
+	case "ProfilesPath":
+		return a.config.config.ProfilesPath, nil
+	case "SidebarCollapsed":
+		return a.config.config.SidebarCollapsed, nil
+	case "SidebarWidth":
+		return a.config.config.SidebarWidth, nil
+	case "SidebarProfilesWidth":
+		return a.config.config.SidebarProfilesWidth, nil
+	case "SidebarFilesWidth":
+		return a.config.config.SidebarFilesWidth, nil
+	case "Theme":
+		return a.config.config.Theme, nil
+	case "ScrollbackLines":
+		a.config.mutex.RLock()
+		defer a.config.mutex.RUnlock()
+		return a.config.config.ScrollbackLines, nil
+
+	default:
+		return nil, &ConfigError{Op: "get_setting", Err: fmt.Errorf("unhandled setting: %s", settingName)}
+	}
 }
 
 // setPlatformDefaultShell sets the platform-specific default shell configuration
 func (a *App) setPlatformDefaultShell(shellPath string) {
-	switch runtime.GOOS {
-	case "windows":
-		a.config.DefaultShellWindows = shellPath
-	case "darwin":
-		a.config.DefaultShellDarwin = shellPath
-	case "linux":
-		a.config.DefaultShellLinux = shellPath
-	default:
-		// For other Unix-like systems, use Linux configuration
-		a.config.DefaultShellLinux = shellPath
+	switch currentPlatform {
+	case PlatformWindows:
+		a.config.config.DefaultShells.Windows = shellPath
+	case PlatformLinux:
+		a.config.config.DefaultShells.Linux = shellPath
+	case PlatformDarwin:
+		a.config.config.DefaultShells.Darwin = shellPath
 	}
 }
 
-// getOSName returns a human-readable OS name for logging
+// getOSName returns a human-readable OS name
 func getOSName() string {
-	switch runtime.GOOS {
-	case "windows":
+	switch currentPlatform {
+	case PlatformWindows:
 		return "Windows"
-	case "darwin":
-		return "macOS"
-	case "linux":
+	case PlatformLinux:
 		return "Linux"
+	case PlatformDarwin:
+		return "macOS"
 	default:
-		return runtime.GOOS
+		return currentPlatform
 	}
 }
 
-// migrateLegacyConfig migrates legacy default_shell configuration to platform-specific format
+// migrateLegacyConfig migrates old single shell config to platform-specific configuration
 func (a *App) migrateLegacyConfig() bool {
-	if a.config == nil {
-		return false
+	if a.config.config.DefaultShell == "" {
+		return false // No legacy config to migrate
 	}
 
-	// Check if we have a legacy default_shell set
-	if a.config.DefaultShell != "" {
-		// Only migrate to the current platform if it's not already set
-		currentPlatformShell := a.getPlatformDefaultShell()
-		if currentPlatformShell == "" {
-			// Set only the current platform's shell
-			a.setPlatformDefaultShell(a.config.DefaultShell)
-			fmt.Printf("Migrated legacy shell '%s' to %s configuration\n", a.config.DefaultShell, getOSName())
-
-			// Clear the legacy field after migration
-			a.config.DefaultShell = ""
-			return true
-		} else {
-			// Platform-specific shell already set, just clear legacy field
-			fmt.Printf("Legacy shell '%s' found but %s already has platform-specific shell '%s', clearing legacy field\n",
-				a.config.DefaultShell, getOSName(), currentPlatformShell)
-			a.config.DefaultShell = ""
-			return true
-		}
+	// Check if platform-specific shell is already set
+	currentPlatformShell := a.getPlatformDefaultShell()
+	if currentPlatformShell == "" {
+		// Migrate legacy shell to current platform
+		a.setPlatformDefaultShell(a.config.config.DefaultShell)
 	}
 
-	return false
-}
-
-// GetCurrentDefaultShellSetting returns the platform-specific default shell string from the configuration.
-// This is intended for populating UI elements.
-func (a *App) GetCurrentDefaultShellSetting() string {
-	if a.config == nil {
-		fmt.Println("GetCurrentDefaultShellSetting: config is nil, returning empty string.")
-		return ""
-	}
-
-	// Get platform-specific shell configuration
-	return a.getPlatformDefaultShell()
-}
-
-// GetSelectToCopyEnabled returns whether select-to-copy mode is enabled
-func (a *App) GetSelectToCopyEnabled() bool {
-	if a.config == nil {
-		fmt.Println("GetSelectToCopyEnabled: config is nil, returning default false.")
-		return false
-	}
-	return a.config.EnableSelectToCopy
-}
-
-// SetSelectToCopyEnabled updates the select-to-copy setting
-func (a *App) SetSelectToCopyEnabled(enabled bool) error {
-	if a.config == nil {
-		return fmt.Errorf("config not initialized, cannot set select-to-copy setting")
-	}
-
-	if a.config.EnableSelectToCopy != enabled {
-		a.config.EnableSelectToCopy = enabled
-		fmt.Printf("Select-to-copy setting updated to: %t\n", enabled)
-		a.markConfigDirty()
-	}
-	return nil
-}
-
-// GetProfilesPath returns the configured profiles directory path
-func (a *App) GetProfilesPath() string {
-	if a.config == nil {
-		fmt.Println("GetProfilesPath: config is nil, returning empty string.")
-		return ""
-	}
-	return a.config.ProfilesPath
-}
-
-// SetProfilesPath updates the profiles directory path in the configuration and marks it dirty
-func (a *App) SetProfilesPath(path string) error {
-	if a.config == nil {
-		return fmt.Errorf("config not initialized, cannot set profiles path")
-	}
-
-	if a.config.ProfilesPath != path {
-		a.config.ProfilesPath = path
-		fmt.Printf("Profiles path updated to: %s\n", path)
-		a.markConfigDirty()
-
-		// Reload profiles from the new directory
-		if err := a.LoadProfiles(); err != nil {
-			fmt.Printf("Warning: Failed to reload profiles from new path: %v\n", err)
-			// Don't return error here as the config update was successful
-		} else {
-			fmt.Println("Profiles reloaded from new directory")
-		}
-	}
-	return nil
-}
-
-// GetSidebarCollapsed returns whether the sidebar is collapsed
-func (a *App) GetSidebarCollapsed() bool {
-	if a.config == nil {
-		fmt.Println("GetSidebarCollapsed: config is nil, returning default false.")
-		return false
-	}
-	return a.config.SidebarCollapsed
-}
-
-// SetSidebarCollapsed updates the sidebar collapsed state
-func (a *App) SetSidebarCollapsed(collapsed bool) error {
-	if a.config == nil {
-		return fmt.Errorf("config not initialized, cannot set sidebar collapsed state")
-	}
-
-	if a.config.SidebarCollapsed != collapsed {
-		a.config.SidebarCollapsed = collapsed
-		fmt.Printf("Sidebar collapsed state updated to: %t\n", collapsed)
-		a.markConfigDirty()
-	}
-	return nil
-}
-
-// GetSidebarWidth returns the sidebar width
-func (a *App) GetSidebarWidth() int {
-	if a.config == nil {
-		fmt.Println("GetSidebarWidth: config is nil, returning default 250.")
-		return 250
-	}
-	return a.config.SidebarWidth
-}
-
-// SetSidebarWidth updates the sidebar width
-func (a *App) SetSidebarWidth(width int) error {
-	if a.config == nil {
-		return fmt.Errorf("config not initialized, cannot set sidebar width")
-	}
-
-	if a.config.SidebarWidth != width {
-		a.config.SidebarWidth = width
-		fmt.Printf("Sidebar width updated to: %d\n", width)
-		a.markConfigDirty()
-	}
-	return nil
-}
-
-// GetTheme returns the saved theme preference
-func (a *App) GetTheme() string {
-	if a.config == nil {
-		fmt.Println("GetTheme: config is nil, returning default 'dark'.")
-		return "dark"
-	}
-	// Ensure we have a valid theme value
-	theme := a.config.Theme
-	if theme != "dark" && theme != "light" && theme != "system" {
-		return "dark" // Default fallback
-	}
-	return theme
-}
-
-// SetTheme updates the theme preference in the configuration and marks it dirty
-func (a *App) SetTheme(theme string) error {
-	if a.config == nil {
-		return fmt.Errorf("config not initialized, cannot set theme")
-	}
-
-	// Validate theme value
-	if theme != "dark" && theme != "light" && theme != "system" {
-		return fmt.Errorf("invalid theme value: %s. Must be 'dark', 'light', or 'system'", theme)
-	}
-
-	if a.config.Theme != theme {
-		a.config.Theme = theme
-		fmt.Printf("Theme preference updated to: %s\n", theme)
-		a.markConfigDirty()
-	}
-	return nil
+	// Clear legacy field
+	a.config.config.DefaultShell = ""
+	return true // Migration occurred
 }

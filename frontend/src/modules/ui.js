@@ -6,11 +6,15 @@ export class UIManager {
         this.isDarkTheme = true; // Default to dark theme, will be synced
         this.tabs = [{ id: 'terminal-1', title: 'Terminal 1', active: true }];
         this.tabCounter = 1;
-        this.sidebarWidth = 250;
+        this.sidebarWidth = 250; // Keep for backward compatibility
+        this.sidebarProfilesWidth = 250;
+        this.sidebarFilesWidth = 350;
         this.sidebarCollapsed = false;
         this.onThemeChange = null;
         this.onTerminalResize = null;
         this.saveWidthTimeout = null; // For debouncing width saves
+        this.saveProfilesWidthTimeout = null;
+        this.saveFilesWidthTimeout = null;
     }
 
     setThemeChangeCallback(callback) {
@@ -29,30 +33,66 @@ export class UIManager {
         this.setupResizablePanels();
         
         // Initialize CSS custom property for sidebar width
-        document.documentElement.style.setProperty('--sidebar-width', this.sidebarWidth + 'px');
+        // The actual width will be set by the sidebar state manager based on current view
+        document.documentElement.style.setProperty('--sidebar-width', this.sidebarProfilesWidth + 'px');
     }
 
     async loadSidebarState() {
         try {
             // Load sidebar state from backend
-            const collapsed = await window.go.main.App.GetSidebarCollapsed();
-            const width = await window.go.main.App.GetSidebarWidth();
+            const collapsed = await window.go.main.App.ConfigGet("SidebarCollapsed");
+            const width = await window.go.main.App.ConfigGet("SidebarWidth");
+            
+            // Try to load separate view widths (new config keys)
+            let profilesWidth, filesWidth;
+            try {
+                profilesWidth = await window.go.main.App.ConfigGet("SidebarProfilesWidth");
+                filesWidth = await window.go.main.App.ConfigGet("SidebarFilesWidth");
+                
+                // If we got default values (meaning they weren't set), migrate from legacy width
+                if ((profilesWidth === 250 && filesWidth === 350) && width && width !== 250) {
+                    console.log('Migrating legacy sidebar width to separate view widths');
+                    profilesWidth = width;
+                    filesWidth = Math.max(width + 100, 350);
+                    
+                    // Save the migrated values
+                    await window.go.main.App.ConfigSet("SidebarProfilesWidth", profilesWidth);
+                    await window.go.main.App.ConfigSet("SidebarFilesWidth", filesWidth);
+                }
+            } catch (error) {
+                // New config keys don't exist yet, use defaults based on main width
+                console.log('Separate view widths not found, using defaults');
+                profilesWidth = width || 250;
+                filesWidth = Math.max((width || 250) + 100, 350); // Files view slightly wider
+                
+                // Save the default values
+                try {
+                    await window.go.main.App.ConfigSet("SidebarProfilesWidth", profilesWidth);
+                    await window.go.main.App.ConfigSet("SidebarFilesWidth", filesWidth);
+                } catch (saveError) {
+                    console.warn('Failed to save default view widths:', saveError);
+                }
+            }
             
             this.sidebarCollapsed = collapsed;
             this.sidebarWidth = width;
+            this.sidebarProfilesWidth = profilesWidth;
+            this.sidebarFilesWidth = filesWidth;
             
-            console.log(`Loaded sidebar state: collapsed=${collapsed}, width=${width}`);
+            console.log(`Loaded sidebar state: collapsed=${collapsed}, width=${width}, profilesWidth=${profilesWidth}, filesWidth=${filesWidth}`);
         } catch (error) {
             console.warn('Failed to load sidebar state from config:', error);
             // Use defaults if loading fails
             this.sidebarCollapsed = false;
             this.sidebarWidth = 250;
+            this.sidebarProfilesWidth = 250;
+            this.sidebarFilesWidth = 350;
         }
     }
 
     async saveSidebarCollapsed() {
         try {
-            await window.go.main.App.SetSidebarCollapsed(this.sidebarCollapsed);
+            await window.go.main.App.ConfigSet("SidebarCollapsed", this.sidebarCollapsed);
             console.log(`Saved sidebar collapsed state: ${this.sidebarCollapsed}`);
         } catch (error) {
             console.warn('Failed to save sidebar collapsed state to config:', error);
@@ -61,7 +101,7 @@ export class UIManager {
 
     async saveSidebarWidth() {
         try {
-            await window.go.main.App.SetSidebarWidth(this.sidebarWidth);
+            await window.go.main.App.ConfigSet("SidebarWidth", this.sidebarWidth);
             console.log(`Saved sidebar width: ${this.sidebarWidth}`);
         } catch (error) {
             console.warn('Failed to save sidebar width to config:', error);
@@ -70,9 +110,11 @@ export class UIManager {
 
     async saveSidebarState() {
         try {
-            await window.go.main.App.SetSidebarCollapsed(this.sidebarCollapsed);
-            await window.go.main.App.SetSidebarWidth(this.sidebarWidth);
-            console.log(`Saved sidebar state: collapsed=${this.sidebarCollapsed}, width=${this.sidebarWidth}`);
+            await window.go.main.App.ConfigSet("SidebarCollapsed", this.sidebarCollapsed);
+            await window.go.main.App.ConfigSet("SidebarWidth", this.sidebarWidth);
+            await window.go.main.App.ConfigSet("SidebarProfilesWidth", this.sidebarProfilesWidth);
+            await window.go.main.App.ConfigSet("SidebarFilesWidth", this.sidebarFilesWidth);
+            console.log(`Saved sidebar state: collapsed=${this.sidebarCollapsed}, width=${this.sidebarWidth}, profilesWidth=${this.sidebarProfilesWidth}, filesWidth=${this.sidebarFilesWidth}`);
         } catch (error) {
             console.warn('Failed to save sidebar state to config:', error);
         }
@@ -98,6 +140,56 @@ export class UIManager {
                 this.saveSidebarWidth();
                 this.saveWidthTimeout = null;
             }, 300); // Save after 300ms of no changes
+        }
+    }
+
+    setSidebarProfilesWidth(width) {
+        if (this.sidebarProfilesWidth !== width) {
+            this.sidebarProfilesWidth = width;
+            
+            // Debounce width saves to avoid too many calls during resizing
+            if (this.saveProfilesWidthTimeout) {
+                clearTimeout(this.saveProfilesWidthTimeout);
+            }
+            
+            this.saveProfilesWidthTimeout = setTimeout(() => {
+                this.saveSidebarProfilesWidth();
+                this.saveProfilesWidthTimeout = null;
+            }, 300); // Save after 300ms of no changes
+        }
+    }
+
+    setSidebarFilesWidth(width) {
+        if (this.sidebarFilesWidth !== width) {
+            this.sidebarFilesWidth = width;
+            
+            // Debounce width saves to avoid too many calls during resizing
+            if (this.saveFilesWidthTimeout) {
+                clearTimeout(this.saveFilesWidthTimeout);
+            }
+            
+            this.saveFilesWidthTimeout = setTimeout(() => {
+                this.saveSidebarFilesWidth();
+                this.saveFilesWidthTimeout = null;
+            }, 300); // Save after 300ms of no changes
+        }
+    }
+
+    async saveSidebarProfilesWidth() {
+        try {
+            await window.go.main.App.ConfigSet("SidebarProfilesWidth", this.sidebarProfilesWidth);
+            console.log(`Saved sidebar profiles width: ${this.sidebarProfilesWidth}`);
+        } catch (error) {
+            console.warn('Failed to save sidebar profiles width to config:', error);
+        }
+    }
+
+    async saveSidebarFilesWidth() {
+        try {
+            await window.go.main.App.ConfigSet("SidebarFilesWidth", this.sidebarFilesWidth);
+            console.log(`Saved sidebar files width: ${this.sidebarFilesWidth}`);
+        } catch (error) {
+            console.warn('Failed to save sidebar files width to config:', error);
         }
     }
 
@@ -143,7 +235,7 @@ export class UIManager {
 
             if (direction === 'left') {
                 const newWidth = e.clientX;
-                if (newWidth >= 200 && newWidth <= 400) {
+                if (newWidth >= 200 && newWidth <= 600) {
                     // Cancel any pending animation frame
                     if (animationFrameId) {
                         cancelAnimationFrame(animationFrameId);
@@ -157,10 +249,16 @@ export class UIManager {
                         // Update CSS variable for profile panel positioning
                         document.documentElement.style.setProperty('--sidebar-width', newWidth + 'px');
                         
-                        this.sidebarWidth = newWidth;
+                        // Update the appropriate view-specific width based on current view
+                        if (window.thermicApp?.activityBarManager?.getSidebarStateManager) {
+                            const sidebarStateManager = window.thermicApp.activityBarManager.getSidebarStateManager();
+                            if (sidebarStateManager && sidebarStateManager.setWidth) {
+                                sidebarStateManager.setWidth(newWidth, true); // true = isResizing
+                            }
+                        }
                         
-                        // Save the new width to config (debounced)
-                        this.setSidebarWidth(newWidth);
+                        // Keep legacy width updated for backward compatibility
+                        this.sidebarWidth = newWidth;
                         
                         // Trigger terminal resize (throttled)
                         this.onTerminalResize?.();
@@ -182,12 +280,13 @@ export class UIManager {
                 animationFrameId = null;
             }
             
-            // Ensure the final width is saved immediately when resizing ends
-            if (this.saveWidthTimeout) {
-                clearTimeout(this.saveWidthTimeout);
-                this.saveWidthTimeout = null;
-            }
-            this.saveSidebarWidth();
+                                        // Trigger immediate save when resize ends
+                            if (window.thermicApp?.activityBarManager?.getSidebarStateManager) {
+                                const sidebarStateManager = window.thermicApp.activityBarManager.getSidebarStateManager();
+                                if (sidebarStateManager && sidebarStateManager.saveCurrentViewWidth) {
+                                    sidebarStateManager.saveCurrentViewWidth();
+                                }
+                            }
         };
     }
 } 

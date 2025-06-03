@@ -1,5 +1,5 @@
 import '@xterm/xterm/css/xterm.css';
-import { GetDefaultShell } from '../wailsjs/go/main/App';
+import { ConfigGet } from '../wailsjs/go/main/App';
 
 // Import all modules
 import { DOMManager } from './modules/dom.js';
@@ -20,6 +20,9 @@ import { notification } from './components/Notification.js';
 
 // Import icon utilities
 import { initializeIcons, debugThemeState, updateAllIconsToInline } from './utils/icons.js';
+
+// Import theme manager to ensure it's initialized
+import { themeManager } from './modules/theme-manager.js';
 
 // Platform detection for window controls
 function detectPlatform() {
@@ -125,6 +128,10 @@ class ThermicTerminal {
             console.log('Initializing icon system...');
             await initializeIcons();
             
+            // Initialize theme manager after DOM is ready
+            console.log('Initializing theme manager...');
+            await themeManager.init();
+            
             // Initialize status first to show platform info
             console.log('Initializing status manager...');
             await this.statusManager.initStatus();
@@ -141,6 +148,10 @@ class ThermicTerminal {
             
             console.log('Initializing activity bar manager...');
             await this.activityBarManager.init();
+            
+            // Sync terminal theme with theme manager's loaded theme
+            console.log('Syncing terminal theme with loaded config...');
+            this.terminalManager.updateTheme(themeManager.isDarkMode());
             
             // Initialize remote explorer
             console.log('Initializing remote explorer manager...');
@@ -166,6 +177,9 @@ class ThermicTerminal {
             
             // Expose the main app instance globally for settings integration
             window.thermicApp = this;
+            
+            // Expose theme manager globally for settings integration
+            window.themeManager = themeManager;
 
             // Initialize terminal
             console.log('Initializing terminal manager...');
@@ -425,20 +439,67 @@ class ThermicTerminal {
 
 // Initialize the terminal when the page loads - v2.0
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM loaded, initializing Thermic Terminal...');
-    try {
-        const app = new ThermicTerminal();
-        // Store reference globally for debugging
-        window.thermicApp = app;
-    } catch (error) {
-        console.error('Critical error during application startup:', error);
-        console.error('Stack trace:', error.stack);
+    console.log('DOM loaded, waiting for Wails to be ready...');
+    
+    // Wait for Wails bindings to be available
+    function waitForWails() {
+        return new Promise((resolve, reject) => {
+            const startTime = Date.now();
+            const timeout = 10000; // 10 second timeout
+            
+            function checkWails() {
+                if (window.go && window.go.main && window.go.main.App) {
+                    console.log('Wails bindings are ready');
+                    resolve();
+                } else if (Date.now() - startTime > timeout) {
+                    reject(new Error('Timeout waiting for Wails bindings'));
+                } else {
+                    console.log('Waiting for Wails bindings...');
+                    setTimeout(checkWails, 100);
+                }
+            }
+            checkWails();
+        });
+    }
+    
+    // Initialize the application after Wails is ready
+    waitForWails().then(() => {
+        console.log('Initializing Thermic Terminal...');
+        try {
+            const app = new ThermicTerminal();
+            // Store reference globally for debugging
+            window.thermicApp = app;
+        } catch (error) {
+            console.error('Critical error during application startup:', error);
+            console.error('Stack trace:', error.stack);
+            
+            // Show error in UI if possible
+            const statusElement = document.getElementById('status-info');
+            if (statusElement) {
+                statusElement.textContent = 'Startup failed: ' + error.message;
+                statusElement.style.color = 'red';
+            }
+        }
+    }).catch((error) => {
+        console.error('Failed to wait for Wails:', error);
         
-        // Show error in UI if possible
+        // Show error in UI
         const statusElement = document.getElementById('status-info');
         if (statusElement) {
-            statusElement.textContent = 'Startup failed: ' + error.message;
+            statusElement.textContent = 'Wails initialization failed: ' + error.message;
             statusElement.style.color = 'red';
         }
-    }
+        
+        // Also try to show a user-friendly message
+        document.body.innerHTML = `
+            <div style="display: flex; justify-content: center; align-items: center; height: 100vh; background: #1a1a1a; color: #fff; font-family: Arial, sans-serif;">
+                <div style="text-align: center; padding: 20px;">
+                    <h2>Application Initialization Failed</h2>
+                    <p>The Wails runtime failed to initialize properly.</p>
+                    <p>Please try restarting the application.</p>
+                    <p style="color: #ff6b6b; font-size: 12px; margin-top: 20px;">Error: ${error.message}</p>
+                </div>
+            </div>
+        `;
+    });
 });

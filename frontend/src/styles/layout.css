@@ -95,11 +95,15 @@
     transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-#theme-toggle svg {
+#theme-toggle svg,
+#theme-toggle .theme-toggle-icon {
     transition: transform 0.3s ease;
+    width: 24px;
+    height: 24px;
 }
 
-#theme-toggle.rotating svg {
+#theme-toggle.rotating svg,
+#theme-toggle.rotating .theme-toggle-icon {
     transform: rotate(180deg);
 }
 
@@ -196,6 +200,43 @@
 .terminal-instance .xterm-screen {
     max-width: 100% !important;
     max-height: 100% !important;
+}
+
+/* Host key prompt mode styles */
+.host-key-prompt-active {
+    border: 2px solid var(--warning-color) !important;
+    box-shadow: 0 0 10px rgba(255, 193, 7, 0.3) !important;
+    background: rgba(255, 193, 7, 0.02) !important;
+    position: relative;
+}
+
+.host-key-prompt-active::before {
+    content: "⚠️ Host Key Verification - Press ENTER to accept, ESC to cancel, Y for yes, N for no";
+    position: absolute;
+    top: -32px;
+    left: 0;
+    right: 0;
+    background: var(--warning-color);
+    color: var(--bg-primary);
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: bold;
+    z-index: 1000;
+    border-radius: 4px 4px 0 0;
+    text-align: center;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.2);
+    animation: pulse-warning 2s infinite;
+}
+
+@keyframes pulse-warning {
+    0%, 100% { 
+        opacity: 1; 
+        transform: scale(1);
+    }
+    50% { 
+        opacity: 0.8; 
+        transform: scale(1.01);
+    }
 }
 
 /* Resizable panels */

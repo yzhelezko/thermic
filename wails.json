@@ -10,6 +10,11 @@
     "name": "Yurii Zheliezko",
     "email": "yzhelezko@gmail.com"
   },
+  "dev": {
+    "assetdir": "./frontend/dist",
+    "reloadonchange": true,
+    "debounceMS": 100
+  },
   "wails": {
     "id": "com.thermic.terminal",
     "name": "Thermic",
@@ -17,8 +22,16 @@
     "homepage": "https://github.com/yzhelezko/thermic",
     "version": "1.0.0",
     "mingw": true,
+    "icon": "build/appicon.png",
+    "iconMacOS": "build/appicon.icns",
+    "iconWindows": "build/appicon.ico",
     "flags": [
       "-ldflags=-H windowsgui"
-    ]
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'",
+      "permissions": ["clipboard-read", "clipboard-write"],
+      "allowLocalFiles": false
+    }
   }
 }
