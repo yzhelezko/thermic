@@ -75,7 +75,9 @@ export function createActivityBarTemplate() {
         </div>
         <div class="activity-bar-bottom">
             <button class="activity-btn" id="theme-toggle" title="Toggle theme">
-                <img src="./icons/moon.svg" class="svg-icon" alt="Toggle theme" width="20" height="20">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" class="theme-toggle-icon">
+                    <path d="M21.64 13a1 1 0 0 0-1.05-.14a8.05 8.05 0 0 1-3.37.73a8.15 8.15 0 0 1-8.14-8.1a8.59 8.59 0 0 1 .25-2A1 1 0 0 0 8 2.36a10.14 10.14 0 1 0 14 11.69a1 1 0 0 0-.36-1.05Zm-9.5 6.69A8.14 8.14 0 0 1 7.08 5.22v.27a10.15 10.15 0 0 0 10.14 10.14a9.79 9.79 0 0 0 2.1-.22a8.11 8.11 0 0 1-7.18 4.32Z"/>
+                </svg>
             </button>
             <button class="activity-btn" id="account-btn" title="Account">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -299,24 +301,11 @@ export function createTerminalSettingsContent() {
                             <div class="setting-item-description">Number of lines to keep in scrollback buffer</div>
                         </div>
                         <div class="setting-item-control">
-                            <input type="number" class="modern-input" value="10000" min="100" max="100000" disabled>
+                            <input type="number" id="scrollback-lines-input" class="modern-input" value="10000" min="100" max="100000">
                         </div>
                     </div>
                 </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Clear Scrollback on Clear</div>
-                            <div class="setting-item-description">Clear scrollback buffer when terminal is cleared</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <label class="modern-toggle">
-                                <input type="checkbox" disabled>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
+
                 <div class="setting-item">
                     <div class="setting-item-content">
                         <div class="setting-item-info">
@@ -1401,6 +1390,20 @@ export function createProfileFormTemplate(mode, type, data = null) {
                     <div class="ssh-key-path-container">
                         <input type="text" id="ssh-keypath" class="form-input" value="${data?.sshConfig?.keyPath || ''}" placeholder="/path/to/private/key">
                         <button type="button" class="modern-button secondary" id="browse-ssh-key"><img src="./icons/folder-open.svg" class="svg-icon" alt="📂"> Browse</button>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Auto-discover SSH keys</div>
+                            <div class="setting-item-description">Automatically scan ~/.ssh directory for private keys when connecting</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <label class="modern-toggle">
+                                <input type="checkbox" id="ssh-auto-discover" ${data?.sshConfig?.allowKeyAutoDiscovery ? 'checked' : ''}>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
                     </div>
                 </div>
             </div>

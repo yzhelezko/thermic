@@ -435,36 +435,88 @@ export class TabsManager {
             // This ensures the terminal can receive error messages immediately during connection
             this.terminalManager.connectToSession(tab.sessionId);
             
-            // Get current terminal dimensions for SSH sessions
+            // Get current terminal dimensions with better sizing for SSH sessions
             let cols = 80, rows = 24; // default fallback
             
             const terminalSession = this.terminalManager.terminals.get(tab.sessionId);
             if (terminalSession && terminalSession.terminal) {
-                // Ensure terminal is fitted before getting dimensions
-                if (terminalSession.fitAddon) {
-                    terminalSession.fitAddon.fit();
+                // For SSH connections, ensure proper fitting and wait for layout
+                if (tab.connectionType === 'ssh') {
+                    // Force multiple fits to ensure accurate sizing
+                    if (terminalSession.fitAddon) {
+                        terminalSession.fitAddon.fit();
+                        // Small delay to allow DOM layout to complete
+                        await new Promise(resolve => setTimeout(resolve, 50));
+                        terminalSession.fitAddon.fit();
+                        // Another small delay for final measurement
+                        await new Promise(resolve => setTimeout(resolve, 50));
+                    }
+                    
+                    // Get the most accurate dimensions possible
+                    const proposedDimensions = terminalSession.fitAddon ? 
+                        terminalSession.fitAddon.proposeDimensions() : null;
+                    
+                    if (proposedDimensions && proposedDimensions.cols > 0 && proposedDimensions.rows > 0) {
+                        cols = proposedDimensions.cols;
+                        rows = proposedDimensions.rows;
+                        console.log(`Using proposed dimensions for SSH: ${cols}x${rows}`);
+                    } else {
+                        cols = terminalSession.terminal.cols || 80;
+                        rows = terminalSession.terminal.rows || 24;
+                        console.log(`Using terminal dimensions for SSH: ${cols}x${rows}`);
+                    }
+                } else {
+                    // For local shells, simpler sizing
+                    if (terminalSession.fitAddon) {
+                        terminalSession.fitAddon.fit();
+                    }
+                    cols = terminalSession.terminal.cols || 80;
+                    rows = terminalSession.terminal.rows || 24;
                 }
-                
-                cols = terminalSession.terminal.cols || 80;
-                rows = terminalSession.terminal.rows || 24;
             }
+            
+            console.log(`Starting tab shell with dimensions: ${cols}x${rows} for ${tab.connectionType} connection`);
             
             // Start the backend shell process with terminal dimensions
             await StartTabShellWithSize(tabId, cols, rows);
             
-            // For SSH connections, send an additional resize to ensure proper synchronization
+            // For SSH connections, send multiple resize attempts to ensure proper synchronization
             if (tab.connectionType === 'ssh') {
+                // First attempt after initial connection
                 setTimeout(async () => {
                     if (terminalSession && terminalSession.terminal && terminalSession.isConnected) {
+                        // Force fit before getting dimensions
+                        if (terminalSession.fitAddon) {
+                            terminalSession.fitAddon.fit();
+                        }
                         const currentCols = terminalSession.terminal.cols;
                         const currentRows = terminalSession.terminal.rows;
+                        console.log(`SSH initial resize attempt: ${currentCols}x${currentRows}`);
                         try {
                             await ResizeShell(tab.sessionId, currentCols, currentRows);
                         } catch (error) {
-                            console.warn('Failed to sync SSH terminal size:', error);
+                            console.warn('Failed to sync SSH terminal size (attempt 1):', error);
                         }
                     }
                 }, 500); // Small delay to ensure SSH session is fully established
+                
+                // Second attempt with longer delay for stability
+                setTimeout(async () => {
+                    if (terminalSession && terminalSession.terminal && terminalSession.isConnected) {
+                        // Force fit again
+                        if (terminalSession.fitAddon) {
+                            terminalSession.fitAddon.fit();
+                        }
+                        const currentCols = terminalSession.terminal.cols;
+                        const currentRows = terminalSession.terminal.rows;
+                        console.log(`SSH secondary resize attempt: ${currentCols}x${currentRows}`);
+                        try {
+                            await ResizeShell(tab.sessionId, currentCols, currentRows);
+                        } catch (error) {
+                            console.warn('Failed to sync SSH terminal size (attempt 2):', error);
+                        }
+                    }
+                }, 1500); // Longer delay for more stable sync
             }
             
         } catch (error) {

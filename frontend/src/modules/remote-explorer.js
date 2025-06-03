@@ -1,5 +1,7 @@
 // Remote File Explorer module for SFTP file browsing
 import { updateStatus, showNotification } from './utils.js';
+import { modal } from '../components/Modal.js';
+import { LiveSearch } from '../components/LiveSearch.js';
 
 export class RemoteExplorerManager {
     constructor(tabsManager) {
@@ -18,17 +20,13 @@ export class RemoteExplorerManager {
         this.retryHandler = null;
         
         // Live search properties
-        this.searchQuery = '';
-        this.filteredFiles = [];
-        this.originalFiles = [];
-        this.searchTimeout = null;
+        this.liveSearch = null;
         
         // Monaco Editor theme observer
         this.themeObserver = null;
         
         // Bind methods to preserve 'this' context
         this.handleActiveTabChanged = this.handleActiveTabChanged.bind(this);
-        this.handleFileSearch = this.handleFileSearch.bind(this);
     }
 
     init() {
@@ -116,11 +114,16 @@ export class RemoteExplorerManager {
             if (e.target.closest('.file-item')) {
                 const fileItem = e.target.closest('.file-item');
                 
-                // Extract file data from the DOM element
+                // Select the file item before showing context menu (standard UX pattern)
+                this.selectFileItem(fileItem);
+                
+                // Extract file data from the DOM element and convert to new format
+                const isDir = fileItem.dataset.isDir === 'true';
                 const fileData = {
                     name: fileItem.dataset.name,
                     path: fileItem.dataset.path,
-                    isDir: fileItem.dataset.isDir === 'true',
+                    type: isDir ? 'directory' : 'file',
+                    isDir: isDir, // Keep for backward compatibility
                     isParent: fileItem.dataset.isParent === 'true'
                 };
                 
@@ -229,15 +232,14 @@ export class RemoteExplorerManager {
 
             // Escape - Clear search if active
             if (e.key === 'Escape') {
-                if (this.searchQuery) {
+                if (this.liveSearch && this.liveSearch.isActive()) {
                     e.preventDefault();
-                    this.clearFileSearch();
+                    this.liveSearch.clearSearch();
                 }
                 return;
             }
 
-            // Live search - Handle typing for file filtering
-            this.handleFileSearch(e);
+            // Live search is handled by the LiveSearch component automatically
         });
 
         // Set up toolbar event listeners when the UI is rendered
@@ -251,7 +253,8 @@ export class RemoteExplorerManager {
         if (uploadBtn) {
             uploadBtn.removeEventListener('click', this.handleUploadClick); // Remove any existing listener
             this.handleUploadClick = async () => {
-                await this.handleFileUpload();
+                // Use the same upload mechanism as "Upload Files Here" context menu
+                await this.uploadToDirectory(this.currentRemotePath);
             };
             uploadBtn.addEventListener('click', this.handleUploadClick);
         }
@@ -336,6 +339,9 @@ export class RemoteExplorerManager {
         
         this.isActivePanel = true;
         console.log('🔵 isActivePanel set to:', this.isActivePanel);
+        
+        // Enable live search for files
+        this.initializeLiveSearch();
 
         // Get current active tab
         const activeTab = this.tabsManager.getActiveTab();
@@ -443,6 +449,11 @@ export class RemoteExplorerManager {
         console.log('🔵 Current path before hiding:', this.currentRemotePath);
         
         this.isActivePanel = false;
+        
+        // Disable live search
+        if (this.liveSearch) {
+            this.liveSearch.disable();
+        }
 
         // Move current session to background instead of disconnecting
         if (this.currentSessionID) {
@@ -464,7 +475,9 @@ export class RemoteExplorerManager {
         }
 
         // Clear any search state
-        this.clearFileSearch();
+        if (this.liveSearch) {
+            this.liveSearch.clearSearch();
+        }
         
         // Clear any UI classes that might interfere with other views
         const sidebarContent = document.getElementById('sidebar-content');
@@ -601,13 +614,23 @@ export class RemoteExplorerManager {
         
         if (!this.currentSessionID) {
             console.error('📂 No current session ID');
+            this.showErrorState('No active SSH session');
             return;
         }
 
+        // Validate and normalize the remote path
+        if (!remotePath || remotePath === 'undefined' || remotePath === 'null') {
+            console.error('📂 Invalid remote path provided:', remotePath);
+            console.log('📂 Falling back to current working directory');
+            remotePath = '.';
+        }
+        
+        // Ensure remotePath is a string
+        remotePath = String(remotePath).trim();
+        
         if (!remotePath) {
-            console.error('📂 No remote path provided');
-            this.showErrorState('Invalid path: undefined');
-            return;
+            console.error('📂 Empty remote path after trimming');
+            remotePath = '.';
         }
 
         try {
@@ -661,7 +684,35 @@ export class RemoteExplorerManager {
             }
 
             console.log('🌐 Loading fresh content for path:', remotePath);
-            const files = await window.go.main.App.ListRemoteFiles(this.currentSessionID, remotePath);
+            
+            // Add more detailed error handling for the API call
+            let files;
+            try {
+                files = await window.go.main.App.ListRemoteFiles(this.currentSessionID, remotePath);
+                console.log('🌐 API call successful, received files:', files);
+            } catch (apiError) {
+                console.error('🌐 API call failed:', apiError);
+                
+                // Check if the error is due to invalid path and try fallback
+                if (apiError.message && apiError.message.includes('failed to read directory')) {
+                    console.log('🌐 Directory read failed, trying to fallback to working directory');
+                    if (remotePath !== '.') {
+                        // Try fallback to current working directory
+                        try {
+                            files = await window.go.main.App.ListRemoteFiles(this.currentSessionID, '.');
+                            remotePath = '.'; // Update path to reflect the fallback
+                            console.log('🌐 Fallback successful');
+                        } catch (fallbackError) {
+                            console.error('🌐 Fallback also failed:', fallbackError);
+                            throw apiError; // Throw original error
+                        }
+                    } else {
+                        throw apiError; // Already at working directory, can't fallback further
+                    }
+                } else {
+                    throw apiError; // Re-throw other types of errors
+                }
+            }
             
             // Handle null/undefined response as empty directory
             let fileList = files;
@@ -675,11 +726,13 @@ export class RemoteExplorerManager {
             }
             
             console.log('🌐 Received files:', fileList.length);
+            console.log('🌐 Sample file data:', fileList.length > 0 ? fileList[0] : 'none');
             
             // Add parent directory entry if not at absolute root
             const processedFiles = [...fileList];
             if (remotePath !== '/') {
                 const parentPath = this.getParentPath(remotePath);
+                console.log('🌐 Adding parent directory with path:', parentPath);
                 processedFiles.unshift({
                     name: '..',
                     path: parentPath,
@@ -711,6 +764,12 @@ export class RemoteExplorerManager {
 
         } catch (error) {
             console.error('Failed to load directory:', error);
+            console.error('Error details:', {
+                message: error.message,
+                stack: error.stack,
+                remotePath,
+                sessionID: this.currentSessionID
+            });
             this.showErrorState(`Failed to load directory: ${error.message}`);
         }
     }
@@ -812,9 +871,86 @@ export class RemoteExplorerManager {
         });
     }
 
+    initializeLiveSearch() {
+        if (this.liveSearch) {
+            this.liveSearch.destroy();
+        }
+        
+        this.liveSearch = new LiveSearch({
+            containerSelector: '.remote-files-container',
+            itemSelector: '.file-item',
+            searchIndicatorClass: 'file-search-indicator',
+            clearManagerCallback: () => {
+                this.restoreAllFileItems();
+                this.liveSearch.clearSearch();
+            },
+            getItemData: (item) => {
+                return {
+                    name: item.dataset.name || '',
+                    path: item.dataset.path || '',
+                    text: item.textContent || '',
+                    isParent: item.dataset.isParent === 'true'
+                };
+            },
+            onSearch: (query) => {
+                if (query.trim() === '') {
+                    this.restoreAllFileItems();
+                } else {
+                    this.performFileSearch(query);
+                }
+            }
+        });
+        
+        this.liveSearch.enable();
+    }
+
+    performFileSearch(query) {
+        const container = document.querySelector('.remote-files-container');
+        if (!container) return;
+        
+        const fileItems = document.querySelectorAll('.file-item');
+        let matchCount = 0;
+        
+        fileItems.forEach(item => {
+            const itemData = {
+                name: item.dataset.name || '',
+                path: item.dataset.path || '',
+                text: item.textContent || '',
+                isParent: item.dataset.isParent === 'true'
+            };
+            
+            // Always show parent directory (..)
+            const matches = itemData.isParent || 
+                           itemData.name.toLowerCase().includes(query.toLowerCase()) ||
+                           itemData.path.toLowerCase().includes(query.toLowerCase());
+            
+            if (matches) {
+                item.style.display = '';
+                if (!itemData.isParent) matchCount++;
+            } else {
+                item.style.display = 'none';
+            }
+        });
+        
+        this.liveSearch.updateSearchResults(matchCount);
+    }
+
+    restoreAllFileItems() {
+        const fileItems = document.querySelectorAll('.file-item');
+        fileItems.forEach(item => {
+            item.style.display = '';
+        });
+        
+        if (this.liveSearch) {
+            this.liveSearch.updateSearchResults(0); // Clear search results counter
+        }
+    }
+
     renderFileList(files) {
         // Clear any active search when showing new files
-        this.clearFileSearch();
+        if (this.liveSearch) {
+            this.liveSearch.clearSearch();
+        }
         
         const container = this.getFileListContainer();
         if (!container) return;
@@ -898,7 +1034,7 @@ export class RemoteExplorerManager {
         return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
     }
 
-    handleFileItemClick(fileItem, event) {
+    selectFileItem(fileItem) {
         // Clear previous selections
         document.querySelectorAll('.file-item.selected').forEach(item => {
             item.classList.remove('selected');
@@ -917,14 +1053,36 @@ export class RemoteExplorerManager {
         }
     }
 
+    handleFileItemClick(fileItem, event) {
+        this.selectFileItem(fileItem);
+    }
+
     handleFileItemDoubleClick(fileItem) {
+        console.log('🖱️ Double-click detected on file item');
+        
         const isDir = fileItem.dataset.isDir === 'true';
         const path = fileItem.dataset.path;
         const isParent = fileItem.dataset.isParent === 'true';
         const fileName = fileItem.dataset.name;
 
+        console.log('🖱️ File item data:', {
+            isDir,
+            path,
+            isParent,
+            fileName
+        });
+
+        // Validate path before proceeding
+        if (!path || path === 'undefined' || path === 'null') {
+            console.error('🖱️ Invalid path detected in file item:', path);
+            console.error('🖱️ File item element:', fileItem);
+            updateStatus('Error: Invalid file path');
+            return;
+        }
+
         if (isDir) {
             // Navigate to directory (works for both regular directories and parent directory)
+            console.log('🖱️ Navigating to directory:', path);
             this.navigateToPath(path);
             
             if (isParent) {
@@ -942,11 +1100,32 @@ export class RemoteExplorerManager {
         } else {
             // For files, show file preview on double-click
             console.log('📄 Double-click on file, showing preview:', fileName);
+            console.log('📄 File path:', path);
             this.showFilePreview(path, fileName);
         }
     }
 
     async navigateToPath(path) {
+        console.log('🧭 navigateToPath called with:', path);
+        console.log('🧭 Current path:', this.currentRemotePath);
+        
+        // Validate the path parameter
+        if (!path || path === 'undefined' || path === 'null') {
+            console.error('🧭 Invalid path provided to navigateToPath:', path);
+            console.log('🧭 Staying at current path:', this.currentRemotePath);
+            return;
+        }
+        
+        // Ensure path is a string
+        path = String(path).trim();
+        
+        if (!path) {
+            console.error('🧭 Empty path after trimming');
+            return;
+        }
+        
+        console.log('🧭 Normalized path:', path);
+        
         if (path !== this.currentRemotePath) {
             // Clear cache when navigating to force refresh
             const cacheKey = `${this.currentSessionID}:${path}`;
@@ -955,8 +1134,10 @@ export class RemoteExplorerManager {
             const pathDescription = path === '/' ? 'root (/)' : 
                                    path === '.' ? 'home' : 
                                    `"${path}"`;
-            console.log(`Navigating from ${this.currentRemotePath} to ${pathDescription}`);
+            console.log(`🧭 Navigating from ${this.currentRemotePath} to ${pathDescription}`);
             await this.loadDirectoryContent(path);
+        } else {
+            console.log('🧭 Already at target path, no navigation needed');
         }
     }
 
@@ -1109,8 +1290,71 @@ export class RemoteExplorerManager {
     }
 
     showUploadDialog() {
-        // TODO: Implement file upload dialog
-        showNotification('File upload coming soon', 'info');
+        console.log('📤 Showing upload dialog');
+        
+        if (!this.currentSessionID) {
+            showNotification('No active SSH session', 'error');
+            return;
+        }
+
+        // Use the existing modal component for file upload
+        if (window.modal) {
+            window.modal.show({
+                title: 'Upload Files',
+                message: `Upload files to: ${this.currentRemotePath}`,
+                icon: '📤',
+                content: `
+                    <div style="margin-top: 16px;">
+                        <label for="file-upload" style="display: block; margin-bottom: 12px; color: var(--text-primary); font-size: 13px; font-weight: 500;">
+                            Select files to upload:
+                        </label>
+                        <input type="file" id="file-upload" multiple
+                               style="width: 100%; padding: 8px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-color); 
+                                      border-radius: 4px; color: var(--text-primary); font-size: 13px; transition: border-color 0.15s ease;"
+                               onfocus="this.style.borderColor = 'var(--accent-color)'"
+                               onblur="this.style.borderColor = 'var(--border-color)'">
+                        <div id="upload-file-list" style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);">
+                            No files selected
+                        </div>
+                    </div>
+                `,
+                buttons: [
+                    { text: 'Cancel', style: 'secondary', action: 'cancel' },
+                    { 
+                        text: 'Upload', 
+                        style: 'primary', 
+                        action: 'confirm',
+                        handler: () => {
+                            const input = document.getElementById('file-upload');
+                            const files = input?.files;
+                            if (files && files.length > 0) {
+                                this.handleWebFileUpload(files);
+                            } else {
+                                showNotification('Please select files to upload', 'error');
+                                return false; // Prevent modal from closing
+                            }
+                        }
+                    }
+                ]
+            }).then(result => {
+                // Set up file input change handler after modal opens
+                setTimeout(() => {
+                    const input = document.getElementById('file-upload');
+                    const fileList = document.getElementById('upload-file-list');
+                    if (input && fileList) {
+                        input.addEventListener('change', (e) => {
+                            const files = e.target.files;
+                            if (files && files.length > 0) {
+                                const fileNames = Array.from(files).map(f => f.name).join(', ');
+                                fileList.textContent = `${files.length} file(s) selected: ${fileNames}`;
+                            } else {
+                                fileList.textContent = 'No files selected';
+                            }
+                        });
+                    }
+                }, 100);
+            });
+        }
     }
 
     showNewFolderDialog() {
@@ -1340,6 +1584,12 @@ export class RemoteExplorerManager {
             this.backgroundRemotePath = null;
         }
         
+        // Cleanup live search
+        if (this.liveSearch) {
+            this.liveSearch.destroy();
+            this.liveSearch = null;
+        }
+        
         this.currentRemotePath = null;
         this.fileCache.clear();
         this.clearView();
@@ -1388,7 +1638,15 @@ export class RemoteExplorerManager {
             
         } catch (error) {
             console.error('Failed to create folder:', error);
-            showNotification(`Failed to create folder: ${error.message}`, 'error');
+            let errorMessage = 'Unknown error';
+            if (error.message) {
+                errorMessage = error.message;
+            } else if (typeof error === 'string') {
+                errorMessage = error;
+            } else if (error.toString && error.toString() !== '[object Object]') {
+                errorMessage = error.toString();
+            }
+            showNotification(`Failed to create folder: ${errorMessage}`, 'error');
         }
     }
 
@@ -1479,7 +1737,7 @@ export class RemoteExplorerManager {
         }
 
         try {
-            console.log('⬇️ Starting download:', filePath);
+            console.log('⬇️ Starting download:', filePath, `(${isDir ? 'directory' : 'file'})`);
             
             // Use Wails runtime to show save dialog
             if (window.go?.main?.App?.SelectSaveLocation) {
@@ -1488,12 +1746,18 @@ export class RemoteExplorerManager {
                     return; // User cancelled
                 }
                 
-                showNotification(`Downloading "${fileName}"...`, 'info');
-                
-                // Call backend download method
-                await window.go.main.App.DownloadRemoteFile(this.currentSessionID, filePath, localPath);
-                
                 const itemType = isDir ? 'folder' : 'file';
+                showNotification(`Downloading ${itemType} "${fileName}"...`, 'info');
+                
+                // Call appropriate backend download method based on type
+                if (isDir) {
+                    // Use the new directory download method for folders
+                    await window.go.main.App.DownloadRemoteDirectory(this.currentSessionID, filePath, localPath);
+                } else {
+                    // Use regular file download for individual files
+                    await window.go.main.App.DownloadRemoteFile(this.currentSessionID, filePath, localPath);
+                }
+                
                 showNotification(`${itemType} "${fileName}" downloaded successfully`, 'success');
                 
             } else {
@@ -1548,6 +1812,49 @@ export class RemoteExplorerManager {
         showNotification('Folder upload coming soon', 'info');
     }
 
+    async handleWebFileUpload(files) {
+        if (!this.currentSessionID) {
+            showNotification('No active session', 'error');
+            return;
+        }
+
+        try {
+            console.log('⬆️ Starting web file upload of', files.length, 'files');
+            
+            // Show progress notification
+            showNotification(`Uploading ${files.length} file(s)...`, 'info');
+            
+            // Convert FileList to array and process each file
+            const fileArray = Array.from(files);
+            
+            for (const file of fileArray) {
+                console.log('⬆️ Uploading file:', file.name);
+                
+                // Read file content as ArrayBuffer
+                const arrayBuffer = await file.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+                
+                // Convert to base64 for transmission
+                const base64Content = btoa(String.fromCharCode(...uint8Array));
+                
+                // Calculate remote path
+                const remotePath = `${this.currentRemotePath}/${file.name}`;
+                
+                // Upload via backend API that accepts base64 content
+                await window.go.main.App.UploadFileContent(this.currentSessionID, remotePath, base64Content);
+            }
+            
+            showNotification(`${files.length} file(s) uploaded successfully`, 'success');
+            
+            // Refresh the current directory to show uploaded files
+            await this.refreshCurrentDirectory();
+            
+        } catch (error) {
+            console.error('Failed to upload files:', error);
+            showNotification(`Failed to upload: ${error.message}`, 'error');
+        }
+    }
+
     // File preview and editing methods
     async showFilePreview(filePath, fileName) {
         console.log('👁️ Showing file preview for:', fileName);
@@ -1596,7 +1903,23 @@ export class RemoteExplorerManager {
         
         try {
             // Download file content for preview
-            const content = await window.go.main.App.GetRemoteFileContent(this.currentSessionID, filePath);
+            let content = await window.go.main.App.GetRemoteFileContent(this.currentSessionID, filePath);
+            
+            // Check if we received base64 content for a file that should be text
+            const fileExtension = fileName.split('.').pop().toLowerCase();
+            const shouldBeText = this.isTextFile(fileExtension);
+            
+            if (shouldBeText && this.isBase64String(content)) {
+                console.log(`⚠️ Received base64 content for text file ${fileName}, attempting to decode...`);
+                try {
+                    // Decode base64 to get the actual text content
+                    content = atob(content);
+                    console.log(`✅ Successfully decoded base64 content for ${fileName}`);
+                } catch (decodeError) {
+                    console.warn(`❌ Failed to decode base64 content for ${fileName}:`, decodeError);
+                    // Keep original base64 content as fallback
+                }
+            }
             
             // Track file in history
             await this.addToFileHistory(filePath, fileName);
@@ -2220,6 +2543,101 @@ export class RemoteExplorerManager {
         }
     }
 
+    showFileProperties(filePath, fileName) {
+        console.log('📄 Showing file properties for:', fileName);
+        
+        if (!this.currentSessionID) {
+            showNotification('No active session', 'error');
+            return;
+        }
+
+        // Get file extension for additional info
+        const extension = fileName.toLowerCase().split('.').pop();
+        const isTextFile = this.isTextFile(extension);
+        const isImageFile = this.isImageFile(extension);
+
+        // Use the existing modal component for file properties
+        if (window.modal) {
+            window.modal.show({
+                title: 'File Properties',
+                message: `Properties for: ${fileName}`,
+                icon: '📄',
+                content: `
+                    <div style="margin-top: 16px;">
+                        <div class="property-row">
+                            <label class="property-label">Name:</label>
+                            <span class="property-value">${fileName}</span>
+                        </div>
+                        <div class="property-row">
+                            <label class="property-label">Path:</label>
+                            <span class="property-value">${filePath}</span>
+                        </div>
+                        <div class="property-row">
+                            <label class="property-label">Type:</label>
+                            <span class="property-value">File</span>
+                        </div>
+                        <div class="property-row">
+                            <label class="property-label">Extension:</label>
+                            <span class="property-value">${extension || 'No extension'}</span>
+                        </div>
+                        <div class="property-row">
+                            <label class="property-label">File Type:</label>
+                            <span class="property-value">${isTextFile ? 'Text File' : isImageFile ? 'Image File' : 'Binary File'}</span>
+                        </div>
+                        <div class="property-row">
+                            <label class="property-label">Remote Server:</label>
+                            <span class="property-value">SSH Connection (Session: ${this.currentSessionID})</span>
+                        </div>
+                        <div class="property-actions" style="margin-top: 20px; display: flex; gap: 8px;">
+                            <button class="btn btn-secondary" onclick="navigator.clipboard.writeText('${filePath}'); showNotification('Path copied to clipboard', 'success');">
+                                Copy Path
+                            </button>
+                            ${isTextFile ? `<button class="btn btn-primary" onclick="window.remoteExplorerManager.showFilePreview('${filePath}', '${fileName}'); window.modal.hide();">
+                                Preview File
+                            </button>` : ''}
+                            <button class="btn btn-secondary" onclick="window.remoteExplorerManager.downloadFile('${filePath}', '${fileName}', false); window.modal.hide();">
+                                Download
+                            </button>
+                        </div>
+                    </div>
+                    <style>
+                        .property-row {
+                            display: flex;
+                            margin-bottom: 12px;
+                            align-items: center;
+                        }
+                        .property-label {
+                            font-weight: 600;
+                            color: var(--text-primary);
+                            min-width: 120px;
+                            font-size: 13px;
+                        }
+                        .property-value {
+                            color: var(--text-secondary);
+                            font-family: monospace;
+                            font-size: 12px;
+                            background: var(--bg-secondary);
+                            padding: 4px 8px;
+                            border-radius: 4px;
+                            border: 1px solid var(--border-color);
+                            flex: 1;
+                        }
+                        .property-actions .btn {
+                            font-size: 12px;
+                            padding: 6px 12px;
+                        }
+                    </style>
+                `,
+                buttons: [
+                    { text: 'Close', style: 'secondary', action: 'cancel' }
+                ]
+            });
+        } else {
+            // Fallback if modal is not available
+            showNotification(`File: ${filePath}`, 'info');
+        }
+    }
+
     setupImageViewerControls() {
         const zoomFitBtn = document.getElementById('zoom-fit-btn');
         const zoomActualBtn = document.getElementById('zoom-actual-btn');
@@ -2315,6 +2733,39 @@ export class RemoteExplorerManager {
         ];
         
         return configPatterns.some(pattern => lowercaseName.includes(pattern));
+    }
+
+    // Helper method to detect if a string is base64 encoded
+    isBase64String(str) {
+        // Basic checks for base64 content
+        if (!str || typeof str !== 'string') {
+            return false;
+        }
+        
+        // Base64 strings should only contain valid base64 characters
+        const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+        if (!base64Regex.test(str)) {
+            return false;
+        }
+        
+        // Base64 strings should be divisible by 4 (with padding)
+        if (str.length % 4 !== 0) {
+            return false;
+        }
+        
+        // Additional check: base64 strings usually don't contain normal text patterns
+        // If it looks like normal text, it's probably not base64
+        const hasNormalTextPattern = /\s+/.test(str) || // Contains whitespace
+                                   /[a-z]{3,}/.test(str.toLowerCase()) || // Contains lowercase words
+                                   str.includes('\n') || str.includes('\r'); // Contains line breaks
+        
+        if (hasNormalTextPattern && str.length < 200) {
+            return false; // Short strings with text patterns are likely not base64
+        }
+        
+        // For longer strings or strings without obvious text patterns, 
+        // they might be base64
+        return str.length > 50; // Only consider as base64 if reasonably long
     }
 
     // File History Management Methods
@@ -2788,10 +3239,13 @@ export class RemoteExplorerManager {
     async clearFileHistoryAndRefresh() {
         console.log('🧹 Clear history button clicked');
         
-        if (confirm('Are you sure you want to clear all file history?')) {
-            console.log('🧹 User confirmed, clearing history...');
+        try {
+            // Use Modal.js for confirmation
+            const result = await modal.confirmDelete('all file history', 'file history');
             
-            try {
+            if (result === 'confirm') {
+                console.log('🧹 User confirmed, clearing history...');
+                
                 await this.clearFileHistory();
                 console.log('🧹 History cleared, refreshing view...');
                 
@@ -2801,12 +3255,13 @@ export class RemoteExplorerManager {
                 await this.updateHistoryButtonCount(); // Update the count badge
                 console.log('🧹 Count updated, done!');
                 
-            } catch (error) {
-                console.error('🧹 Error during clear and refresh:', error);
-                showNotification('Failed to clear history', 'error');
+                showNotification('File history cleared', 'success');
+            } else {
+                console.log('🧹 User cancelled clear operation');
             }
-        } else {
-            console.log('🧹 User cancelled clear operation');
+        } catch (error) {
+            console.error('🧹 Error during clear and refresh:', error);
+            showNotification('Failed to clear history', 'error');
         }
     }
 
@@ -2895,165 +3350,14 @@ export class RemoteExplorerManager {
         }
     }
 
-    // Live Search Methods
-    handleFileSearch(e) {
-        // Don't trigger search on special keys or when modifiers are pressed
-        if (e.ctrlKey || e.metaKey || e.altKey) return;
-        
-        // Ignore function keys, arrows, and other special keys
-        const ignoredKeys = [
-            'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12',
-            'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-            'Home', 'End', 'PageUp', 'PageDown',
-            'Insert', 'Delete', 'Tab', 'Enter', 'Escape',
-            'CapsLock', 'Shift', 'Control', 'Alt', 'Meta'
-        ];
-        
-        if (ignoredKeys.includes(e.key)) return;
-        
-        // Check if a file preview is open - don't trigger search then
-        const filePreviewOpen = document.getElementById('file-preview-overlay');
-        if (filePreviewOpen && filePreviewOpen.classList.contains('active')) {
-            return;
-        }
-        
-        // Check if an input field is currently focused - don't trigger search then
-        const activeElement = document.activeElement;
-        if (activeElement && (
-            activeElement.tagName === 'INPUT' || 
-            activeElement.tagName === 'TEXTAREA' ||
-            activeElement.contentEditable === 'true' ||
-            activeElement.closest('.modal-overlay') || // Any modal is open
-            activeElement.closest('.profile-panel') // Profile panel is open
-        )) {
-            return;
-        }
-        
-        // Handle backspace
-        if (e.key === 'Backspace') {
-            if (this.searchQuery.length > 0) {
-                e.preventDefault();
-                this.searchQuery = this.searchQuery.slice(0, -1);
-                this.performFileSearch();
-            }
-            return;
-        }
-        
-        // Handle regular typing
-        if (e.key.length === 1) {
-            e.preventDefault();
-            this.searchQuery += e.key.toLowerCase();
-            this.performFileSearch();
-        }
-    }
-
-    performFileSearch() {
-        console.log('🔍 Searching files for:', this.searchQuery);
-        
-        // Clear previous timeout
-        if (this.searchTimeout) {
-            clearTimeout(this.searchTimeout);
-        }
-        
-        // Debounce search
-        this.searchTimeout = setTimeout(() => {
-            if (!this.searchQuery) {
-                this.clearFileSearch();
-                return;
-            }
-            
-            // Get current files
-            const fileItems = document.querySelectorAll('.file-item');
-            const files = Array.from(fileItems).map(item => ({
-                element: item,
-                name: item.dataset.name || '',
-                isParent: item.dataset.isParent === 'true'
-            }));
-            
-            // Show search UI
-            this.showSearchUI();
-            
-            // Filter files
-            let matchCount = 0;
-            files.forEach(file => {
-                const matches = file.isParent || file.name.toLowerCase().includes(this.searchQuery);
-                
-                if (matches) {
-                    file.element.style.display = '';
-                    if (!file.isParent) matchCount++;
-                } else {
-                    file.element.style.display = 'none';
-                }
-            });
-            
-            // Update search results count
-            this.updateSearchResults(matchCount);
-            
-        }, 100); // 100ms debounce
-    }
-
-    showSearchUI() {
-        // Create or update search indicator
-        let searchIndicator = document.querySelector('.file-search-indicator');
-        if (!searchIndicator) {
-            const container = document.querySelector('.remote-files-container');
-            if (container) {
-                searchIndicator = document.createElement('div');
-                searchIndicator.className = 'file-search-indicator';
-                container.insertBefore(searchIndicator, container.firstChild);
-            }
-        }
-        
-        if (searchIndicator) {
-            searchIndicator.innerHTML = `
-                <div class="search-info">
-                    <span class="search-icon">🔍</span>
-                    <span class="search-query">${this.searchQuery}</span>
-                    <span class="search-results" id="search-results-count">Searching...</span>
-                    <button class="search-clear" onclick="window.remoteExplorerManager.clearFileSearch()">×</button>
-                </div>
-            `;
-            searchIndicator.style.display = 'block';
-        }
-    }
-
-    updateSearchResults(count) {
-        const resultsElement = document.getElementById('search-results-count');
-        if (resultsElement) {
-            const text = count === 0 ? 'No matches' : 
-                         count === 1 ? '1 match' : 
-                         `${count} matches`;
-            resultsElement.textContent = text;
-        }
-    }
-
-    clearFileSearch() {
-        console.log('🔍 Clearing file search');
-        
-        this.searchQuery = '';
-        
-        // Clear timeout
-        if (this.searchTimeout) {
-            clearTimeout(this.searchTimeout);
-            this.searchTimeout = null;
-        }
-        
-        // Show all files
-        const fileItems = document.querySelectorAll('.file-item');
-        fileItems.forEach(item => {
-            item.style.display = '';
-        });
-        
-        // Hide search UI
-        const searchIndicator = document.querySelector('.file-search-indicator');
-        if (searchIndicator) {
-            searchIndicator.style.display = 'none';
-        }
-    }
+    // Live Search Methods (now handled by LiveSearch component)
+    // Methods moved to LiveSearch utility class for reusability
 
     updateFileList(files, path = null) {
         // Clear any active search when showing new directory
-        this.clearFileSearch();
+        if (this.liveSearch) {
+            this.liveSearch.clearSearch();
+        }
         
         const container = document.querySelector('.remote-files-container');
         if (!container) {

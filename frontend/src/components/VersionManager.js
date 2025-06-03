@@ -2,6 +2,10 @@
  * Version Manager Component
  * Handles version display, update checking, and inline upgrade functionality in the status bar
  */
+
+// Import Wails bindings properly
+import { GetVersionInfo, CheckForUpdates, DownloadAndInstallUpdate } from '../../wailsjs/go/main/App';
+
 class VersionManager {
     constructor() {
         // State management
@@ -28,7 +32,7 @@ class VersionManager {
     async loadVersionInfo() {
         try {
             console.log('Loading version info...');
-            this.versionInfo = await window.go.main.App.GetVersionInfo();
+            this.versionInfo = await GetVersionInfo();
             console.log('Version info loaded:', this.versionInfo);
             this.updateStatusBarVersion();
         } catch (error) {
@@ -197,30 +201,25 @@ Platform: ${this.versionInfo.platform}/${this.versionInfo.arch}
         this.showProgressState();
         
         try {
-            await window.go.main.App.DownloadAndInstallUpdate(this.updateInfo.downloadUrl);
+            await DownloadAndInstallUpdate(this.updateInfo.downloadUrl);
+            
+            // Show restarting state
             this.showRestartingState();
             
-            // Restart after brief delay
-            setTimeout(async () => {
-                try {
-                    await window.go.main.App.RestartApplication();
-                } catch (error) {
-                    console.error('Failed to restart application:', error);
-                    this.versionContainer.innerHTML = `
-                        <span class="version-error" title="Restart failed. Please restart manually.">Update complete - Restart manually</span>
-                    `;
+            // The application should restart automatically after download
+            // If it doesn't restart within 10 seconds, show error
+            setTimeout(() => {
+                if (this.isDownloading) {
+                    console.error('Application did not restart after update');
+                    this.isDownloading = false;
+                    this.updateStatusBarVersion();
                 }
-            }, 2000);
+            }, 10000);
             
         } catch (error) {
-            console.error('Failed to download/install update:', error);
+            console.error('Failed to download and install update:', error);
             this.isDownloading = false;
-            this.versionContainer.innerHTML = `
-                <span class="version-error" title="Update failed: ${error}">Update failed</span>
-            `;
-            
-            // Return to normal state after delay
-            setTimeout(() => this.showNormalState(), 3000);
+            this.updateStatusBarVersion();
         }
     }
 
@@ -229,31 +228,31 @@ Platform: ${this.versionInfo.platform}/${this.versionInfo.arch}
     // =========================================================================
 
     triggerStartupUpdateCheck() {
-        setTimeout(() => this.checkForUpdatesInBackground(), 2000);
+        // Check for updates 5 seconds after startup
+        setTimeout(() => this.checkForUpdatesInBackground(), 5000);
     }
 
     startAutomaticUpdateChecking() {
-        // Set up periodic checking every hour
+        // Check for updates every 6 hours
         this.updateCheckInterval = setInterval(() => {
             this.checkForUpdatesInBackground();
-        }, 60 * 60 * 1000);
+        }, 6 * 60 * 60 * 1000);
     }
 
     async checkForUpdatesInBackground() {
-        if (this.isCheckingUpdate) return;
+        if (this.isCheckingUpdate || this.isDownloading) return;
         
         this.isCheckingUpdate = true;
         
         try {
             console.log('Checking for updates in background...');
-            this.updateInfo = await window.go.main.App.CheckForUpdates();
-            console.log('Background update check result:', this.updateInfo);
+            this.updateInfo = await CheckForUpdates();
             
             if (this.updateInfo && this.updateInfo.available) {
-                console.log(`Background update found: ${this.updateInfo.latestVersion}`);
+                console.log('Update available:', this.updateInfo);
                 this.updateStatusBarVersion();
             } else {
-                console.log('Background check: No updates available');
+                console.log('No updates available');
             }
         } catch (error) {
             console.error('Background update check failed:', error);
@@ -263,37 +262,33 @@ Platform: ${this.versionInfo.platform}/${this.versionInfo.arch}
     }
 
     async checkForUpdatesManually() {
-        if (this.isCheckingUpdate) return;
-        
-        console.log('Manually checking for updates...');
-        
-        // Show checking state
-        this.versionContainer.innerHTML = `
-            <span class="version-checking" title="Checking for updates...">Checking...</span>
-        `;
+        if (this.isCheckingUpdate || this.isDownloading) return;
         
         this.isCheckingUpdate = true;
         
+        // Show checking state temporarily
+        const originalText = this.versionContainer.innerHTML;
+        this.versionContainer.innerHTML = '<span class="version-checking">Checking...</span>';
+        
         try {
-            this.updateInfo = await window.go.main.App.CheckForUpdates();
-            console.log('Manual update check result:', this.updateInfo);
+            console.log('Manually checking for updates...');
+            this.updateInfo = await CheckForUpdates();
             
             if (this.updateInfo && this.updateInfo.available) {
-                console.log(`Update found: ${this.updateInfo.latestVersion}`);
-                this.showUpgradeAvailableState();
+                console.log('Update available:', this.updateInfo);
+                this.updateStatusBarVersion();
             } else {
                 console.log('No updates available');
-                this.versionContainer.innerHTML = `
-                    <span class="version-no-update" title="You have the latest version">Up to date</span>
-                `;
-                setTimeout(() => this.showNormalState(), 2000);
+                // Show "Up to date" message briefly
+                this.versionContainer.innerHTML = '<span class="version-up-to-date">Up to date</span>';
+                setTimeout(() => {
+                    this.updateStatusBarVersion();
+                }, 2000);
             }
         } catch (error) {
             console.error('Manual update check failed:', error);
-            this.versionContainer.innerHTML = `
-                <span class="version-error" title="Failed to check for updates">Check failed</span>
-            `;
-            setTimeout(() => this.showNormalState(), 2000);
+            // Restore original state on error
+            this.versionContainer.innerHTML = originalText;
         } finally {
             this.isCheckingUpdate = false;
         }
@@ -311,7 +306,5 @@ Platform: ${this.versionInfo.platform}/${this.versionInfo.arch}
     }
 }
 
-// Create global instance
-window.versionManager = new VersionManager();
-
+// Export for use in other modules
 export default VersionManager; 

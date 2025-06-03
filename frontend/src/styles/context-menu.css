@@ -13,12 +13,14 @@
     transform: scale(0.95);
     transition: all 0.15s ease;
     padding: 4px 0;
+    display: none; /* Hide completely when inactive */
 }
 
 .context-menu.active {
     opacity: 1;
     visibility: visible;
     transform: scale(1);
+    display: block; /* Show when active */
 }
 
 .context-menu-item {
@@ -75,6 +77,22 @@
     align-items: center;
     justify-content: center;
     font-size: 12px;
+}
+
+.context-menu-item-icon .context-menu-svg-icon {
+    width: 14px;
+    height: 14px;
+    display: inline-block;
+}
+
+.context-menu-item-icon .emoji-fallback {
+    font-size: 14px;
+    line-height: 1;
+    display: inline-block;
+}
+
+.context-menu-item-text {
+    flex: 1;
 }
 
 .context-menu-separator {

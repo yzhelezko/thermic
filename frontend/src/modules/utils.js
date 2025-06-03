@@ -55,8 +55,8 @@ export const DEFAULT_TERMINAL_OPTIONS = {
     rightClickSelectsWord: true,
     cols: 120,
     rows: 30,
-    // Scrolling configuration
-    scrollback: 10000,           // Keep 10,000 lines of scrollback
+    // Scrolling configuration (will be updated from backend config)
+    scrollback: 10000,           // Keep 10,000 lines of scrollback (default, will be updated)
     fastScrollModifier: 'alt',   // Use Alt key for fast scrolling
     fastScrollSensitivity: 5,    // Scroll 5 lines at a time with Alt
     scrollSensitivity: 1,        // Normal scroll sensitivity

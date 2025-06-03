@@ -443,12 +443,24 @@
     }
 }
 
-/* Theme toggle uses original images, no filter needed */
+/* Theme toggle uses original colors, no filter needed */
 #theme-toggle .svg-icon {
     filter: none !important;
 }
 
-/* Also ensure theme toggle in activity bar keeps original colors */
-.activity-btn#theme-toggle .svg-icon {
+/* Specific styling for inline SVG theme toggle */
+#theme-toggle .theme-toggle-icon {
+    transition: all 0.3s ease;
     filter: none !important;
+    color: inherit;
+}
+
+/* Ensure theme toggle rotation animation works with inline SVG */
+#theme-toggle.rotating .theme-toggle-icon {
+    transform: rotate(180deg);
+}
+
+/* Make sure theme toggle inherits activity button hover colors properly */
+.activity-btn#theme-toggle:hover .theme-toggle-icon {
+    color: var(--text-secondary);
 } 

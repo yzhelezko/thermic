@@ -34,5 +34,5 @@ func (a *App) GetWindowMaximizedState() bool {
 	if a.config == nil {
 		return false
 	}
-	return a.config.WindowMaximized
+	return a.config.config.WindowMaximized
 }

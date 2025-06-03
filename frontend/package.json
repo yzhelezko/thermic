@@ -2,13 +2,19 @@
   "name": "frontend",
   "private": true,
   "version": "0.0.0",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "audit": "npm audit",
+    "outdated": "npm outdated"
   },
   "devDependencies": {
-    "vite": "^3.0.7"
+    "vite": "^4.5.3"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",

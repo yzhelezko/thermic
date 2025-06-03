@@ -2,8 +2,8 @@
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
-import { GetAvailableShells, GetDefaultShell, StartShell, WriteToShell, ResizeShell, CloseShell, ShowMessageDialog, WaitForSessionClose } from '../../wailsjs/go/main/App';
-import { EventsOn } from '../../wailsjs/runtime/runtime';
+import { GetAvailableShells, StartShell, WriteToShell, ResizeShell, CloseShell, ShowMessageDialog, WaitForSessionClose, ConfigGet, ConfigSet, ApproveHostKeyUpdate } from '../../wailsjs/go/main/App';
+import { EventsOn, EventsEmit } from '../../wailsjs/runtime/runtime';
 import { THEMES, DEFAULT_TERMINAL_OPTIONS, generateSessionId, formatShellName, updateStatus } from './utils.js';
 
 export class TerminalManager {
@@ -22,9 +22,41 @@ export class TerminalManager {
         
         // Global terminal output handler - single listener for all sessions
         this.globalOutputListener = null;
+        this.globalTabStatusListener = null;
+        this.globalTabSwitchListener = null;
+        this.globalSizeSyncListener = null;
+        this.globalConfigListener = null;
         this.globalListenerSetup = false;
         this.globalOutputListenerSetup = false;
         this.tabsManager = tabsManager; // Reference to tabs manager for reconnection
+        
+        // Resource management
+        this.maxSessions = 50;
+        this.resizeObserver = null;
+        this.cleanupInterval = null;
+        
+        // Host key prompt mode
+        this.hostKeyPromptMode = {
+            active: false,
+            sessionId: null,
+            keydownHandler: null
+        };
+        
+        // Terminal configuration
+        this.scrollbackLines = 10000; // Will be loaded from backend
+        this.maxBufferLines = this.scrollbackLines; // Updated when scrollbackLines changes
+        
+        // Load terminal config from backend
+        this.loadTerminalConfig();
+        
+        // Set up terminal size sync system for SSH connections
+        this.setupTerminalSizeSync();
+        
+        // Set up config change listeners
+        this.setupConfigListeners();
+        
+        // Start resource monitoring
+        this.startResourceMonitoring();
     }
 
     setupGlobalOutputListener() {
@@ -65,7 +97,9 @@ export class TerminalManager {
                             const isAtBottom = terminalSession.terminal.buffer.active.viewportY >= 
                                               terminalSession.terminal.buffer.active.baseY;
                             
-                            terminalSession.terminal.write(data.data);
+                            // Process SSH status messages for better display
+                            const processedData = this.processSSHMessage(data.data, sessionId);
+                            terminalSession.terminal.write(processedData);
                             
                             // Auto-scroll to bottom if we were already at the bottom
                             if (isAtBottom || terminalSession.terminal.buffer.active.length === 0) {
@@ -118,6 +152,12 @@ export class TerminalManager {
                     }
                 });
 
+                // Set up host key prompt listener
+                this.globalHostKeyPromptListener = EventsOn('host-key-prompt', (data) => {
+                    console.log('Global listener received host key prompt:', data);
+                    this.enableHostKeyPromptMode(data.sessionId);
+                });
+
                 this.globalListenerSetup = true;
                 console.log('Global event listeners set up successfully');
             } catch (error) {
@@ -141,16 +181,22 @@ export class TerminalManager {
     }
 
     createTerminalSession(sessionId) {
+        // Check session limits
+        if (this.terminals.size >= this.maxSessions) {
+            throw new Error(`Maximum terminal sessions (${this.maxSessions}) reached`);
+        }
+        
         // Ensure global output listener is set up
         this.setupGlobalOutputListener();
         
-        // Create terminal instance with current theme
+        // Create terminal instance with current theme and backend config
         const initialTheme = this.isDarkTheme ? THEMES.DARK : THEMES.LIGHT;
         console.log(`Creating terminal session ${sessionId} with theme:`, this.isDarkTheme ? 'dark' : 'light');
 
         const terminal = new Terminal({
             ...DEFAULT_TERMINAL_OPTIONS,
-            theme: initialTheme
+            theme: initialTheme,
+            scrollback: this.scrollbackLines // Use backend config
         });
 
         // Add addons
@@ -185,6 +231,11 @@ export class TerminalManager {
         terminal.onData((data) => {
             console.log(`Terminal input received for session ${sessionId}:`, data.charCodeAt(0));
             const terminalSession = this.terminals.get(sessionId);
+            
+            // Update last activity
+            if (terminalSession) {
+                terminalSession.lastActivity = Date.now();
+            }
             
             // Check for Enter key (char code 13) and if we should trigger reconnection
             if (data.charCodeAt(0) === 13 && this.tabsManager) {
@@ -221,7 +272,8 @@ export class TerminalManager {
             if (event.ctrlKey && event.code === 'KeyL') {
                 const terminalSession = this.terminals.get(sessionId);
                 if (terminalSession && terminalSession.isConnected) {
-                    WriteToShell(sessionId, '\x0C');
+                    // Use frontend terminal clearing that respects clearScrollback setting
+                    this.clearTerminal(sessionId);
                 }
                 return false;
             }
@@ -250,7 +302,11 @@ export class TerminalManager {
             terminal,
             fitAddon,
             container: terminalContainer,
-            isConnected: false
+            isConnected: false,
+            created: Date.now(),
+            lastActivity: Date.now(),
+            resizeHandler: null,
+            resizeTimeout: null
         };
 
         this.terminals.set(sessionId, terminalSession);
@@ -343,7 +399,7 @@ export class TerminalManager {
     async loadShells() {
         try {
             const shells = await GetAvailableShells();
-            const defaultShell = await GetDefaultShell();
+            const defaultShell = await ConfigGet("DefaultShell");
             
             const shellSelector = document.getElementById('shell-selector');
             shellSelector.innerHTML = '';
@@ -516,7 +572,12 @@ export class TerminalManager {
     }
 
     setupResizeObserver() {
-        const resizeObserver = new ResizeObserver(() => {
+        // Cleanup existing observer
+        if (this.resizeObserver) {
+            this.resizeObserver.disconnect();
+        }
+        
+        this.resizeObserver = new ResizeObserver(() => {
             if (this.fitAddon) {
                 setTimeout(() => {
                     this.fitAddon.fit();
@@ -531,7 +592,7 @@ export class TerminalManager {
         
         const terminalContainer = document.querySelector('.terminal-container');
         if (terminalContainer) {
-            resizeObserver.observe(terminalContainer);
+            this.resizeObserver.observe(terminalContainer);
         }
     }
 
@@ -641,26 +702,70 @@ export class TerminalManager {
                 setTimeout(() => {
                     try {
                         if (newSession.terminal && newSession.fitAddon) {
-                            // Force fit multiple times to ensure proper sizing
-                            newSession.fitAddon.fit();
+                            // For SSH connections, be more aggressive about sizing
+                            const isSSH = this.isSSHConnection(sessionId);
                             
-                            // Additional fit after a short delay to handle any layout changes
-                            setTimeout(() => {
+                            if (isSSH) {
+                                // SSH requires precise sizing - use proposed dimensions
+                                const proposedDimensions = newSession.fitAddon.proposeDimensions();
+                                
+                                if (proposedDimensions && proposedDimensions.cols > 0 && proposedDimensions.rows > 0) {
+                                    // Resize to proposed dimensions first
+                                    newSession.terminal.resize(proposedDimensions.cols, proposedDimensions.rows);
+                                    
+                                    setTimeout(() => {
+                                        newSession.fitAddon.fit();
+                                        
+                                        // Update shell size for SSH
+                                        if (newSession.isConnected) {
+                                            const cols = newSession.terminal.cols;
+                                            const rows = newSession.terminal.rows;
+                                            console.log(`SSH tab switch - updating size to ${cols}x${rows}`);
+                                            ResizeShell(sessionId, cols, rows).catch(error => {
+                                                console.warn('Error resizing SSH shell on tab switch:', error);
+                                            });
+                                        }
+                                        
+                                        newSession.terminal.focus();
+                                        console.log(`SSH Terminal ${sessionId} fitted (${newSession.terminal.cols}x${newSession.terminal.rows}) and focused`);
+                                    }, 20);
+                                } else {
+                                    // Fallback for SSH
+                                    newSession.fitAddon.fit();
+                                    setTimeout(() => {
+                                        newSession.fitAddon.fit();
+                                        if (newSession.isConnected) {
+                                            const cols = newSession.terminal.cols;
+                                            const rows = newSession.terminal.rows;
+                                            ResizeShell(sessionId, cols, rows).catch(error => {
+                                                console.warn('Error resizing shell on tab switch:', error);
+                                            });
+                                        }
+                                        newSession.terminal.focus();
+                                        console.log(`Terminal ${sessionId} fitted (${newSession.terminal.cols}x${newSession.terminal.rows}) and focused`);
+                                    }, 50);
+                                }
+                            } else {
+                                // Local shells - simpler sizing
                                 newSession.fitAddon.fit();
                                 
-                                // Update shell size if connected
-                                if (newSession.isConnected) {
-                                    const cols = newSession.terminal.cols;
-                                    const rows = newSession.terminal.rows;
-                                    ResizeShell(sessionId, cols, rows).catch(error => {
-                                        console.warn('Error resizing shell on tab switch:', error);
-                                    });
-                                }
-                                
-                                // Focus after fitting is complete
-                                newSession.terminal.focus();
-                                console.log(`Terminal ${sessionId} fitted (${newSession.terminal.cols}x${newSession.terminal.rows}) and focused`);
-                            }, 50);
+                                setTimeout(() => {
+                                    newSession.fitAddon.fit();
+                                    
+                                    // Update shell size if connected
+                                    if (newSession.isConnected) {
+                                        const cols = newSession.terminal.cols;
+                                        const rows = newSession.terminal.rows;
+                                        ResizeShell(sessionId, cols, rows).catch(error => {
+                                            console.warn('Error resizing shell on tab switch:', error);
+                                        });
+                                    }
+                                    
+                                    // Focus after fitting is complete
+                                    newSession.terminal.focus();
+                                    console.log(`Terminal ${sessionId} fitted (${newSession.terminal.cols}x${newSession.terminal.rows}) and focused`);
+                                }, 50);
+                            }
                         }
                     } catch (error) {
                         console.warn('Error focusing/fitting terminal:', error);
@@ -740,7 +845,11 @@ export class TerminalManager {
             if (terminalSession.container) {
                 try {
                     terminalSession.container.style.display = 'none';
-                    terminalSession.container.remove();
+                    
+                    // Remove all event listeners from container
+                    const newContainer = terminalSession.container.cloneNode(true);
+                    terminalSession.container.parentNode.replaceChild(newContainer, terminalSession.container);
+                    newContainer.remove();
                 } catch (error) {
                     console.warn('Error removing terminal container:', error);
                 }
@@ -781,7 +890,7 @@ export class TerminalManager {
 
     async getDefaultShell() {
         try {
-            return await GetDefaultShell();
+            return await ConfigGet("DefaultShell");
         } catch (error) {
             console.error('Failed to get default shell:', error);
             return 'cmd.exe'; // Fallback for Windows
@@ -848,6 +957,43 @@ export class TerminalManager {
         }
     }
 
+    handleResize() {
+        // Handle window resize - fit terminals and notify backend of window state change
+        console.log('Handling window resize...');
+        
+        // Fit all terminal sessions to their containers
+        this.fit();
+        
+        // Also fit any other active terminals
+        for (const [sessionId, terminalSession] of this.terminals) {
+            if (terminalSession && terminalSession.fitAddon) {
+                try {
+                    terminalSession.fitAddon.fit();
+                    
+                    // Update shell size if connected
+                    if (terminalSession.isConnected) {
+                        const cols = terminalSession.terminal.cols;
+                        const rows = terminalSession.terminal.rows;
+                        ResizeShell(sessionId, cols, rows).catch(error => {
+                            console.warn(`Error resizing shell ${sessionId}:`, error);
+                        });
+                    }
+                } catch (error) {
+                    console.warn(`Error resizing terminal session ${sessionId}:`, error);
+                }
+            }
+        }
+        
+        // Emit resize event to backend to save window state
+        try {
+            EventsEmit('frontend:window:resized').catch(error => {
+                console.warn('Error emitting window resize event:', error);
+            });
+        } catch (error) {
+            console.warn('Error emitting resize event to backend:', error);
+        }
+    }
+
     scrollToBottom() {
         if (this.activeSessionId) {
             const terminalSession = this.terminals.get(this.activeSessionId);
@@ -885,7 +1031,7 @@ export class TerminalManager {
         // Don't trigger activity for certain types of output
         if (!data || typeof data !== 'string') return false;
         
-        // Filter out SSH connection animations and status messages
+        // Filter out SSH connection status messages with new format
         if (data.includes('SSH Connection') || 
             data.includes('Connecting...') ||
             data.includes('Connected to') ||
@@ -898,11 +1044,256 @@ export class TerminalManager {
             return false;
         }
         
-        // Trigger activity for actual content
+        // Filter out new formatted SSH status messages (they shouldn't trigger activity)
+        if (data.includes('● Authentication:') ||
+            data.includes('⏳ Connecting to') ||
+            data.includes('⏳ Creating session') ||
+            data.includes('⏳ Loading key:') ||
+            data.includes('⏳ Discovering authentication') ||
+            data.includes('✓ Connection established') ||
+            data.includes('✓ SSH session ready') ||
+            data.includes('● New host:') ||
+            data.includes('⏳ Adding') && data.includes('to known hosts') ||
+            data.includes('✓ Host') && data.includes('verified and added')) {
+            return false;
+        }
+        
+        // Trigger activity for actual user content and important warnings/errors
         return true;
     }
 
+    processSSHMessage(data, sessionId) {
+        // Don't process empty or non-string data
+        if (!data || typeof data !== 'string') {
+            return data;
+        }
+
+        // Check if this is an SSH connection message by looking for our new format
+        const isSSHMessage = data.includes('●') || data.includes('✓') || data.includes('⚠') || data.includes('⏳') || data.includes('✗');
+        
+        if (!isSSHMessage) {
+            return data; // Return original data if not an SSH status message
+        }
+
+        // Add some spacing and formatting improvements for SSH messages
+        let processedData = data;
+
+        // Add subtle animation effect for progress messages
+        if (data.includes('⏳')) {
+            // Add a subtle pulse effect using ANSI sequences (optional enhancement)
+            processedData = data.replace('⏳', '\x1b[2m⏳\x1b[0m\x1b[90m');
+        }
+
+        // Make success messages slightly more prominent
+        if (data.includes('✓')) {
+            processedData = data.replace('✓', '\x1b[1m✓\x1b[0m');
+        }
+
+        // Make warning messages more noticeable
+        if (data.includes('⚠')) {
+            processedData = data.replace('⚠', '\x1b[1m⚠\x1b[0m');
+        }
+
+        // Add subtle visual separation for SSH connection flow
+        if (data.includes('✓ SSH session ready')) {
+            // Update tab status for successful connection
+            this.updateSSHConnectionStatus(sessionId, 'connected');
+        }
+
+        // Handle connection errors
+        if (data.includes('✗') && (data.includes('failed') || data.includes('error'))) {
+            this.updateSSHConnectionStatus(sessionId, 'failed');
+        }
+
+        // Handle warnings
+        if (data.includes('⚠') && data.includes('Host key changed')) {
+            this.updateSSHConnectionStatus(sessionId, 'warning');
+        }
+
+        return processedData;
+    }
+
+    updateSSHConnectionStatus(sessionId, status) {
+        // Find the tab associated with this session and update its visual state
+        if (this.tabsManager) {
+            const tabId = this.findTabBySessionId(sessionId);
+            if (tabId) {
+                // Emit a custom event that the tabs manager can listen to
+                const event = new CustomEvent('ssh-connection-status', {
+                    detail: { 
+                        sessionId, 
+                        tabId, 
+                        status,
+                        timestamp: Date.now()
+                    }
+                });
+                document.dispatchEvent(event);
+                
+                // Also log for debugging
+                console.log(`SSH connection status updated: ${sessionId} -> ${status}`);
+            }
+        }
+    }
+
+    async loadTerminalConfig() {
+        try {
+            const scrollbackLines = await ConfigGet("ScrollbackLines");
+            
+            this.scrollbackLines = scrollbackLines;
+            this.maxBufferLines = scrollbackLines;
+            
+            console.log(`Loaded terminal config: scrollback=${scrollbackLines}`);
+            
+            // Update existing terminals with new config
+            this.applyConfigToAllTerminals();
+        } catch (error) {
+            console.warn('Failed to load terminal config from backend:', error);
+            // Use defaults if backend fails
+            this.scrollbackLines = 10000;
+            this.maxBufferLines = 10000;
+        }
+    }
+
+    setupConfigListeners() {
+        // Listen for config changes from backend
+        EventsOn('config:scrollback-lines-changed', (data) => {
+            const { scrollbackLines } = data;
+            console.log(`Scrollback lines changed to: ${scrollbackLines}`);
+            this.scrollbackLines = scrollbackLines;
+            this.maxBufferLines = scrollbackLines;
+            this.applyConfigToAllTerminals();
+        });
+
+
+    }
+
+    applyConfigToAllTerminals() {
+        // Update all existing terminal sessions with new config
+        for (const [sessionId, terminalSession] of this.terminals) {
+            if (terminalSession.terminal) {
+                try {
+                    // Update terminal options
+                    terminalSession.terminal.options.scrollback = this.scrollbackLines;
+                    console.log(`Updated scrollback for session ${sessionId} to ${this.scrollbackLines} lines`);
+                } catch (error) {
+                    console.warn(`Error updating config for session ${sessionId}:`, error);
+                }
+            }
+        }
+    }
+
+    // Host key prompt mode methods
+    enableHostKeyPromptMode(sessionId) {
+        console.log(`Enabling host key prompt mode for session: ${sessionId}`);
+        
+        this.hostKeyPromptMode.active = true;
+        this.hostKeyPromptMode.sessionId = sessionId;
+        
+        // Add visual indicator to the terminal
+        const terminalSession = this.terminals.get(sessionId);
+        if (terminalSession && terminalSession.container) {
+            terminalSession.container.classList.add('host-key-prompt-active');
+        }
+        
+        // Set up global keyboard listener
+        this.hostKeyPromptMode.keydownHandler = (event) => {
+            this.handleHostKeyPromptInput(event);
+        };
+        
+        document.addEventListener('keydown', this.hostKeyPromptMode.keydownHandler, true);
+        console.log('Host key prompt mode enabled - listening for keyboard input');
+    }
+
+    disableHostKeyPromptMode() {
+        console.log('Disabling host key prompt mode');
+        
+        const sessionId = this.hostKeyPromptMode.sessionId;
+        this.hostKeyPromptMode.active = false;
+        this.hostKeyPromptMode.sessionId = null;
+        
+        // Remove visual indicator
+        if (sessionId) {
+            const terminalSession = this.terminals.get(sessionId);
+            if (terminalSession && terminalSession.container) {
+                terminalSession.container.classList.remove('host-key-prompt-active');
+            }
+        }
+        
+        // Remove keyboard event listener
+        if (this.hostKeyPromptMode.keydownHandler) {
+            document.removeEventListener('keydown', this.hostKeyPromptMode.keydownHandler, true);
+            this.hostKeyPromptMode.keydownHandler = null;
+        }
+        
+        console.log('Host key prompt mode disabled');
+    }
+
+    handleHostKeyPromptInput(event) {
+        if (!this.hostKeyPromptMode.active) return;
+        
+        const sessionId = this.hostKeyPromptMode.sessionId;
+        console.log(`Host key prompt input: ${event.key} for session: ${sessionId}`);
+        
+        // Handle Enter key (approve)
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            event.stopPropagation();
+            this.approveHostKey(sessionId, true);
+            this.disableHostKeyPromptMode();
+        }
+        // Handle Escape key (reject)
+        else if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            this.approveHostKey(sessionId, false);
+            this.disableHostKeyPromptMode();
+        }
+        // Handle 'y' or 'Y' for yes
+        else if (event.key.toLowerCase() === 'y') {
+            event.preventDefault();
+            event.stopPropagation();
+            this.approveHostKey(sessionId, true);
+            this.disableHostKeyPromptMode();
+        }
+        // Handle 'n' or 'N' for no
+        else if (event.key.toLowerCase() === 'n') {
+            event.preventDefault();
+            event.stopPropagation();
+            this.approveHostKey(sessionId, false);
+            this.disableHostKeyPromptMode();
+        }
+    }
+
+    async approveHostKey(sessionId, approved) {
+        try {
+            console.log(`Host key ${approved ? 'approved' : 'rejected'} for session: ${sessionId}`);
+            
+            await ApproveHostKeyUpdate(sessionId, approved);
+            
+            if (approved) {
+                console.log('Host key updated successfully. You can now retry the connection.');
+            } else {
+                console.log('Host key update cancelled by user.');
+            }
+            
+        } catch (error) {
+            console.error('Failed to process host key approval:', error);
+        }
+    }
+
     cleanup() {
+        // Stop resource monitoring
+        if (this.cleanupInterval) {
+            clearInterval(this.cleanupInterval);
+            this.cleanupInterval = null;
+        }
+        
+        // Cleanup resize observer
+        if (this.resizeObserver) {
+            this.resizeObserver.disconnect();
+            this.resizeObserver = null;
+        }
+        
         // Cleanup global listeners
         if (this.globalOutputListener) {
             try {
@@ -930,11 +1321,46 @@ export class TerminalManager {
             }
             this.globalTabSwitchListener = null;
         }
+        
+        if (this.globalSizeSyncListener) {
+            try {
+                this.globalSizeSyncListener();
+            } catch (error) {
+                console.warn('Error cleaning up global size sync listener:', error);
+            }
+            this.globalSizeSyncListener = null;
+        }
+
+        if (this.globalConfigListener) {
+            try {
+                this.globalConfigListener();
+            } catch (error) {
+                console.warn('Error cleaning up global config listener:', error);
+            }
+            this.globalConfigListener = null;
+        }
+
+        if (this.globalHostKeyPromptListener) {
+            try {
+                this.globalHostKeyPromptListener();
+            } catch (error) {
+                console.warn('Error cleaning up global host key prompt listener:', error);
+            }
+            this.globalHostKeyPromptListener = null;
+        }
+
+        // Disable host key prompt mode if active
+        if (this.hostKeyPromptMode.active) {
+            this.disableHostKeyPromptMode();
+        }
 
         // Cleanup all terminal sessions
         for (const [sessionId, terminalSession] of this.terminals) {
             this.disconnectSession(sessionId);
         }
+        
+        // Clear terminals map
+        this.terminals.clear();
     }
 
     checkForReconnection(sessionId) {
@@ -956,5 +1382,244 @@ export class TerminalManager {
             }
         }
         return false;
+    }
+
+    setupTerminalSizeSync() {
+        // Clean up existing listeners first
+        if (this.globalSizeSyncListener) {
+            try {
+                this.globalSizeSyncListener();
+            } catch (error) {
+                console.warn('Error cleaning up size sync listener:', error);
+            }
+        }
+        
+        // Listen for terminal size requests from backend using Wails EventsOn
+        this.globalSizeSyncListener = EventsOn('terminal-size-request', (data) => {
+            const { sessionId } = data;
+            console.log(`Received terminal size request for session: ${sessionId}`);
+            this.handleTerminalSizeRequest(sessionId);
+        });
+        
+        // Listen for immediate terminal size sync requests (for SSH connections)
+        EventsOn('terminal-size-sync-request', (data) => {
+            const { sessionId, immediate } = data;
+            console.log(`Received terminal size sync request for session: ${sessionId}, immediate: ${immediate}`);
+            if (immediate) {
+                // For immediate requests, do aggressive terminal fitting and sizing
+                setTimeout(() => {
+                    this.handleImmediateTerminalSizeSync(sessionId);
+                }, 50); // Shorter delay for immediate requests
+            } else {
+                this.handleTerminalSizeRequest(sessionId);
+            }
+        });
+        
+        // Reduce periodic size sync to prevent constant resizing
+        // Only sync SSH connections and only every 30 seconds to avoid disrupting VIM/editors
+        setInterval(() => {
+            this.syncSSHTerminalSizes();
+        }, 30000); // Sync every 30 seconds instead of 5
+    }
+
+    handleTerminalSizeRequest(sessionId) {
+        const terminalSession = this.terminals.get(sessionId);
+        if (!terminalSession || !terminalSession.terminal) {
+            console.warn(`Terminal size request for unknown session: ${sessionId}`);
+            return;
+        }
+
+        // Only resize if the terminal is visible and active to avoid disrupting editors
+        const isActiveSession = sessionId === this.activeSessionId;
+        if (!isActiveSession) {
+            console.log(`Skipping size sync for inactive session: ${sessionId}`);
+            return;
+        }
+
+        // Get current dimensions without forcing a fit (to avoid disruption)
+        const currentCols = terminalSession.terminal.cols || 80;
+        const currentRows = terminalSession.terminal.rows || 24;
+
+        // Check if size has actually changed since last sync
+        const lastSyncedSize = terminalSession.lastSyncedSize;
+        if (lastSyncedSize && 
+            lastSyncedSize.cols === currentCols && 
+            lastSyncedSize.rows === currentRows) {
+            console.log(`Terminal size unchanged for ${sessionId}: ${currentCols}x${currentRows}`);
+            return;
+        }
+
+        console.log(`Syncing terminal size for ${sessionId}: ${currentCols}x${currentRows}`);
+
+        // Store the size we're syncing to avoid redundant calls
+        terminalSession.lastSyncedSize = { cols: currentCols, rows: currentRows };
+
+        // Send current size to backend
+        ResizeShell(sessionId, currentCols, currentRows).catch(error => {
+            console.warn(`Failed to sync terminal size for ${sessionId}:`, error);
+            // Clear the stored size on error so we can retry later
+            delete terminalSession.lastSyncedSize;
+        });
+    }
+
+    handleImmediateTerminalSizeSync(sessionId) {
+        const terminalSession = this.terminals.get(sessionId);
+        if (!terminalSession || !terminalSession.terminal) {
+            console.warn(`Immediate terminal size sync for unknown session: ${sessionId}`);
+            return;
+        }
+
+        console.log(`Performing immediate terminal size sync for ${sessionId}`);
+
+        // For immediate sync (SSH connections), always force fit and get accurate dimensions
+        if (terminalSession.fitAddon) {
+            // Force multiple fits to ensure accurate sizing
+            terminalSession.fitAddon.fit();
+            
+            // Use proposeDimensions for most accurate sizing
+            const proposedDimensions = terminalSession.fitAddon.proposeDimensions();
+            
+            if (proposedDimensions && proposedDimensions.cols > 0 && proposedDimensions.rows > 0) {
+                // Resize terminal to proposed dimensions first
+                terminalSession.terminal.resize(proposedDimensions.cols, proposedDimensions.rows);
+                
+                // Then fit again to ensure proper layout
+                setTimeout(() => {
+                    if (terminalSession.fitAddon) {
+                        terminalSession.fitAddon.fit();
+                        
+                        // Get final dimensions and send to backend
+                        const finalCols = terminalSession.terminal.cols || proposedDimensions.cols;
+                        const finalRows = terminalSession.terminal.rows || proposedDimensions.rows;
+                        
+                        console.log(`Immediate sync - final dimensions for ${sessionId}: ${finalCols}x${finalRows}`);
+                        
+                        // Clear any cached size to force the update
+                        delete terminalSession.lastSyncedSize;
+                        
+                        // Send size to backend
+                        ResizeShell(sessionId, finalCols, finalRows).catch(error => {
+                            console.warn(`Failed to sync immediate terminal size for ${sessionId}:`, error);
+                        });
+                    }
+                }, 10);
+            } else {
+                // Fallback to regular terminal dimensions
+                const cols = terminalSession.terminal.cols || 80;
+                const rows = terminalSession.terminal.rows || 24;
+                
+                console.log(`Immediate sync - fallback dimensions for ${sessionId}: ${cols}x${rows}`);
+                
+                // Clear any cached size to force the update
+                delete terminalSession.lastSyncedSize;
+                
+                ResizeShell(sessionId, cols, rows).catch(error => {
+                    console.warn(`Failed to sync immediate terminal size (fallback) for ${sessionId}:`, error);
+                });
+            }
+        } else {
+            // No fit addon available, use current dimensions
+            const cols = terminalSession.terminal.cols || 80;
+            const rows = terminalSession.terminal.rows || 24;
+            
+            console.log(`Immediate sync - no fitAddon, using current dimensions for ${sessionId}: ${cols}x${rows}`);
+            
+            // Clear any cached size to force the update
+            delete terminalSession.lastSyncedSize;
+            
+            ResizeShell(sessionId, cols, rows).catch(error => {
+                console.warn(`Failed to sync immediate terminal size (no addon) for ${sessionId}:`, error);
+            });
+        }
+    }
+
+    syncSSHTerminalSizes() {
+        // Only sync SSH connections and only if they haven't been resized recently
+        this.terminals.forEach((terminalSession, sessionId) => {
+            if (terminalSession.isConnected && terminalSession.terminal) {
+                // Check if this is an SSH connection
+                const isSSH = this.isSSHConnection(sessionId);
+                if (isSSH) {
+                    // Only sync if the session is active or if it's been a while since last sync
+                    const isActiveSession = sessionId === this.activeSessionId;
+                    const now = Date.now();
+                    const lastSync = terminalSession.lastSizeSync || 0;
+                    const timeSinceLastSync = now - lastSync;
+                    
+                    // Sync if it's the active session or if it's been more than 2 minutes
+                    if (isActiveSession || timeSinceLastSync > 120000) {
+                        console.log(`Syncing SSH terminal size for session: ${sessionId}`);
+                        this.handleTerminalSizeRequest(sessionId);
+                        terminalSession.lastSizeSync = now;
+                    }
+                }
+            }
+        });
+    }
+
+    isSSHConnection(sessionId) {
+        // Check if this session belongs to an SSH tab
+        // This is a simple check - you could enhance this by storing connection type
+        const tabManager = window.tabsManager;
+        if (!tabManager) return false;
+        
+        for (const [tabId, tab] of tabManager.tabs) {
+            if (tab.sessionId === sessionId && tab.connectionType === 'ssh') {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    startResourceMonitoring() {
+        // Monitor resource usage every 30 seconds
+        this.cleanupInterval = setInterval(() => {
+            this.performResourceCleanup();
+        }, 30000);
+    }
+
+    performResourceCleanup() {
+        try {
+            // Cleanup disconnected sessions
+            for (const [sessionId, terminalSession] of this.terminals) {
+                if (!terminalSession.isConnected && !terminalSession.terminal) {
+                    console.log(`Cleaning up orphaned session: ${sessionId}`);
+                    this.terminals.delete(sessionId);
+                }
+                
+                // Note: Removed automatic terminal clearing when buffer gets large
+                // xterm.js handles buffer limits naturally by scrolling old content out
+                // Auto-clearing was disruptive to user experience
+            }
+            
+            // Enforce session limits
+            if (this.terminals.size > this.maxSessions) {
+                console.warn(`Too many terminal sessions (${this.terminals.size}), cleaning up oldest`);
+                this.cleanupOldestSessions(this.terminals.size - this.maxSessions);
+            }
+        } catch (error) {
+            console.warn('Error during resource cleanup:', error);
+        }
+    }
+
+    cleanupOldestSessions(count) {
+        // Sort by last activity or creation time
+        const sessions = Array.from(this.terminals.entries())
+            .filter(([_, session]) => !session.isConnected)
+            .sort((a, b) => (a[1].lastActivity || 0) - (b[1].lastActivity || 0))
+            .slice(0, count);
+            
+        for (const [sessionId] of sessions) {
+            console.log(`Force cleaning up old session: ${sessionId}`);
+            this.disconnectSession(sessionId);
+        }
+    }
+
+    clearTerminal(sessionId) {
+        const terminalSession = this.terminals.get(sessionId);
+        if (terminalSession && terminalSession.terminal) {
+            // Always clear everything including scrollback buffer
+            terminalSession.terminal.reset();
+        }
     }
 } 
