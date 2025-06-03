@@ -43,7 +43,8 @@ const EMOJI_TO_ICON = {
     '📑': 'copy',
     '📝': 'rename',
     '🗂️': 'files',
-    '🌐': 'globe'
+    '🌐': 'globe',
+    '👁️': 'eye'
 };
 
 // Cache for loaded SVG content with version to prevent corruption

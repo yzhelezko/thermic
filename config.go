@@ -51,8 +51,10 @@ type AppConfig struct {
 	// Context menu settings
 	EnableSelectToCopy bool `yaml:"enable_select_to_copy"` // Enable select-to-copy and right-click-to-paste (disables context menu)
 	// Sidebar settings
-	SidebarCollapsed bool `yaml:"sidebar_collapsed"` // Whether the sidebar is collapsed
-	SidebarWidth     int  `yaml:"sidebar_width"`     // Width of the sidebar when expanded
+	SidebarCollapsed     bool `yaml:"sidebar_collapsed"`       // Whether the sidebar is collapsed
+	SidebarWidth         int  `yaml:"sidebar_width,omitempty"` // Width of the sidebar when expanded (legacy - for migration only)
+	SidebarProfilesWidth int  `yaml:"sidebar_profiles_width"`  // Width of the sidebar for profiles view
+	SidebarFilesWidth    int  `yaml:"sidebar_files_width"`     // Width of the sidebar for files view
 	// Theme settings
 	Theme string `yaml:"theme"` // Theme preference: "dark", "light", or "system"
 	// Terminal settings
@@ -75,8 +77,10 @@ func DefaultConfig() *AppConfig {
 		// Default context menu settings
 		EnableSelectToCopy: false, // Default to disabled (standard context menu behavior)
 		// Default sidebar settings
-		SidebarCollapsed: false, // Default to expanded
-		SidebarWidth:     DefaultSidebarWidth,
+		SidebarCollapsed:     false, // Default to expanded
+		SidebarWidth:         DefaultSidebarWidth,
+		SidebarProfilesWidth: DefaultSidebarWidth,       // Default profiles width
+		SidebarFilesWidth:    DefaultSidebarWidth + 100, // Default files width (slightly wider)
 		// Default theme settings
 		Theme: DefaultTheme,
 		// Default terminal settings

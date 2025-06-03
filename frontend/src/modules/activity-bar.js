@@ -10,8 +10,8 @@ export class ActivityBarManager {
         this.uiManager = uiManager;
         
         // Initialize specialized managers
-        this.viewManager = new ViewManager(sidebarManager);
         this.sidebarStateManager = new SidebarStateManager(uiManager);
+        this.viewManager = new ViewManager(sidebarManager, this.sidebarStateManager);
         this.eventHandler = new ActivityEventHandler(this.viewManager, this.sidebarStateManager);
         
         // Subscribe to theme changes from theme-manager
@@ -36,6 +36,9 @@ export class ActivityBarManager {
         // Initialize all managers
         this.sidebarStateManager.initialize();
         this.eventHandler.initialize();
+        
+        // Initialize the view manager to show the initial view
+        this.viewManager.initialize();
         
         // Theme manager is already initialized by main.js after DOM is ready
         // Just sync initial theme state

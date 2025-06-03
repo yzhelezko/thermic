@@ -11,6 +11,18 @@ import (
 	"github.com/pkg/sftp"
 )
 
+// joinRemotePath properly joins remote paths using forward slashes
+func joinRemotePath(base, name string) string {
+	if base == "" {
+		return name
+	}
+	if name == "" {
+		return base
+	}
+	// Always use forward slashes for remote paths (Unix-style)
+	return strings.TrimSuffix(base, "/") + "/" + name
+}
+
 // SFTPClientWrapper wraps an SFTP client for resource management
 type SFTPClientWrapper struct {
 	client    *sftp.Client
@@ -250,6 +262,88 @@ func (a *App) DownloadRemoteFile(sessionID string, remotePath string, localPath 
 	return nil
 }
 
+// DownloadRemoteDirectory downloads a directory recursively from the remote server to local path
+func (a *App) DownloadRemoteDirectory(sessionID string, remotePath string, localPath string) error {
+	a.ssh.sftpClientsMutex.RLock()
+	sftpClient, exists := a.ssh.sftpClients[sessionID]
+	a.ssh.sftpClientsMutex.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("SFTP client not initialized for session %s", sessionID)
+	}
+
+	// Check if remote path is actually a directory
+	stat, err := sftpClient.Stat(remotePath)
+	if err != nil {
+		return fmt.Errorf("failed to stat remote path %s: %w", remotePath, err)
+	}
+
+	if !stat.IsDir() {
+		// If it's a file, just use the regular file download
+		return a.DownloadRemoteFile(sessionID, remotePath, localPath)
+	}
+
+	// Create local directory
+	err = os.MkdirAll(localPath, 0755)
+	if err != nil {
+		return fmt.Errorf("failed to create local directory %s: %w", localPath, err)
+	}
+
+	// Download directory contents recursively
+	return a.downloadRemoteDirectoryRecursive(sftpClient, remotePath, localPath)
+}
+
+// Helper function to recursively download a directory
+func (a *App) downloadRemoteDirectoryRecursive(sftpClient *sftp.Client, remotePath string, localPath string) error {
+	// List directory contents
+	fileInfos, err := sftpClient.ReadDir(remotePath)
+	if err != nil {
+		return fmt.Errorf("failed to read directory %s: %w", remotePath, err)
+	}
+
+	// Download each item recursively
+	for _, fileInfo := range fileInfos {
+		// Use proper path joining for both remote and local paths
+		remoteItemPath := joinRemotePath(remotePath, fileInfo.Name())
+		localItemPath := filepath.Join(localPath, fileInfo.Name())
+
+		if fileInfo.IsDir() {
+			// Create local subdirectory
+			err := os.MkdirAll(localItemPath, 0755)
+			if err != nil {
+				return fmt.Errorf("failed to create local directory %s: %w", localItemPath, err)
+			}
+
+			// Recursively download subdirectory
+			if err := a.downloadRemoteDirectoryRecursive(sftpClient, remoteItemPath, localItemPath); err != nil {
+				return err
+			}
+		} else {
+			// Download file
+			remoteFile, err := sftpClient.Open(remoteItemPath)
+			if err != nil {
+				return fmt.Errorf("failed to open remote file %s: %w", remoteItemPath, err)
+			}
+
+			localFile, err := os.Create(localItemPath)
+			if err != nil {
+				remoteFile.Close()
+				return fmt.Errorf("failed to create local file %s: %w", localItemPath, err)
+			}
+
+			_, err = io.Copy(localFile, remoteFile)
+			remoteFile.Close()
+			localFile.Close()
+
+			if err != nil {
+				return fmt.Errorf("failed to copy file %s: %w", remoteItemPath, err)
+			}
+		}
+	}
+
+	return nil
+}
+
 // UploadRemoteFiles uploads local files to the remote directory
 func (a *App) UploadRemoteFiles(sessionID string, localFilePaths []string, remotePath string) error {
 	a.ssh.sftpClientsMutex.RLock()
@@ -269,7 +363,8 @@ func (a *App) UploadRemoteFiles(sessionID string, localFilePaths []string, remot
 
 		// Get file name from path
 		fileName := filepath.Base(localFilePath)
-		remoteFilePath := filepath.Join(remotePath, fileName)
+		// Use proper remote path joining
+		remoteFilePath := joinRemotePath(remotePath, fileName)
 
 		// Create remote file
 		remoteFile, err := sftpClient.Create(remoteFilePath)
@@ -386,7 +481,8 @@ func (a *App) deleteRemoteDirectoryRecursive(sftpClient *sftp.Client, remotePath
 
 	// Delete each item recursively
 	for _, fileInfo := range fileInfos {
-		fullPath := filepath.Join(remotePath, fileInfo.Name())
+		// Use proper remote path joining
+		fullPath := joinRemotePath(remotePath, fileInfo.Name())
 
 		if fileInfo.IsDir() {
 			if err := a.deleteRemoteDirectoryRecursive(sftpClient, fullPath); err != nil {
@@ -478,6 +574,38 @@ func (a *App) UpdateRemoteFileContent(sessionID string, remotePath string, conte
 
 	// Write the content
 	_, err = file.Write([]byte(content))
+	if err != nil {
+		return fmt.Errorf("failed to write file content: %w", err)
+	}
+
+	return nil
+}
+
+// UploadFileContent uploads file content from base64 string to a remote path
+func (a *App) UploadFileContent(sessionID string, remotePath string, base64Content string) error {
+	a.ssh.sftpClientsMutex.RLock()
+	sftpClient, exists := a.ssh.sftpClients[sessionID]
+	a.ssh.sftpClientsMutex.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("SFTP client not initialized for session %s", sessionID)
+	}
+
+	// Decode base64 content
+	content, err := base64.StdEncoding.DecodeString(base64Content)
+	if err != nil {
+		return fmt.Errorf("failed to decode base64 content: %w", err)
+	}
+
+	// Create or truncate the remote file
+	file, err := sftpClient.Create(remotePath)
+	if err != nil {
+		return fmt.Errorf("failed to create remote file %s: %w", remotePath, err)
+	}
+	defer file.Close()
+
+	// Write the decoded content
+	_, err = file.Write(content)
 	if err != nil {
 		return fmt.Errorf("failed to write file content: %w", err)
 	}

@@ -3,9 +3,11 @@
  */
 
 export class ViewManager {
-    constructor(sidebarManager) {
+    constructor(sidebarManager, sidebarStateManager = null) {
         this.sidebarManager = sidebarManager;
+        this.sidebarStateManager = sidebarStateManager;
         this.currentView = 'profiles';
+        this.isInitialized = false;
         this.views = new Map([
             ['profiles', {
                 title: 'Profiles',
@@ -20,7 +22,17 @@ export class ViewManager {
         ]);
     }
 
-    switchToView(viewName) {
+    initialize() {
+        if (this.isInitialized) return;
+        
+        console.log('🔀 ViewManager: Initializing with profiles view');
+        this.isInitialized = true;
+        
+        // Show the initial view
+        this.switchToView('profiles');
+    }
+
+    switchToView(viewName, force = false) {
         if (!this.views.has(viewName)) {
             console.warn(`Unknown view: ${viewName}`);
             return;
@@ -29,10 +41,15 @@ export class ViewManager {
         const previousView = this.currentView;
         const newView = this.views.get(viewName);
         
-        console.log('🔀 View Manager: Switching from', previousView, 'to', viewName);
+        console.log('🔀 View Manager: Switching from', previousView, 'to', viewName, force ? '(forced)' : '');
         
-        // Hide previous view if it's different and has a hide method
-        if (previousView !== viewName && this.views.has(previousView)) {
+        // Switch sidebar width to the appropriate view first
+        if (this.sidebarStateManager && (previousView !== viewName || force)) {
+            this.sidebarStateManager.switchToView(viewName);
+        }
+        
+        // Hide previous view if it's different and has a hide method, or if forcing
+        if ((previousView !== viewName || force) && this.views.has(previousView)) {
             const prevViewConfig = this.views.get(previousView);
             if (prevViewConfig.hide) {
                 prevViewConfig.hide();

@@ -1,6 +1,7 @@
 // Enhanced Sidebar management module with profile tree support
 import { updateStatus, showNotification } from './utils.js';
 import { modal } from '../components/Modal.js';
+import { LiveSearch } from '../components/LiveSearch.js';
 
 export class SidebarManager {
     constructor() {
@@ -13,6 +14,7 @@ export class SidebarManager {
         this.doubleClickHandled = false;
         this.iconSelectorListeners = [];
         this.virtualFolderClickHandler = null; // For proper event listener cleanup
+        this.profileLiveSearch = null; // Live search for profiles
     }
 
     async initSidebar() {
@@ -22,6 +24,11 @@ export class SidebarManager {
         await this.loadProfileTree();
         this.renderProfileTree();
         this.setupProfileUpdateListener();
+        
+        // Ensure profiles view is properly set up for initial load
+        // This will be called by the activity bar manager when the initial view is set
+        this.isReadyForLiveSearch = true;
+        
         console.log('✅ Sidebar initialization complete');
         
         // Test profile interaction after a brief delay
@@ -870,8 +877,22 @@ export class SidebarManager {
         const profileType = profile.profile?.type || 'local';
         const tooltipText = `Click or double-click to connect to ${profile.name} (${profileType})`;
         
+        // Extract searchable data for live search
+        const sshConfig = profile.profile?.sshConfig || {};
+        const host = sshConfig.host || '';
+        const username = sshConfig.username || '';
+        const tags = profile.profile?.tags?.join(' ') || '';
+        
         return `
-            <div class="tree-item" data-id="${profile.id}" data-type="profile" draggable="true" title="${tooltipText}">
+            <div class="tree-item" 
+                 data-id="${profile.id}" 
+                 data-type="profile" 
+                 data-name="${profile.name}" 
+                 data-host="${host}" 
+                 data-username="${username}" 
+                 data-tags="${tags}" 
+                 draggable="true" 
+                 title="${tooltipText}">
                 <div class="tree-item-content" style="padding-left: ${(level + 1) * 16}px">
                     <span class="tree-item-icon">${profile.icon}</span>
                     <span class="tree-item-text">${profile.name}</span>
@@ -1390,43 +1411,350 @@ export class SidebarManager {
         }
     }
 
+    initializeProfileLiveSearch() {
+        if (this.profileLiveSearch) {
+            this.profileLiveSearch.destroy();
+        }
+        
+        this.profileLiveSearch = new LiveSearch({
+            containerSelector: '#sidebar-content',
+            itemSelector: '.tree-item[data-type="profile"], .virtual-profile[data-type="profile"]',
+            searchIndicatorClass: 'profile-search-indicator',
+            clearManagerCallback: () => this.clearProfileSearch(),
+            getItemData: (item) => {
+                return {
+                    name: item.dataset.name || '',
+                    text: item.textContent || '',
+                    tags: item.dataset.tags || '',
+                    host: item.dataset.host || '',
+                    username: item.dataset.username || ''
+                };
+            },
+            onSearch: (query) => {
+                if (query.trim() === '') {
+                    this.clearProfileSearch();
+                } else {
+                    this.performProfileSearch(query);
+                }
+            }
+        });
+    }
+
+    clearProfileSearch() {
+        console.log('🔍 Clearing profile search and restoring tree structure');
+        
+        // Restore proper tree structure by respecting folder expanded states
+        this.restoreProfileTreeStructure();
+        
+        // Clear the search state
+        if (this.profileLiveSearch) {
+            this.profileLiveSearch.clearSearch();
+        }
+    }
+
+    restoreProfileTreeStructure() {
+        const container = document.querySelector('#sidebar-content');
+        if (!container) return;
+        
+        console.log('🔍 Restoring profile tree structure...');
+        
+        // Restore original expanded state if we have it
+        if (this.originalExpandedState) {
+            console.log('🔍 Restoring original expanded state');
+            this.expandedFolders = new Set(this.originalExpandedState);
+            this.originalExpandedState = null; // Clear the stored state
+        }
+        
+        console.log('🔍 Current expanded folders:', Array.from(this.expandedFolders));
+        
+        // Show all items first, then handle visibility based on folder state
+        const allItems = container.querySelectorAll('.tree-item, .tree-folder');
+        allItems.forEach(item => {
+            item.style.display = '';
+        });
+        
+        // Handle folders based on their expanded/collapsed state
+        const folderItems = container.querySelectorAll('.tree-item[data-type="folder"]');
+        console.log('🔍 Found folders:', folderItems.length);
+        
+        folderItems.forEach(folder => {
+            // Always show the folder itself
+            folder.style.display = '';
+            
+            // Check if this folder is expanded
+            const folderId = folder.dataset.id;
+            const isExpanded = this.expandedFolders.has(folderId);
+            const folderContainer = folder.closest('.tree-folder');
+            
+            console.log(`🔍 Folder ${folderId}: expanded=${isExpanded}`);
+            
+            if (folderContainer) {
+                if (isExpanded) {
+                    // Ensure folder is properly expanded in DOM
+                    folderContainer.classList.add('expanded');
+                    const toggle = folderContainer.querySelector('.tree-folder-toggle');
+                    if (toggle) {
+                        toggle.textContent = '▼';
+                    }
+                } else {
+                    // Ensure folder is properly collapsed in DOM
+                    folderContainer.classList.remove('expanded');
+                    const toggle = folderContainer.querySelector('.tree-folder-toggle');
+                    if (toggle) {
+                        toggle.textContent = '▶';
+                    }
+                    // Hide children of collapsed folders
+                    this.hideChildrenOfCollapsedFolder(folder);
+                }
+            }
+        });
+        
+        console.log('🔍 Profile tree structure restored');
+    }
+
+    hideChildrenOfCollapsedFolder(folderElement) {
+        // Find the children container for this folder
+        let current = folderElement.nextElementSibling;
+        const folderLevel = parseInt(folderElement.dataset.level || '0');
+        
+        // Hide all items that are children of this folder (higher level number)
+        while (current) {
+            const currentLevel = parseInt(current.dataset.level || '0');
+            
+            // If we encounter an item at the same level or lower, we've moved out of this folder's children
+            if (currentLevel <= folderLevel) {
+                break;
+            }
+            
+            // Hide this child item
+            current.style.display = 'none';
+            current = current.nextElementSibling;
+        }
+    }
+
+    performProfileSearch(query) {
+        const container = document.querySelector('#sidebar-content');
+        if (!container) return;
+        
+        console.log('🔍 Performing profile search for query:', query);
+        
+        // Step 1: Find matching profiles from our in-memory data
+        const matchingProfiles = this.findMatchingProfilesInData(query);
+        console.log('🔍 Found matching profiles in data:', matchingProfiles.length);
+        
+        // Step 2: Temporarily expand folders that contain matching profiles
+        const foldersToExpand = new Set();
+        matchingProfiles.forEach(profile => {
+            if (profile.folderId) {
+                foldersToExpand.add(profile.folderId);
+                console.log('🔍 Need to expand folder for profile:', profile.name, 'in folder:', profile.folderId);
+            }
+        });
+        
+        // Step 3: Expand required folders temporarily and ensure all profiles are visible
+        this.temporarilyExpandFoldersForSearch(foldersToExpand);
+        
+        // Step 4: Wait for DOM updates and then search the visible elements
+        setTimeout(() => {
+            this.searchVisibleProfileElements(query, matchingProfiles);
+        }, 50); // Small delay to ensure DOM is updated
+    }
+
+    findMatchingProfilesInData(query) {
+        const matchingProfiles = [];
+        const queryLower = query.toLowerCase();
+        
+        // Search through the in-memory profile tree data
+        const searchInNodes = (nodes) => {
+            nodes.forEach(node => {
+                if (node.type === 'profile' && node.profile) {
+                    const profile = node.profile;
+                    const sshConfig = profile.sshConfig || {};
+                    
+                    // Check for matches in various fields
+                    const matches = 
+                        profile.name.toLowerCase().includes(queryLower) ||
+                        (profile.description || '').toLowerCase().includes(queryLower) ||
+                        (sshConfig.host || '').toLowerCase().includes(queryLower) ||
+                        (sshConfig.username || '').toLowerCase().includes(queryLower) ||
+                        (profile.tags || []).some(tag => tag.toLowerCase().includes(queryLower)) ||
+                        (profile.type || '').toLowerCase().includes(queryLower);
+                    
+                    if (matches) {
+                        matchingProfiles.push({
+                            id: profile.id,
+                            name: profile.name,
+                            folderId: profile.folderId
+                        });
+                    }
+                }
+                
+                // Recursively search in children
+                if (node.children && node.children.length > 0) {
+                    searchInNodes(node.children);
+                }
+            });
+        };
+        
+        if (this.profileTree) {
+            searchInNodes(this.profileTree);
+        }
+        
+        return matchingProfiles;
+    }
+
+    temporarilyExpandFoldersForSearch(foldersToExpand) {
+        // Store original expanded state for restoration later
+        if (!this.originalExpandedState) {
+            this.originalExpandedState = new Set(this.expandedFolders);
+        }
+        
+        // Temporarily expand required folders
+        foldersToExpand.forEach(folderId => {
+            if (!this.expandedFolders.has(folderId)) {
+                console.log('🔍 Temporarily expanding folder:', folderId);
+                this.expandedFolders.add(folderId);
+                
+                // Update DOM to reflect expansion
+                const folderElement = document.querySelector(`.tree-folder .tree-item[data-id="${folderId}"]`)?.closest('.tree-folder');
+                if (folderElement) {
+                    folderElement.classList.add('expanded');
+                    const toggle = folderElement.querySelector('.tree-folder-toggle');
+                    if (toggle) {
+                        toggle.textContent = '▼';
+                    }
+                }
+            }
+        });
+    }
+
+    searchVisibleProfileElements(query, matchingProfiles) {
+        const container = document.querySelector('#sidebar-content');
+        if (!container) return;
+        
+        const profileItems = container.querySelectorAll('.tree-item[data-type="profile"], .virtual-profile[data-type="profile"]');
+        const folderItems = container.querySelectorAll('.tree-item[data-type="folder"]');
+        let matchCount = 0;
+        
+        // Create a set of matching profile IDs for quick lookup
+        const matchingProfileIds = new Set(matchingProfiles.map(p => p.id));
+        
+        // Search profiles in DOM
+        profileItems.forEach(item => {
+            const profileId = item.dataset.id;
+            const matches = matchingProfileIds.has(profileId);
+            
+            if (matches) {
+                item.style.display = '';
+                matchCount++;
+                
+                // Show parent folders of matching profiles
+                let parent = item.parentElement;
+                while (parent && parent !== container) {
+                    if (parent.classList.contains('tree-folder')) {
+                        const folderItem = parent.querySelector('.tree-item[data-type="folder"]');
+                        if (folderItem) {
+                            folderItem.style.display = '';
+                        }
+                        parent.style.display = '';
+                    }
+                    parent = parent.parentElement;
+                }
+            } else {
+                item.style.display = 'none';
+            }
+        });
+        
+        // Handle folders - show if they contain visible children or are on the path to matching profiles
+        folderItems.forEach(folder => {
+            const folderContainer = folder.closest('.tree-folder');
+            if (folderContainer) {
+                const visibleChildren = folderContainer.querySelectorAll('.tree-item[data-type="profile"]:not([style*="display: none"])');
+                if (visibleChildren.length > 0) {
+                    folder.style.display = '';
+                    folderContainer.style.display = '';
+                } else {
+                    folder.style.display = 'none';
+                }
+            }
+        });
+        
+        console.log('🔍 Profile search completed. Matches found:', matchCount);
+        this.profileLiveSearch.updateSearchResults(matchCount);
+    }
+
     // New view methods for activity bar integration
     showProfilesView() {
-        console.log('📋 SidebarManager: Showing profiles view');
+        console.log('📋 SidebarManager: Showing profiles view (isReadyForLiveSearch:', this.isReadyForLiveSearch, ')');
         const sidebarContent = document.getElementById('sidebar-content');
-        if (sidebarContent) {
-            // Clear any existing content first to prevent mixing
-            sidebarContent.innerHTML = '';
-            sidebarContent.className = ''; // Clear any classes from other views
-            console.log('📋 SidebarManager: Sidebar content cleared');
-            
-            // Force reload profile tree data to ensure it's fresh (including virtual folders)
-            this.loadProfileTree().then(() => {
-                // Render the profile tree
-                this.renderProfileTree();
-                console.log('📋 SidebarManager: Profile tree rendered');
-                
-                // Force setup virtual folder interactions after rendering
-                setTimeout(() => {
-                    console.log('📋 SidebarManager: Setting up virtual folder interactions after render');
-                    this.setupVirtualFolderInteractions();
-                }, 100);
-                
-            }).catch(error => {
-                console.error('📋 SidebarManager: Failed to load profile tree:', error);
-                // Render with existing data as fallback
-                this.renderProfileTree();
-                
-                // Still try to setup interactions
-                setTimeout(() => {
-                    this.setupVirtualFolderInteractions();
-                }, 100);
-            });
+        if (!sidebarContent) {
+            console.error('📋 SidebarManager: Sidebar content element not found');
+            return;
         }
+        
+        // Check if profiles view is already showing
+        const hasProfileContent = sidebarContent.querySelector('.tree-item[data-type="profile"], .virtual-profile[data-type="profile"]');
+        const hasFilesContent = sidebarContent.querySelector('.remote-explorer-container, .remote-explorer-placeholder');
+        
+        console.log('📋 SidebarManager: Current content check - hasProfileContent:', !!hasProfileContent, 'hasFilesContent:', !!hasFilesContent);
+        
+        // If we already have profile content and no files content, just ensure live search is set up
+        if (hasProfileContent && !hasFilesContent && this.isReadyForLiveSearch) {
+            console.log('📋 SidebarManager: Profiles view already showing, ensuring live search is active');
+            this.setupLiveSearchForCurrentContent();
+            return;
+        }
+        
+        // Clear any existing content first to prevent mixing
+        sidebarContent.innerHTML = '';
+        sidebarContent.className = ''; // Clear any classes from other views
+        console.log('📋 SidebarManager: Sidebar content cleared');
+        
+        // Force reload profile tree data to ensure it's fresh (including virtual folders)
+        this.loadProfileTree().then(() => {
+            // Render the profile tree
+            this.renderProfileTree();
+            console.log('📋 SidebarManager: Profile tree rendered');
+            
+            // Initialize/re-initialize and enable profile live search after rendering
+            this.setupLiveSearchForCurrentContent();
+            
+        }).catch(error => {
+            console.error('📋 SidebarManager: Failed to load profile tree:', error);
+            // Render with existing data as fallback
+            this.renderProfileTree();
+            
+            // Still try to setup interactions and search
+            this.setupLiveSearchForCurrentContent();
+        });
+    }
+
+    setupLiveSearchForCurrentContent() {
+        setTimeout(() => {
+            console.log('📋 SidebarManager: Setting up live search for current content');
+            console.log('📋 SidebarManager: DOM ready check - profiles found:', document.querySelectorAll('.tree-item[data-type="profile"]').length);
+            
+            this.initializeProfileLiveSearch();
+            if (this.profileLiveSearch) {
+                this.profileLiveSearch.enable();
+                console.log('📋 SidebarManager: Profile live search enabled successfully');
+            } else {
+                console.error('📋 SidebarManager: Failed to initialize profile live search');
+            }
+            
+            // Setup virtual folder interactions after rendering
+            console.log('📋 SidebarManager: Setting up virtual folder interactions after render');
+            this.setupVirtualFolderInteractions();
+        }, 200); // Increased timeout to 200ms for better reliability
     }
 
     showFilesView() {
         console.log('📁 SidebarManager: Showing files view');
+        
+        // Disable profile live search when switching to files view
+        if (this.profileLiveSearch) {
+            this.profileLiveSearch.disable();
+        }
         
         // Clear the sidebar content first to prevent conflicts
         const sidebarContent = document.getElementById('sidebar-content');
@@ -1461,6 +1789,16 @@ export class SidebarManager {
         }
     }
 
+    // Called when the sidebar switches away from Profiles view
+    hideProfilesView() {
+        console.log('📋 SidebarManager: Hiding profiles view');
+        
+        // Disable profile live search when hiding profiles view
+        if (this.profileLiveSearch) {
+            this.profileLiveSearch.disable();
+        }
+    }
+
     // Called when the sidebar switches away from Files view
     hideFilesView() {
         if (window.remoteExplorerManager) {
@@ -1484,5 +1822,112 @@ export class SidebarManager {
                 <div style="margin-top: 4px; font-size: 11px;">Coming soon...</div>
             </div>
         `;
+    }
+
+    async showProfileProperties(profileId, treeItem) {
+        try {
+            // Get profile data
+            const profile = this.getProfileById(profileId);
+            if (!profile) {
+                showNotification('Profile not found', 'error');
+                return;
+            }
+
+            // Build properties info
+            let propertiesContent = `
+                <div class="properties-section">
+                    <h4>General Information</h4>
+                    <div class="property-item">
+                        <strong>Name:</strong> ${profile.name || 'Unknown'}
+                    </div>
+                    <div class="property-item">
+                        <strong>Type:</strong> ${(profile.type || 'local').toUpperCase()}
+                    </div>
+                    <div class="property-item">
+                        <strong>Icon:</strong> ${profile.icon || '🖥️'}
+                    </div>
+                    <div class="property-item">
+                        <strong>Favorite:</strong> ${profile.isFavorite ? 'Yes' : 'No'}
+                    </div>
+                </div>
+            `;
+
+            if (profile.type === 'ssh' && profile.sshConfig) {
+                propertiesContent += `
+                    <div class="properties-section">
+                        <h4>SSH Configuration</h4>
+                        <div class="property-item">
+                            <strong>Host:</strong> ${profile.sshConfig.host || 'N/A'}
+                        </div>
+                        <div class="property-item">
+                            <strong>Port:</strong> ${profile.sshConfig.port || 22}
+                        </div>
+                        <div class="property-item">
+                            <strong>Username:</strong> ${profile.sshConfig.username || 'N/A'}
+                        </div>
+                        <div class="property-item">
+                            <strong>Key Path:</strong> ${profile.sshConfig.keyPath || 'Not specified'}
+                        </div>
+                        <div class="property-item">
+                            <strong>Auto-discover Keys:</strong> ${profile.sshConfig.allowKeyAutoDiscovery ? 'Yes' : 'No'}
+                        </div>
+                    </div>
+                `;
+            } else if (profile.type === 'local' || profile.type === 'custom') {
+                propertiesContent += `
+                    <div class="properties-section">
+                        <h4>Shell Configuration</h4>
+                        <div class="property-item">
+                            <strong>Shell/Command:</strong> ${profile.shell || 'Default shell'}
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (profile.workingDir) {
+                propertiesContent += `
+                    <div class="properties-section">
+                        <h4>Working Directory</h4>
+                        <div class="property-item">
+                            <strong>Path:</strong> ${profile.workingDir}
+                        </div>
+                    </div>
+                `;
+            }
+
+            propertiesContent += `
+                <div class="properties-section">
+                    <h4>Usage Statistics</h4>
+                    <div class="property-item">
+                        <strong>Usage Count:</strong> ${profile.usageCount || 0}
+                    </div>
+                    <div class="property-item">
+                        <strong>Last Used:</strong> ${profile.lastUsed ? new Date(profile.lastUsed).toLocaleString() : 'Never'}
+                    </div>
+                    <div class="property-item">
+                        <strong>Created:</strong> ${profile.createdAt ? new Date(profile.createdAt).toLocaleString() : 'Unknown'}
+                    </div>
+                </div>
+            `;
+
+            // Show properties using Modal.js
+            await modal.show({
+                title: `${profile.name} Properties`,
+                content: propertiesContent,
+                icon: '⚙️',
+                buttons: [
+                    { text: 'Edit', style: 'primary', action: 'edit' },
+                    { text: 'Close', style: 'secondary', action: 'close' }
+                ]
+            }).then(result => {
+                if (result === 'edit') {
+                    this.editProfile(profileId);
+                }
+            });
+
+        } catch (error) {
+            console.error('Error showing profile properties:', error);
+            showNotification('Failed to show profile properties', 'error');
+        }
     }
 }

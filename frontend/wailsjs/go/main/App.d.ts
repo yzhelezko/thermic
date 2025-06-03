@@ -79,6 +79,8 @@ export function DeleteVirtualFolder(arg1:string):Promise<void>;
 
 export function DownloadAndInstallUpdate(arg1:string):Promise<void>;
 
+export function DownloadRemoteDirectory(arg1:string,arg2:string,arg3:string):Promise<void>;
+
 export function DownloadRemoteFile(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function DuplicateProfile(arg1:string):Promise<main.Profile>;
@@ -274,6 +276,8 @@ export function UpdateProfileTagsAPI(arg1:string,arg2:Array<string>):Promise<voi
 export function UpdateRemoteFileContent(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function UpdateVirtualFolder(arg1:string,arg2:string,arg3:string,arg4:main.VirtualFilter):Promise<void>;
+
+export function UploadFileContent(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function UploadRemoteFiles(arg1:string,arg2:Array<string>,arg3:string):Promise<void>;
 

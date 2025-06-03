@@ -154,6 +154,10 @@ export function DownloadAndInstallUpdate(arg1) {
   return window['go']['main']['App']['DownloadAndInstallUpdate'](arg1);
 }
 
+export function DownloadRemoteDirectory(arg1, arg2, arg3) {
+  return window['go']['main']['App']['DownloadRemoteDirectory'](arg1, arg2, arg3);
+}
+
 export function DownloadRemoteFile(arg1, arg2, arg3) {
   return window['go']['main']['App']['DownloadRemoteFile'](arg1, arg2, arg3);
 }
@@ -544,6 +548,10 @@ export function UpdateRemoteFileContent(arg1, arg2, arg3) {
 
 export function UpdateVirtualFolder(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['UpdateVirtualFolder'](arg1, arg2, arg3, arg4);
+}
+
+export function UploadFileContent(arg1, arg2, arg3) {
+  return window['go']['main']['App']['UploadFileContent'](arg1, arg2, arg3);
 }
 
 export function UploadRemoteFiles(arg1, arg2, arg3) {

@@ -427,6 +427,10 @@ func (c *SettingConfig) Update(a *App, value SettingValue) error {
 		a.config.config.SidebarCollapsed = value.(bool)
 	case "SidebarWidth":
 		a.config.config.SidebarWidth = value.(int)
+	case "SidebarProfilesWidth":
+		a.config.config.SidebarProfilesWidth = value.(int)
+	case "SidebarFilesWidth":
+		a.config.config.SidebarFilesWidth = value.(int)
 	case "Theme":
 		a.config.config.Theme = value.(string)
 	case "ScrollbackLines":
@@ -494,6 +498,20 @@ var settingConfigs = map[string]*SettingConfig{
 		Min:         intPtr(MinSidebarWidth),
 		Max:         intPtr(MaxSidebarWidth),
 		ConfigField: "SidebarWidth",
+	},
+	"SidebarProfilesWidth": {
+		Name:        "SidebarProfilesWidth",
+		Type:        SettingTypeInt,
+		Min:         intPtr(MinSidebarWidth),
+		Max:         intPtr(MaxSidebarWidth),
+		ConfigField: "SidebarProfilesWidth",
+	},
+	"SidebarFilesWidth": {
+		Name:        "SidebarFilesWidth",
+		Type:        SettingTypeInt,
+		Min:         intPtr(MinSidebarWidth),
+		Max:         intPtr(MaxSidebarWidth),
+		ConfigField: "SidebarFilesWidth",
 	},
 	"Theme": {
 		Name:          "Theme",
@@ -570,6 +588,10 @@ func (a *App) ConfigGet(settingName string) (SettingValue, error) {
 		return a.config.config.SidebarCollapsed, nil
 	case "SidebarWidth":
 		return a.config.config.SidebarWidth, nil
+	case "SidebarProfilesWidth":
+		return a.config.config.SidebarProfilesWidth, nil
+	case "SidebarFilesWidth":
+		return a.config.config.SidebarFilesWidth, nil
 	case "Theme":
 		return a.config.config.Theme, nil
 	case "ScrollbackLines":
