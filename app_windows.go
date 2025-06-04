@@ -469,8 +469,10 @@ func configurePtyProcess(cmd *pty.Cmd) {
 
 	// Hide console window
 	cmd.SysProcAttr.HideWindow = true
-	// Create new process group
-	cmd.SysProcAttr.CreationFlags = syscall.CREATE_NEW_PROCESS_GROUP
+	// Don't create new process group to allow signal propagation (Ctrl+C, etc.)
+	// ConPty handles signal forwarding when processes are in the same group
+	// For more details see: https://learn.microsoft.com/en-us/windows/win32/procthread/process-creation-flags
+	cmd.SysProcAttr.CreationFlags = 0
 }
 
 // findWSLExecutable finds WSL executable with proper validation
