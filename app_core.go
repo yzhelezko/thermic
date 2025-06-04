@@ -25,6 +25,15 @@ func (a *App) startup(ctx context.Context) {
 		// Fallback or handle error appropriately
 	}
 
+	// Update AI manager with loaded config
+	if a.ai != nil && a.config != nil && a.config.config != nil {
+		if err := a.ai.UpdateConfig(&a.config.config.AI); err != nil {
+			fmt.Printf("Warning: Failed to update AI manager with loaded config: %v\n", err)
+		} else {
+			fmt.Println("AI manager updated with loaded configuration")
+		}
+	}
+
 	// Set initial window size and state using loaded/default config
 	if a.config != nil && a.config.config != nil { // Ensure config is not nil
 		wailsRuntime.WindowSetSize(a.ctx, a.config.config.WindowWidth, a.config.config.WindowHeight)

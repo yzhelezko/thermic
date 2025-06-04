@@ -1371,7 +1371,8 @@ export class RemoteExplorerManager {
                         <label for="new-folder-name" style="display: block; margin-bottom: 6px; color: var(--text-primary); font-size: 13px; font-weight: 500;">
                             Folder Name:
                         </label>
-                        <input type="text" id="new-folder-name" placeholder="Enter folder name" 
+                        <input type="text" id="new-folder-name" placeholder="Enter folder name"
+                    autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" 
                                style="width: 100%; padding: 8px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-color); 
                                       border-radius: 4px; color: var(--text-primary); font-size: 13px; transition: border-color 0.15s ease;"
                                onfocus="this.style.borderColor = 'var(--accent-color)'"
@@ -1422,7 +1423,8 @@ export class RemoteExplorerManager {
                         <label for="new-file-name" style="display: block; margin-bottom: 6px; color: var(--text-primary); font-size: 13px; font-weight: 500;">
                             File Name:
                         </label>
-                        <input type="text" id="new-file-name" placeholder="Enter file name (e.g., script.js, readme.md)" 
+                        <input type="text" id="new-file-name" placeholder="Enter file name (e.g., script.js, readme.md)"
+                    autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" 
                                style="width: 100%; padding: 8px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-color); 
                                       border-radius: 4px; color: var(--text-primary); font-size: 13px; transition: border-color 0.15s ease;"
                                onfocus="this.style.borderColor = 'var(--accent-color)'"
@@ -1473,7 +1475,8 @@ export class RemoteExplorerManager {
                         <label for="new-file-name" style="display: block; margin-bottom: 6px; color: var(--text-primary); font-size: 13px; font-weight: 500;">
                             New Name:
                         </label>
-                        <input type="text" id="new-file-name" value="${currentName}" 
+                        <input type="text" id="new-file-name" value="${currentName}"
+                    autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" 
                                style="width: 100%; padding: 8px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-color); 
                                       border-radius: 4px; color: var(--text-primary); font-size: 13px; transition: border-color 0.15s ease;"
                                onfocus="this.style.borderColor = 'var(--accent-color)'"

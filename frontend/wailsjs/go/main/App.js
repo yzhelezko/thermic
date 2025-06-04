@@ -166,6 +166,10 @@ export function DuplicateProfile(arg1) {
   return window['go']['main']['App']['DuplicateProfile'](arg1);
 }
 
+export function EnableAI(arg1) {
+  return window['go']['main']['App']['EnableAI'](arg1);
+}
+
 export function ExecuteMonitoringCommand(arg1, arg2) {
   return window['go']['main']['App']['ExecuteMonitoringCommand'](arg1, arg2);
 }
@@ -182,12 +186,24 @@ export function ForceDisconnectTab(arg1) {
   return window['go']['main']['App']['ForceDisconnectTab'](arg1);
 }
 
+export function GetAIConfig() {
+  return window['go']['main']['App']['GetAIConfig']();
+}
+
+export function GetAISupportedModels() {
+  return window['go']['main']['App']['GetAISupportedModels']();
+}
+
 export function GetActiveTab() {
   return window['go']['main']['App']['GetActiveTab']();
 }
 
 export function GetActiveTabInfo() {
   return window['go']['main']['App']['GetActiveTabInfo']();
+}
+
+export function GetAvailableAIProviders() {
+  return window['go']['main']['App']['GetAvailableAIProviders']();
 }
 
 export function GetAvailableShells() {
@@ -362,6 +378,10 @@ export function InitializeProfiles() {
   return window['go']['main']['App']['InitializeProfiles']();
 }
 
+export function IsAIEnabled() {
+  return window['go']['main']['App']['IsAIEnabled']();
+}
+
 export function IsSessionClosed(arg1) {
   return window['go']['main']['App']['IsSessionClosed'](arg1);
 }
@@ -486,6 +506,18 @@ export function SelectSaveLocation(arg1) {
   return window['go']['main']['App']['SelectSaveLocation'](arg1);
 }
 
+export function SendAIRequest(arg1) {
+  return window['go']['main']['App']['SendAIRequest'](arg1);
+}
+
+export function SetAIConfig(arg1) {
+  return window['go']['main']['App']['SetAIConfig'](arg1);
+}
+
+export function SetAIProvider(arg1) {
+  return window['go']['main']['App']['SetAIProvider'](arg1);
+}
+
 export function SetActiveTab(arg1) {
   return window['go']['main']['App']['SetActiveTab'](arg1);
 }
@@ -520,6 +552,10 @@ export function StartTabShellWithSize(arg1, arg2, arg3) {
 
 export function StopProfileWatcher() {
   return window['go']['main']['App']['StopProfileWatcher']();
+}
+
+export function TestAIConnection() {
+  return window['go']['main']['App']['TestAIConnection']();
 }
 
 export function ToggleFavoriteAPI(arg1) {

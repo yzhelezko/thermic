@@ -5,6 +5,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { GetAvailableShells, StartShell, WriteToShell, ResizeShell, CloseShell, ShowMessageDialog, WaitForSessionClose, ConfigGet, ConfigSet, ApproveHostKeyUpdate } from '../../wailsjs/go/main/App';
 import { EventsOn, EventsEmit } from '../../wailsjs/runtime/runtime';
 import { THEMES, DEFAULT_TERMINAL_OPTIONS, generateSessionId, formatShellName, updateStatus } from './utils.js';
+import { AIFloatWindow } from '../components/AIFloatWindow.js';
 
 export class TerminalManager {
     constructor(tabsManager = null) {
@@ -57,6 +58,27 @@ export class TerminalManager {
         
         // Start resource monitoring
         this.startResourceMonitoring();
+
+        // Initialize AI float window after DOM is ready
+        this.aiFloatWindow = null;
+    }
+
+    initializeAIWindow() {
+        try {
+            console.log('Initializing AI float window in terminal...');
+            this.aiFloatWindow = new AIFloatWindow();
+            
+            // Set up the AI window to use this terminal manager for pasting
+            this.aiFloatWindow.terminalManager = this;
+            
+            // Expose globally for accessibility from other modules if needed
+            window.aiFloatWindow = this.aiFloatWindow;
+            
+            console.log('AI float window initialized successfully');
+        } catch (error) {
+            console.error('Failed to initialize AI float window:', error);
+            this.aiFloatWindow = null;
+        }
     }
 
     setupGlobalOutputListener() {
@@ -176,6 +198,9 @@ export class TerminalManager {
             return;
         }
 
+        // Initialize AI float window now that DOM is ready
+        this.initializeAIWindow();
+
         // Create initial terminal session (will be managed by tabs)
         this.updateTerminalContainer();
     }
@@ -287,6 +312,25 @@ export class TerminalManager {
             if (event.ctrlKey && event.code === 'KeyW') {
                 // Emit event for close tab
                 document.dispatchEvent(new CustomEvent('terminal:close-tab', { detail: { sessionId } }));
+                return false;
+            }
+            // Ctrl+K - AI Assistant
+            if (event.ctrlKey && event.code === 'KeyK' && !event.shiftKey && !event.altKey) {
+                console.log('Ctrl+K pressed in terminal, AI window:', this.aiFloatWindow);
+                if (this.aiFloatWindow) {
+                    if (this.aiFloatWindow.isVisible) {
+                        // Window is already open - add selected text as context
+                        const selectedText = this.getSelectedText();
+                        if (selectedText.trim()) {
+                            this.aiFloatWindow.addContext(selectedText);
+                            console.log('Added selected text as context:', selectedText);
+                        }
+                    } else {
+                        this.aiFloatWindow.show();
+                    }
+                } else {
+                    console.error('AI window not initialized in terminal!');
+                }
                 return false;
             }
             return true;
@@ -1016,6 +1060,47 @@ export class TerminalManager {
         }
     }
 
+    pasteText(text) {
+        // Paste text into the active terminal
+        if (this.activeSessionId) {
+            const terminalSession = this.terminals.get(this.activeSessionId);
+            if (terminalSession && terminalSession.terminal && terminalSession.isConnected) {
+                try {
+                    WriteToShell(this.activeSessionId, text);
+                    console.log('Text pasted to active terminal via backend');
+                    return true;
+                } catch (error) {
+                    console.error('Failed to paste text to active terminal:', error);
+                }
+            }
+        } else if (this.terminal && this.isConnected) {
+            // Fallback to default terminal
+            try {
+                WriteToShell(this.sessionId, text);
+                console.log('Text pasted to default terminal via backend');
+                return true;
+            } catch (error) {
+                console.error('Failed to paste text to default terminal:', error);
+            }
+        } else {
+            console.warn('No active terminal session to paste text into');
+        }
+        return false;
+    }
+
+    getSelectedText() {
+        // Get selected text from the active terminal
+        if (this.activeSessionId) {
+            const terminalSession = this.terminals.get(this.activeSessionId);
+            if (terminalSession && terminalSession.terminal) {
+                return terminalSession.terminal.getSelection();
+            }
+        } else if (this.terminal) {
+            return this.terminal.getSelection();
+        }
+        return '';
+    }
+
     findTabBySessionId(sessionId) {
         if (!this.tabsManager) return null;
         
@@ -1352,6 +1437,18 @@ export class TerminalManager {
         // Disable host key prompt mode if active
         if (this.hostKeyPromptMode.active) {
             this.disableHostKeyPromptMode();
+        }
+
+        // Cleanup AI float window
+        if (this.aiFloatWindow) {
+            try {
+                this.aiFloatWindow.hide();
+                this.aiFloatWindow.terminalManager = null;
+                console.log('AI float window cleaned up');
+            } catch (error) {
+                console.warn('Error cleaning up AI float window:', error);
+            }
+            this.aiFloatWindow = null;
         }
 
         // Cleanup all terminal sessions

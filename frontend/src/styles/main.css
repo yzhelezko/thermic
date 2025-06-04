@@ -20,4 +20,74 @@
 @import 'context-menu.css'; 
 @import 'version-manager.css'; 
 @import 'remote-explorer.css';
-@import 'icons.css'; 
+@import 'ai-float-window.css';
+@import 'icons.css';
+
+/* AI Model Suggestions */
+.input-with-suggestion {
+    position: relative;
+}
+
+.model-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    display: none;
+    max-height: 120px;
+    overflow-y: auto;
+}
+
+.model-suggestions.show {
+    display: block;
+}
+
+.suggestion-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.15s ease;
+}
+
+.suggestion-item:last-child {
+    border-bottom: none;
+}
+
+.suggestion-item:hover {
+    background: var(--bg-hover);
+}
+
+.suggestion-item.selected {
+    background: var(--accent-color);
+    color: white;
+}
+
+/* AI Settings Status Indicators */
+.setting-status {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.setting-status.testing {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+
+.setting-status.success {
+    background: rgba(34, 197, 94, 0.1);
+    color: #22c55e;
+}
+
+.setting-status.error {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+} 
