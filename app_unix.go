@@ -197,7 +197,7 @@ func (a *App) getAvailableShells() []string {
 	// Update cache
 	unixShellCacheInstance.mutex.Lock()
 	unixShellCacheInstance.shells = make([]string, len(shells))
-	copy(shells, unixShellCacheInstance.shells)
+	copy(unixShellCacheInstance.shells, shells)
 	unixShellCacheInstance.timestamp = time.Now()
 	unixShellCacheInstance.mutex.Unlock()
 
