@@ -325,6 +325,11 @@ export class SettingsManager {
         this.setupProfilesPathSettings().catch(error => {
             console.error('Error setting up profiles path settings:', error);
         });
+
+        // --- AI Settings Logic ---
+        this.setupAISettings().catch(error => {
+            console.error('Error setting up AI settings:', error);
+        });
     }
 
     async setupContextMenuSettings() {
@@ -628,5 +633,189 @@ export class SettingsManager {
         }
     }
 
+    async setupAISettings() {
+        try {
+            console.log('Setting up AI settings...');
+
+            // Get AI settings elements
+            const aiEnabledToggle = document.getElementById('ai-enabled-toggle');
+            const aiProviderSelect = document.getElementById('ai-provider-select');
+            const aiModelInput = document.getElementById('ai-model-input');
+            const aiModelSuggestions = document.getElementById('ai-model-suggestions');
+            const aiApiKeyInput = document.getElementById('ai-api-key-input');
+            const aiApiKeyToggle = document.getElementById('ai-api-key-toggle');
+            const aiApiUrlInput = document.getElementById('ai-api-url-input');
+
+            const aiHotkeyInput = document.getElementById('ai-hotkey-input');
+            const aiTestConnectionBtn = document.getElementById('ai-test-connection-btn');
+            const aiConnectionStatus = document.getElementById('ai-connection-status');
+
+            if (!aiEnabledToggle || !aiProviderSelect || !aiModelInput) {
+                console.warn('Some AI settings elements not found in DOM');
+                return;
+            }
+
+            // Load current AI configuration using ConfigGet
+            const aiEnabled = await window.go.main.App.ConfigGet("AIEnabled");
+            const aiProvider = await window.go.main.App.ConfigGet("AIProvider");
+            const aiModelID = await window.go.main.App.ConfigGet("AIModelID");
+            const aiAPIKey = await window.go.main.App.ConfigGet("AIAPIKey");
+            const aiAPIURL = await window.go.main.App.ConfigGet("AIURL");
+
+            const aiHotkey = await window.go.main.App.ConfigGet("AIHotkey");
+            
+            // Set initial values
+            aiEnabledToggle.checked = aiEnabled || false;
+            aiProviderSelect.value = aiProvider || 'openai';
+            aiModelInput.value = aiModelID || 'gpt-4o-mini';
+            if (aiApiKeyInput) aiApiKeyInput.value = aiAPIKey || '';
+            if (aiApiUrlInput) aiApiUrlInput.value = aiAPIURL || '';
+
+            if (aiHotkeyInput) aiHotkeyInput.value = aiHotkey || 'ctrl+k';
+
+            // AI enabled toggle
+            aiEnabledToggle.addEventListener('change', async (event) => {
+                try {
+                    const enabled = event.target.checked;
+                    await window.go.main.App.ConfigSet('AIEnabled', enabled);
+                    showNotification(`AI assistant ${enabled ? 'enabled' : 'disabled'}`, 'info');
+                } catch (error) {
+                    console.error('Error updating AI enabled setting:', error);
+                    showNotification(`Failed to update AI setting: ${error.message}`, 'error');
+                    event.target.checked = !event.target.checked;
+                }
+            });
+
+            // AI provider select
+            aiProviderSelect.addEventListener('change', async (event) => {
+                try {
+                    const provider = event.target.value;
+                    await window.go.main.App.ConfigSet('AIProvider', provider);
+                    showNotification(`AI provider set to ${provider}`, 'info');
+                } catch (error) {
+                    console.error('Error updating AI provider:', error);
+                    showNotification(`Failed to update AI provider: ${error.message}`, 'error');
+                }
+            });
+
+            // Model input with suggestions
+            if (aiModelInput && aiModelSuggestions) {
+                aiModelInput.addEventListener('input', async (event) => {
+                    try {
+                        const modelID = event.target.value.trim();
+                        await window.go.main.App.ConfigSet('AIModelID', modelID);
+                    } catch (error) {
+                        console.error('Error updating AI model:', error);
+                    }
+                });
+
+                aiModelInput.addEventListener('focus', () => {
+                    aiModelSuggestions.classList.add('show');
+                });
+
+                aiModelInput.addEventListener('blur', () => {
+                    // Delay hiding to allow clicks on suggestions
+                    setTimeout(() => {
+                        aiModelSuggestions.classList.remove('show');
+                    }, 200);
+                });
+
+                // Handle suggestion clicks
+                aiModelSuggestions.addEventListener('click', async (event) => {
+                    const suggestionItem = event.target.closest('.suggestion-item');
+                    if (suggestionItem) {
+                        const modelID = suggestionItem.dataset.model;
+                        aiModelInput.value = modelID;
+                        aiModelSuggestions.classList.remove('show');
+                        
+                        try {
+                            await window.go.main.App.ConfigSet('AIModelID', modelID);
+                            showNotification(`AI model set to ${modelID}`, 'info');
+                        } catch (error) {
+                            console.error('Error updating AI model:', error);
+                            showNotification(`Failed to update AI model: ${error.message}`, 'error');
+                        }
+                    }
+                });
+            }
+
+            // API key input
+            if (aiApiKeyInput) {
+                let apiKeyDebounceTimeout;
+                aiApiKeyInput.addEventListener('input', (event) => {
+                    clearTimeout(apiKeyDebounceTimeout);
+                    apiKeyDebounceTimeout = setTimeout(async () => {
+                        try {
+                            const apiKey = event.target.value.trim();
+                            await window.go.main.App.ConfigSet('AIAPIKey', apiKey);
+                        } catch (error) {
+                            console.error('Error updating AI API key:', error);
+                        }
+                    }, 1000);
+                });
+
+                // API key show/hide toggle
+                if (aiApiKeyToggle) {
+                    aiApiKeyToggle.addEventListener('click', () => {
+                        const isPassword = aiApiKeyInput.type === 'password';
+                        aiApiKeyInput.type = isPassword ? 'text' : 'password';
+                    });
+                }
+            }
+
+            // API URL input
+            if (aiApiUrlInput) {
+                let apiUrlDebounceTimeout;
+                aiApiUrlInput.addEventListener('input', (event) => {
+                    clearTimeout(apiUrlDebounceTimeout);
+                    apiUrlDebounceTimeout = setTimeout(async () => {
+                        try {
+                            const apiUrl = event.target.value.trim();
+                            await window.go.main.App.ConfigSet('AIURL', apiUrl);
+                        } catch (error) {
+                            console.error('Error updating AI API URL:', error);
+                        }
+                    }, 1000);
+                });
+            }
+
+
+
+            // Test connection button
+            if (aiTestConnectionBtn && aiConnectionStatus) {
+                aiTestConnectionBtn.addEventListener('click', async () => {
+                    try {
+                        aiTestConnectionBtn.disabled = true;
+                        aiConnectionStatus.textContent = 'Testing...';
+                        aiConnectionStatus.className = 'setting-status testing';
+
+                        const result = await window.go.main.App.TestAIConnection();
+                        
+                        if (result.Success) {
+                            aiConnectionStatus.textContent = 'Connected';
+                            aiConnectionStatus.className = 'setting-status success';
+                            showNotification('AI connection test successful', 'success');
+                        } else {
+                            aiConnectionStatus.textContent = `Failed: ${result.Error}`;
+                            aiConnectionStatus.className = 'setting-status error';
+                            showNotification(`AI connection test failed: ${result.Error}`, 'error');
+                        }
+                    } catch (error) {
+                        console.error('Error testing AI connection:', error);
+                        aiConnectionStatus.textContent = `Error: ${error.message}`;
+                        aiConnectionStatus.className = 'setting-status error';
+                        showNotification(`AI connection test error: ${error.message}`, 'error');
+                    } finally {
+                        aiTestConnectionBtn.disabled = false;
+                    }
+                });
+            }
+
+            console.log('AI settings initialized successfully');
+
+        } catch (error) {
+            console.error('Error in setupAISettings:', error);
+        }
+    }
 
 } 

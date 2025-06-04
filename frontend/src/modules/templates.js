@@ -153,6 +153,7 @@ export function createSettingsPanelTemplate() {
                     <button class="settings-tab" data-tab-target="#settings-tab-appearance"><img src="./icons/palette.svg" class="svg-icon" alt="🎨"> Appearance</button>
                     <button class="settings-tab" data-tab-target="#settings-tab-profiles"><img src="./icons/folder.svg" class="svg-icon" alt="📁"> Profiles</button>
                     <button class="settings-tab" data-tab-target="#settings-tab-advanced"><img src="./icons/settings.svg" class="svg-icon" alt="⚙️"> Advanced</button>
+                    <button class="settings-tab" data-tab-target="#settings-tab-ai"><img src="./icons/ai.svg" class="svg-icon" alt="🤖"> AI</button>
                     <button class="settings-tab" data-tab-target="#settings-tab-about"><img src="./icons/info.svg" class="svg-icon" alt="ℹ️"> About</button>
                 </div>
             </div>
@@ -168,6 +169,9 @@ export function createSettingsPanelTemplate() {
                 </div>
                 <div class="settings-tab-pane" id="settings-tab-advanced">
                     ${createAdvancedSettingsContent()}
+                </div>
+                <div class="settings-tab-pane" id="settings-tab-ai">
+                    ${createAISettingsContent()}
                 </div>
                 <div class="settings-tab-pane" id="settings-tab-about">
                     ${createAboutSettingsContent()}
@@ -648,7 +652,8 @@ export function createProfilesSettingsContent() {
                         </div>
                         <div class="setting-item-control">
                             <div class="profiles-path-container">
-                                <input type="text" class="modern-input" id="profiles-path-input" placeholder="Default location will be used">
+                                <input type="text" class="modern-input" id="profiles-path-input" placeholder="Default location will be used"
+                            autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
                                 <button class="modern-button secondary" id="browse-profiles-path"><img src="./icons/folder-open.svg" class="svg-icon" alt="📂"> Browse</button>
                                 <button class="modern-button" id="save-profiles-path">Save</button>
                             </div>
@@ -950,6 +955,148 @@ export function createAdvancedSettingsContent() {
                         </div>
                         <div class="setting-item-control">
                             <button class="modern-button secondary" disabled>Check Now</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+export function createAISettingsContent() {
+    return `
+        <div class="settings-section">
+            <div class="settings-section-title">
+                <span class="settings-section-icon"><img src="./icons/ai.svg" class="svg-icon" alt="🤖"></span>
+                AI Assistant Configuration
+            </div>
+            <div class="settings-list">
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Enable AI Assistant</div>
+                            <div class="setting-item-description">Enable AI-powered assistance in terminal</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <label class="modern-toggle">
+                                <input type="checkbox" id="ai-enabled-toggle">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">AI Provider</div>
+                            <div class="setting-item-description">Choose your AI service provider</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <select class="modern-select" id="ai-provider-select">
+                                <option value="openai">OpenAI</option>
+                                <option value="gemini" disabled>Google Gemini (Coming Soon)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">API URL</div>
+                            <div class="setting-item-description">API endpoint URL for your provider</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <input type="url" id="ai-api-url-input" class="modern-input" placeholder="https://api.openai.com/v1">
+                        </div>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Model ID</div>
+                            <div class="setting-item-description">AI model to use for responses (e.g. gpt-4o-mini, gpt-4, claude-3-sonnet)</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <div class="input-with-suggestion">
+                                <input type="text" id="ai-model-input" class="modern-input" placeholder="Enter model ID (e.g. gpt-4o-mini)"
+                            autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
+                                <div class="model-suggestions" id="ai-model-suggestions">
+                                    <div class="suggestion-item" data-model="gpt-4o-mini">gpt-4o-mini (recommended)</div>
+                                    <div class="suggestion-item" data-model="gpt-4o">gpt-4o</div>
+                                    <div class="suggestion-item" data-model="gpt-4-turbo">gpt-4-turbo</div>
+                                    <div class="suggestion-item" data-model="gpt-3.5-turbo">gpt-3.5-turbo</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">API Key</div>
+                            <div class="setting-item-description">Your API key for the selected provider</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <div class="input-with-button">
+                                <input type="password" id="ai-api-key-input" class="modern-input" placeholder="Enter your API key">
+                                <button type="button" class="input-button" id="ai-api-key-toggle" title="Show/Hide API Key">
+                                    <img src="./icons/eye.svg" class="svg-icon" alt="👁️">
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <div class="settings-section-title">
+                <span class="settings-section-icon"><img src="./icons/keyboard.svg" class="svg-icon" alt="⌨️"></span>
+                Hotkeys & Interaction
+            </div>
+            <div class="settings-list">
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Activation Hotkey</div>
+                            <div class="setting-item-description">Keyboard shortcut to open AI assistant</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <input type="text" id="ai-hotkey-input" class="modern-input" placeholder="ctrl+k" readonly>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <div class="settings-section-title">
+                <span class="settings-section-icon"><img src="./icons/network.svg" class="svg-icon" alt="🌐"></span>
+                Connection & Testing
+            </div>
+            <div class="settings-list">
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Test Connection</div>
+                            <div class="setting-item-description">Verify your AI provider configuration</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <button class="modern-button primary" id="ai-test-connection-btn">
+                                <img src="./icons/network.svg" class="svg-icon" alt="🌐">
+                                Test Connection
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Connection Status</div>
+                            <div class="setting-item-description">Current status of AI service connection</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <span class="setting-status" id="ai-connection-status">Not tested</span>
                         </div>
                     </div>
                 </div>
@@ -1270,7 +1417,8 @@ export function createProfileFormTemplate(mode, type, data = null) {
                 <div class="form-group">
                     <label for="folder-name">Folder Name</label>
                     <div class="name-icon-container">
-                        <input type="text" id="folder-name" class="form-input" value="${data?.name || ''}" placeholder="Enter folder name" required>
+                        <input type="text" id="folder-name" class="form-input" value="${data?.name || ''}" placeholder="Enter folder name" required
+                    autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
                         <div class="icon-selector-compact">
                             <button type="button" class="icon-selector-button" id="folder-icon-btn">
                                 <span class="current-icon" id="folder-current-icon">${data?.icon || '📁'}</span>
@@ -1304,7 +1452,8 @@ export function createProfileFormTemplate(mode, type, data = null) {
                 <div class="form-group">
                     <label for="profile-name">Profile Name</label>
                     <div class="name-icon-container">
-                        <input type="text" id="profile-name" class="form-input" value="${data?.name || ''}" placeholder="Enter profile name" required>
+                        <input type="text" id="profile-name" class="form-input" value="${data?.name || ''}" placeholder="Enter profile name" required
+                    autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
                         <div class="icon-selector-compact">
                             <button type="button" class="icon-selector-button" id="profile-icon-btn">
                                 <span class="current-icon" id="profile-current-icon">${data?.icon || '💻'}</span>
@@ -1356,11 +1505,13 @@ export function createProfileFormTemplate(mode, type, data = null) {
                 </div>
                 <div class="form-group custom-group" style="display: ${data?.type === 'custom' ? 'block' : 'none'}">
                     <label for="custom-command">Custom Command</label>
-                    <input type="text" id="custom-command" class="form-input" value="${data?.shell || ''}" placeholder="Enter custom command">
+                                            <input type="text" id="custom-command" class="form-input" value="${data?.shell || ''}" placeholder="Enter custom command"
+                            autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
                 </div>
                 <div class="form-group">
                     <label for="profile-workdir">Working Directory (optional)</label>
-                    <input type="text" id="profile-workdir" class="form-input" value="${data?.workingDir || ''}" placeholder="Enter working directory">
+                                            <input type="text" id="profile-workdir" class="form-input" value="${data?.workingDir || ''}" placeholder="Enter working directory"
+                            autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
                 </div>
             </div>
 
@@ -1371,7 +1522,8 @@ export function createProfileFormTemplate(mode, type, data = null) {
                 </div>
                 <div class="form-group">
                     <label for="ssh-host">SSH Host</label>
-                    <input type="text" id="ssh-host" class="form-input" value="${data?.sshConfig?.host || ''}" placeholder="hostname or IP address">
+                                            <input type="text" id="ssh-host" class="form-input" value="${data?.sshConfig?.host || ''}" placeholder="hostname or IP address"
+                            autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
                 </div>
                 <div class="form-group">
                     <label for="ssh-port">SSH Port</label>
@@ -1379,7 +1531,8 @@ export function createProfileFormTemplate(mode, type, data = null) {
                 </div>
                 <div class="form-group">
                     <label for="ssh-username">Username</label>
-                    <input type="text" id="ssh-username" class="form-input" value="${data?.sshConfig?.username || ''}" placeholder="username">
+                                            <input type="text" id="ssh-username" class="form-input" value="${data?.sshConfig?.username || ''}" placeholder="username"
+                            autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
                 </div>
                 <div class="form-group">
                     <label for="ssh-password">Password (optional)</label>
@@ -1388,7 +1541,8 @@ export function createProfileFormTemplate(mode, type, data = null) {
                 <div class="form-group">
                     <label for="ssh-keypath">Private Key Path (optional)</label>
                     <div class="ssh-key-path-container">
-                        <input type="text" id="ssh-keypath" class="form-input" value="${data?.sshConfig?.keyPath || ''}" placeholder="/path/to/private/key">
+                        <input type="text" id="ssh-keypath" class="form-input" value="${data?.sshConfig?.keyPath || ''}" placeholder="/path/to/private/key"
+                            autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
                         <button type="button" class="modern-button secondary" id="browse-ssh-key"><img src="./icons/folder-open.svg" class="svg-icon" alt="📂"> Browse</button>
                     </div>
                 </div>
@@ -1596,7 +1750,8 @@ export function createProfileSettingsContent(type, data = null) {
                         <div class="setting-item-description">Default directory when opening this profile</div>
                     </div>
                     <div class="setting-item-control">
-                        <input type="text" class="modern-input" id="profile-working-dir" placeholder="Leave empty for default">
+                        <input type="text" class="modern-input" id="profile-working-dir" placeholder="Leave empty for default"
+                            autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
                     </div>
                 </div>
             </div>

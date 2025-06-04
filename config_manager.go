@@ -436,6 +436,20 @@ func (c *SettingConfig) Update(a *App, value SettingValue) error {
 	case "ScrollbackLines":
 		a.config.config.ScrollbackLines = value.(int)
 
+	// AI Configuration Fields
+	case "AI.Enabled":
+		a.config.config.AI.Enabled = value.(bool)
+	case "AI.Provider":
+		a.config.config.AI.Provider = value.(string)
+	case "AI.APIKey":
+		a.config.config.AI.APIKey = value.(string)
+	case "AI.APIURL":
+		a.config.config.AI.APIURL = value.(string)
+	case "AI.ModelID":
+		a.config.config.AI.ModelID = value.(string)
+	case "AI.Hotkey":
+		a.config.config.AI.Hotkey = value.(string)
+
 	default:
 		return fmt.Errorf("unknown config field: %s", c.ConfigField)
 	}
@@ -460,6 +474,54 @@ func updateDefaultShell(a *App, value SettingValue) error {
 		a.setPlatformDefaultShell(shellPath)
 		fmt.Printf("Default shell for %s set to: %s\n", getOSName(), shellPath)
 	}
+	return nil
+}
+
+// Custom update function for AI settings that also updates the AI manager
+func updateAIEnabledSetting(a *App, value SettingValue) error {
+	enabled := value.(bool)
+	a.config.config.AI.Enabled = enabled
+
+	// Update AI manager with new config if available
+	if a.ai != nil {
+		if err := a.ai.UpdateConfig(&a.config.config.AI); err != nil {
+			fmt.Printf("Warning: Failed to update AI manager with new config: %v\n", err)
+		}
+	}
+
+	fmt.Printf("AI enabled setting updated to: %v\n", enabled)
+	return nil
+}
+
+// Custom update function for AI provider that also updates the AI manager
+func updateAIProviderSetting(a *App, value SettingValue) error {
+	provider := value.(string)
+	a.config.config.AI.Provider = provider
+
+	// Update AI manager with new config if available
+	if a.ai != nil {
+		if err := a.ai.UpdateConfig(&a.config.config.AI); err != nil {
+			fmt.Printf("Warning: Failed to update AI manager with new config: %v\n", err)
+		}
+	}
+
+	fmt.Printf("AI provider updated to: %s\n", provider)
+	return nil
+}
+
+// Custom update function for AI API key that also updates the AI manager
+func updateAIAPIKeySetting(a *App, value SettingValue) error {
+	apiKey := value.(string)
+	a.config.config.AI.APIKey = apiKey
+
+	// Update AI manager with new config if available
+	if a.ai != nil {
+		if err := a.ai.UpdateConfig(&a.config.config.AI); err != nil {
+			fmt.Printf("Warning: Failed to update AI manager with new config: %v\n", err)
+		}
+	}
+
+	fmt.Printf("AI API key updated\n") // Don't log the actual key for security
 	return nil
 }
 
@@ -528,6 +590,42 @@ var settingConfigs = map[string]*SettingConfig{
 		EventName:     "config:scrollback-lines-changed",
 		ConfigField:   "ScrollbackLines",
 		RequiresMutex: true,
+	},
+	// AI Configuration Settings
+	"AIEnabled": {
+		Name:         "AIEnabled",
+		Type:         SettingTypeBool,
+		CustomUpdate: updateAIEnabledSetting,
+	},
+	"AIProvider": {
+		Name:          "AIProvider",
+		Type:          SettingTypeString,
+		AllowedValues: []string{"openai", "gemini"},
+		CustomUpdate:  updateAIProviderSetting,
+	},
+	"AIAPIKey": {
+		Name:         "AIAPIKey",
+		Type:         SettingTypeString,
+		MaxLength:    intPtr(512),
+		CustomUpdate: updateAIAPIKeySetting,
+	},
+	"AIURL": {
+		Name:        "AIURL",
+		Type:        SettingTypeString,
+		MaxLength:   intPtr(1024),
+		ConfigField: "AI.APIURL",
+	},
+	"AIModelID": {
+		Name:        "AIModelID",
+		Type:        SettingTypeString,
+		MaxLength:   intPtr(256),
+		ConfigField: "AI.ModelID",
+	},
+	"AIHotkey": {
+		Name:        "AIHotkey",
+		Type:        SettingTypeString,
+		MaxLength:   intPtr(32),
+		ConfigField: "AI.Hotkey",
 	},
 }
 
@@ -598,6 +696,20 @@ func (a *App) ConfigGet(settingName string) (SettingValue, error) {
 		a.config.mutex.RLock()
 		defer a.config.mutex.RUnlock()
 		return a.config.config.ScrollbackLines, nil
+
+	// AI Configuration Settings
+	case "AIEnabled":
+		return a.config.config.AI.Enabled, nil
+	case "AIProvider":
+		return a.config.config.AI.Provider, nil
+	case "AIAPIKey":
+		return a.config.config.AI.APIKey, nil
+	case "AIURL":
+		return a.config.config.AI.APIURL, nil
+	case "AIModelID":
+		return a.config.config.AI.ModelID, nil
+	case "AIHotkey":
+		return a.config.config.AI.Hotkey, nil
 
 	default:
 		return nil, &ConfigError{Op: "get_setting", Err: fmt.Errorf("unhandled setting: %s", settingName)}

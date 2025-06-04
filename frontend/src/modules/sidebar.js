@@ -750,7 +750,8 @@ export class SidebarManager {
                     <h3>🔍 Search Profiles</h3>
                 </div>
                 <div class="search-controls">
-                    <input type="text" id="search-input" placeholder="Search profiles..." class="search-input">
+                    <input type="text" id="search-input" placeholder="Search profiles..." class="search-input"
+                    autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
                     <div class="tag-filter">
                         <label>Filter by tags:</label>
                         <div id="tag-buttons" class="tag-buttons"></div>

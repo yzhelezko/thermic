@@ -85,6 +85,8 @@ export function DownloadRemoteFile(arg1:string,arg2:string,arg3:string):Promise<
 
 export function DuplicateProfile(arg1:string):Promise<main.Profile>;
 
+export function EnableAI(arg1:boolean):Promise<void>;
+
 export function ExecuteMonitoringCommand(arg1:main.SSHSession,arg2:string):Promise<string>;
 
 export function ExportMetrics(arg1:string):Promise<void>;
@@ -93,9 +95,15 @@ export function ForceDisconnectSSHSession(arg1:string):Promise<void>;
 
 export function ForceDisconnectTab(arg1:string):Promise<void>;
 
+export function GetAIConfig():Promise<main.AIConfig>;
+
+export function GetAISupportedModels():Promise<Array<string>>;
+
 export function GetActiveTab():Promise<main.Tab>;
 
 export function GetActiveTabInfo():Promise<Record<string, any>>;
+
+export function GetAvailableAIProviders():Promise<Array<string>>;
 
 export function GetAvailableShells():Promise<Array<string>>;
 
@@ -183,6 +191,8 @@ export function InitializeFileExplorerSession(arg1:string):Promise<void>;
 
 export function InitializeProfiles():Promise<void>;
 
+export function IsAIEnabled():Promise<boolean>;
+
 export function IsSessionClosed(arg1:string):Promise<boolean>;
 
 export function IsWindowMaximized():Promise<boolean>;
@@ -245,6 +255,12 @@ export function SelectSSHPrivateKey():Promise<string>;
 
 export function SelectSaveLocation(arg1:string):Promise<string>;
 
+export function SendAIRequest(arg1:string):Promise<main.AIResponse>;
+
+export function SetAIConfig(arg1:main.AIConfig):Promise<void>;
+
+export function SetAIProvider(arg1:string):Promise<void>;
+
 export function SetActiveTab(arg1:string):Promise<void>;
 
 export function ShowMessageDialog(arg1:string,arg2:string):Promise<void>;
@@ -262,6 +278,8 @@ export function StartTabShell(arg1:string):Promise<void>;
 export function StartTabShellWithSize(arg1:string,arg2:number,arg3:number):Promise<void>;
 
 export function StopProfileWatcher():Promise<void>;
+
+export function TestAIConnection():Promise<Record<string, any>>;
 
 export function ToggleFavoriteAPI(arg1:string):Promise<void>;
 

@@ -822,7 +822,8 @@ export class TabsManager {
                     <div class="ssh-form">
                         <div class="form-group">
                             <label for="ssh-host">Host:</label>
-                            <input type="text" id="ssh-host" placeholder="hostname or IP" required>
+                            <input type="text" id="ssh-host" placeholder="hostname or IP" required
+                        autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
                         </div>
                         <div class="form-group">
                             <label for="ssh-port">Port:</label>
@@ -830,7 +831,8 @@ export class TabsManager {
                         </div>
                         <div class="form-group">
                             <label for="ssh-username">Username:</label>
-                            <input type="text" id="ssh-username" placeholder="username" required>
+                            <input type="text" id="ssh-username" placeholder="username" required
+                        autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
                         </div>
                         <div class="form-group">
                             <label for="ssh-password">Password (optional):</label>
@@ -839,7 +841,8 @@ export class TabsManager {
                         <div class="form-group">
                             <label for="ssh-keypath">Private Key Path (optional):</label>
                             <div class="ssh-key-path-container">
-                                <input type="text" id="ssh-keypath" placeholder="/path/to/private/key">
+                                <input type="text" id="ssh-keypath" placeholder="/path/to/private/key"
+                        autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
                                 <button type="button" class="ssh-browse-key-btn">📂 Browse</button>
                             </div>
                         </div>

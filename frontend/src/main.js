@@ -65,7 +65,6 @@ class ThermicTerminal {
         this.activityBarManager = new ActivityBarManager(this.sidebarManager, this.uiManager);
         this.statusManager = new StatusManager();
         this.versionManager = null; // Initialize later after DOM is ready
-        
         this.platform = detectPlatform();
         
         this.init();
@@ -180,7 +179,6 @@ class ThermicTerminal {
             
             // Expose theme manager globally for settings integration
             window.themeManager = themeManager;
-
             // Initialize terminal
             console.log('Initializing terminal manager...');
             this.terminalManager.initTerminal();

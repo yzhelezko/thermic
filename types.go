@@ -210,6 +210,7 @@ type App struct {
 	ssh             *SSHManager
 	config          *ConfigManager
 	messages        *MessageManager
+	ai              *AIManager
 	resourceManager *ResourceManager
 	mutex           sync.RWMutex
 }
@@ -565,6 +566,9 @@ func NewApp() *App {
 
 	// Create message manager (requires app reference)
 	app.messages = NewMessageManager(app)
+
+	// Create AI manager with default config
+	app.ai = NewAIManager(&config.config.AI)
 
 	return app
 }

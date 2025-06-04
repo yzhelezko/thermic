@@ -172,6 +172,10 @@ export class SidebarCommandRegistry extends CommandRegistry {
             input.type = 'text';
             input.value = currentText;
             input.className = 'tree-item-edit';
+            input.setAttribute('autocomplete', 'off');
+            input.setAttribute('spellcheck', 'false');
+            input.setAttribute('autocorrect', 'off');
+            input.setAttribute('autocapitalize', 'off');
             
             input.addEventListener('blur', () => this.finishEdit(itemText, input));
             input.addEventListener('keydown', (e) => {

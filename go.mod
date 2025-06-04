@@ -7,6 +7,7 @@ require (
 	github.com/aymanbagabas/go-pty v0.2.2
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/pkg/sftp v1.13.9
+	github.com/sashabaranov/go-openai v1.17.9
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/wailsapp/wails/v2 v2.10.1
 	golang.org/x/crypto v0.38.0
