@@ -18,12 +18,25 @@ A modern, cross-platform terminal emulator built with **Wails** and **xterm.js**
 - **⚡ VS Code Experience**: Same xterm.js library with identical terminal behavior
 - **🎨 Modern UI**: Clean, dark-themed interface with responsive design
 - **🔄 Real-Time**: Raw byte streaming for authentic terminal experience
+- **🤖 AI-Powered Assistance**: Leverage integrated AI (OpenAI) for command explanations, troubleshooting, and more. ([See AI Integration](#ai-integration))
 
 ### 🛠️ **Shell Support**
 - **Windows**: PowerShell, Command Prompt, PowerShell Core, WSL distributions
 - **macOS**: zsh (default), bash, fish, and other common shells  
 - **Linux**: bash, zsh, fish, sh, and all available shells
 - **WSL**: Automatic detection and integration of all WSL distributions
+
+## 🤖 AI Integration
+
+Thermic brings the power of Artificial Intelligence directly into your terminal workflow. By integrating with AI providers like OpenAI, Thermic can help you:
+
+- **Understand Commands**: Get quick explanations of complex shell commands.
+- **Generate Examples**: Ask for examples of how to use specific tools or commands.
+- **Troubleshoot Errors**: Paste error messages and get suggestions for fixes.
+- **Summarize Text**: Quickly summarize logs or large blocks of text.
+- **And more!**: Experiment with different prompts to streamline your tasks.
+
+You can configure your AI provider (currently supporting OpenAI), add your API key, choose your preferred model, and easily enable or disable the AI features through the application settings.
 
 ## 🚀 Quick Start
 
@@ -134,6 +147,7 @@ wails build -clean -trimpath
 - **Framework**: Wails v2
 - **Terminal**: Custom PTY implementation with raw byte streaming
 - **Shells**: Native process execution with stdin/stdout pipes
+- **AI**: OpenAI API integration for AI-powered assistance.
 
 ### **Frontend**  
 - **Terminal**: xterm.js (same as VS Code)
@@ -177,6 +191,7 @@ We welcome contributions! Here's how to get started:
 - [x] Multiple terminal tabs with drag-and-drop reordering
 - [x] Tab management (create, close, switch, rename)
 - [x] SSH connection support with intelligent key discovery
+- [x] AI integration with OpenAI (configurable provider, API key, model selection).
 
 ### **🚧 In Progress**  
 - [ ] To be defined
