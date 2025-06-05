@@ -61,6 +61,9 @@ export class TerminalManager {
 
         // Initialize AI float window after DOM is ready
         this.aiFloatWindow = null;
+        
+        // Expose resize method globally for debugging
+        window.forceResizeTerminals = () => this.forceResizeAllTerminals();
     }
 
     initializeAIWindow() {
@@ -247,10 +250,8 @@ export class TerminalManager {
         // Open terminal in the wrapper (not the container)
         terminal.open(terminalWrapper);
 
-        // Delay fit to ensure container is properly sized
-        setTimeout(() => {
-            fitAddon.fit();
-        }, 100);
+        // DON'T call fit() here - container is hidden so measurements will be wrong
+        // Fitting will happen in switchToSession() when container becomes visible
 
         // Handle terminal input - send to shell
         terminal.onData((data) => {
@@ -362,7 +363,7 @@ export class TerminalManager {
     }
 
     setupTerminalResize(sessionId) {
-        // Handle resize for specific terminal with debouncing and proper dimension calculation
+        // Handle resize for specific terminal with debouncing using the new forceResize method
         let resizeTimeout;
         const resizeHandler = () => {
             // Clear previous timeout to debounce rapid resize events
@@ -373,61 +374,21 @@ export class TerminalManager {
             resizeTimeout = setTimeout(() => {
                 const terminalSession = this.terminals.get(sessionId);
                 if (terminalSession && sessionId === this.activeSessionId) {
-                    try {
-                        // Force a reflow to ensure accurate measurements
-                        terminalSession.container.offsetHeight;
+                    console.log(`Window resize triggered for active session: ${sessionId}`);
+                    
+                    // Use the new force resize method which handles all the complexity
+                    this.forceResizeSession(sessionId).catch(error => {
+                        console.warn(`Error during resize for session ${sessionId}:`, error);
                         
-                        // Use proposeDimensions to get exact dimensions that fit properly
-                        const proposedDimensions = terminalSession.fitAddon.proposeDimensions();
-                        
-                        if (proposedDimensions && proposedDimensions.cols > 0 && proposedDimensions.rows > 0) {
-                            // Use the proposed dimensions to ensure exact fit
-                            terminalSession.terminal.resize(proposedDimensions.cols, proposedDimensions.rows);
-                            
-                            // Additional fit after resize to ensure proper layout
-                            setTimeout(() => {
-                                if (terminalSession.fitAddon && this.terminals.has(sessionId)) {
-                                    terminalSession.fitAddon.fit();
-                                    
-                                    // Update shell size if connected
-                                    if (terminalSession.isConnected) {
-                                        const cols = terminalSession.terminal.cols;
-                                        const rows = terminalSession.terminal.rows;
-                                        ResizeShell(sessionId, cols, rows).catch(error => {
-                                            console.warn('Error resizing shell during window resize:', error);
-                                        });
-                                    }
-                                }
-                            }, 10);
-                        } else {
-                            // Fallback to regular fit if proposeDimensions fails
-                            terminalSession.fitAddon.fit();
-                            
-                            setTimeout(() => {
-                                if (terminalSession.fitAddon && this.terminals.has(sessionId)) {
-                                    terminalSession.fitAddon.fit();
-                                    
-                                    if (terminalSession.isConnected) {
-                                        const cols = terminalSession.terminal.cols;
-                                        const rows = terminalSession.terminal.rows;
-                                        ResizeShell(sessionId, cols, rows).catch(error => {
-                                            console.warn('Error resizing shell during window resize:', error);
-                                        });
-                                    }
-                                }
-                            }, 50);
-                        }
-                    } catch (error) {
-                        console.warn('Error during terminal resize:', error);
                         // Fallback to basic fit on error
                         try {
                             terminalSession.fitAddon.fit();
                         } catch (fallbackError) {
                             console.error('Fallback fit also failed:', fallbackError);
                         }
-                    }
+                    });
                 }
-            }, 100); // Debounce resize events by 100ms
+            }, 150); // Slightly increased debounce for better performance
         };
 
         window.addEventListener('resize', resizeHandler);
@@ -742,79 +703,29 @@ export class TerminalManager {
                 this.isConnected = newSession.isConnected;
                 this.eventUnsubscribe = this.globalOutputListener;
                 
-                // Focus and fit the terminal with proper timing
-                setTimeout(() => {
-                    try {
-                        if (newSession.terminal && newSession.fitAddon) {
-                            // For SSH connections, be more aggressive about sizing
-                            const isSSH = this.isSSHConnection(sessionId);
-                            
-                            if (isSSH) {
-                                // SSH requires precise sizing - use proposed dimensions
-                                const proposedDimensions = newSession.fitAddon.proposeDimensions();
-                                
-                                if (proposedDimensions && proposedDimensions.cols > 0 && proposedDimensions.rows > 0) {
-                                    // Resize to proposed dimensions first
-                                    newSession.terminal.resize(proposedDimensions.cols, proposedDimensions.rows);
-                                    
-                                    setTimeout(() => {
-                                        newSession.fitAddon.fit();
-                                        
-                                        // Update shell size for SSH
-                                        if (newSession.isConnected) {
-                                            const cols = newSession.terminal.cols;
-                                            const rows = newSession.terminal.rows;
-                                            console.log(`SSH tab switch - updating size to ${cols}x${rows}`);
-                                            ResizeShell(sessionId, cols, rows).catch(error => {
-                                                console.warn('Error resizing SSH shell on tab switch:', error);
-                                            });
-                                        }
-                                        
-                                        newSession.terminal.focus();
-                                        console.log(`SSH Terminal ${sessionId} fitted (${newSession.terminal.cols}x${newSession.terminal.rows}) and focused`);
-                                    }, 20);
-                                } else {
-                                    // Fallback for SSH
-                                    newSession.fitAddon.fit();
-                                    setTimeout(() => {
-                                        newSession.fitAddon.fit();
-                                        if (newSession.isConnected) {
-                                            const cols = newSession.terminal.cols;
-                                            const rows = newSession.terminal.rows;
-                                            ResizeShell(sessionId, cols, rows).catch(error => {
-                                                console.warn('Error resizing shell on tab switch:', error);
-                                            });
-                                        }
-                                        newSession.terminal.focus();
-                                        console.log(`Terminal ${sessionId} fitted (${newSession.terminal.cols}x${newSession.terminal.rows}) and focused`);
-                                    }, 50);
-                                }
-                            } else {
-                                // Local shells - simpler sizing
-                                newSession.fitAddon.fit();
-                                
-                                setTimeout(() => {
-                                    newSession.fitAddon.fit();
-                                    
-                                    // Update shell size if connected
-                                    if (newSession.isConnected) {
-                                        const cols = newSession.terminal.cols;
-                                        const rows = newSession.terminal.rows;
-                                        ResizeShell(sessionId, cols, rows).catch(error => {
-                                            console.warn('Error resizing shell on tab switch:', error);
-                                        });
-                                    }
-                                    
-                                    // Focus after fitting is complete
-                                    newSession.terminal.focus();
-                                    console.log(`Terminal ${sessionId} fitted (${newSession.terminal.cols}x${newSession.terminal.rows}) and focused`);
-                                }, 50);
-                            }
+                // Force reflow to ensure container has proper dimensions
+                newSession.container.offsetHeight;
+                
+                // Use requestAnimationFrame to ensure container is fully rendered
+                requestAnimationFrame(() => {
+                    this.forceResizeSession(sessionId).then(() => {
+                        // Focus after resizing is complete
+                        try {
+                            newSession.terminal.focus();
+                            console.log(`Terminal ${sessionId} resized (${newSession.terminal.cols}x${newSession.terminal.rows}) and focused`);
+                        } catch (error) {
+                            console.warn('Error focusing terminal:', error);
                         }
-                    } catch (error) {
-                        console.warn('Error focusing/fitting terminal:', error);
-                    }
-                }, 100);
+                    }).catch(error => {
+                        console.warn('Error during forced resize:', error);
+                        // Fallback focus
+                        try {
+                            newSession.terminal.focus();
+                        } catch (focusError) {
+                            console.warn('Error focusing terminal in fallback:', focusError);
+                        }
+                    });
+                });
                 
                 console.log(`Successfully switched to session: ${sessionId}`);
             } catch (error) {
@@ -941,6 +852,7 @@ export class TerminalManager {
         }
     }
 
+    // Enhanced fit method with better error handling and forced recalculation
     fit() {
         if (this.activeSessionId) {
             const terminalSession = this.terminals.get(this.activeSessionId);
@@ -1001,32 +913,124 @@ export class TerminalManager {
         }
     }
 
-    handleResize() {
-        // Handle window resize - fit terminals and notify backend of window state change
-        console.log('Handling window resize...');
-        
-        // Fit all terminal sessions to their containers
-        this.fit();
-        
-        // Also fit any other active terminals
-        for (const [sessionId, terminalSession] of this.terminals) {
-            if (terminalSession && terminalSession.fitAddon) {
-                try {
-                    terminalSession.fitAddon.fit();
-                    
-                    // Update shell size if connected
-                    if (terminalSession.isConnected) {
-                        const cols = terminalSession.terminal.cols;
-                        const rows = terminalSession.terminal.rows;
-                        ResizeShell(sessionId, cols, rows).catch(error => {
-                            console.warn(`Error resizing shell ${sessionId}:`, error);
-                        });
-                    }
-                } catch (error) {
-                    console.warn(`Error resizing terminal session ${sessionId}:`, error);
+    // Force resize a terminal session with aggressive dimension recalculation
+    async forceResizeSession(sessionId) {
+        const terminalSession = this.terminals.get(sessionId);
+        if (!terminalSession || !terminalSession.terminal || !terminalSession.fitAddon) {
+            console.warn(`Cannot force resize - session ${sessionId} invalid`);
+            return;
+        }
+
+        console.log(`Force resizing session ${sessionId}...`);
+
+        try {
+            // Clear any cached dimensions and force recalculation
+            const container = terminalSession.container;
+            
+            // Ensure container is visible and has dimensions
+            if (container.style.display === 'none') {
+                console.warn('Container is hidden, cannot resize properly');
+                return;
+            }
+
+            // Force reflow multiple times to ensure accurate measurements
+            container.offsetWidth;
+            container.offsetHeight;
+            
+            // Wait a frame for layout to settle
+            await new Promise(resolve => requestAnimationFrame(resolve));
+            
+            // Get proposed dimensions - this should be most accurate
+            const proposedDimensions = terminalSession.fitAddon.proposeDimensions();
+            
+            if (proposedDimensions && proposedDimensions.cols > 0 && proposedDimensions.rows > 0) {
+                console.log(`Using proposed dimensions: ${proposedDimensions.cols}x${proposedDimensions.rows}`);
+                
+                // First resize to proposed dimensions
+                terminalSession.terminal.resize(proposedDimensions.cols, proposedDimensions.rows);
+                
+                // Wait for resize to take effect
+                await new Promise(resolve => setTimeout(resolve, 10));
+                
+                // Then fit to ensure proper layout
+                terminalSession.fitAddon.fit();
+                
+                // Get final dimensions
+                const finalCols = terminalSession.terminal.cols;
+                const finalRows = terminalSession.terminal.rows;
+                
+                console.log(`Force resize complete: ${finalCols}x${finalRows}`);
+                
+                // Update backend if connected
+                if (terminalSession.isConnected) {
+                    await ResizeShell(sessionId, finalCols, finalRows).catch(error => {
+                        console.warn('Error updating backend shell size:', error);
+                    });
+                }
+            } else {
+                // Fallback - use multiple fits
+                console.log('Proposed dimensions failed, using fallback method');
+                
+                // Multiple fits with delays to ensure proper sizing
+                terminalSession.fitAddon.fit();
+                await new Promise(resolve => setTimeout(resolve, 20));
+                
+                terminalSession.fitAddon.fit();
+                await new Promise(resolve => setTimeout(resolve, 20));
+                
+                // Final fit
+                terminalSession.fitAddon.fit();
+                
+                const finalCols = terminalSession.terminal.cols;
+                const finalRows = terminalSession.terminal.rows;
+                
+                console.log(`Fallback resize complete: ${finalCols}x${finalRows}`);
+                
+                // Update backend if connected
+                if (terminalSession.isConnected) {
+                    await ResizeShell(sessionId, finalCols, finalRows).catch(error => {
+                        console.warn('Error updating backend shell size:', error);
+                    });
                 }
             }
+        } catch (error) {
+            console.error(`Error during force resize of session ${sessionId}:`, error);
+            
+            // Last resort fallback
+            try {
+                terminalSession.fitAddon.fit();
+            } catch (fallbackError) {
+                console.error('Even fallback fit failed:', fallbackError);
+            }
         }
+    }
+
+    handleResize() {
+        // Handle window resize - aggressively resize all terminals
+        console.log('Handling window resize...');
+        
+        // Force resize the active session immediately
+        if (this.activeSessionId) {
+            this.forceResizeSession(this.activeSessionId).catch(error => {
+                console.warn('Error force resizing active session:', error);
+            });
+        }
+        
+        // Also resize any other visible terminals (with a small delay to avoid overwhelming)
+        setTimeout(() => {
+            for (const [sessionId, terminalSession] of this.terminals) {
+                if (sessionId !== this.activeSessionId && 
+                    terminalSession && 
+                    terminalSession.fitAddon && 
+                    terminalSession.container && 
+                    terminalSession.container.style.display !== 'none') {
+                    
+                    this.forceResizeSession(sessionId).catch(error => {
+                        console.warn(`Error force resizing session ${sessionId}:`, error);
+                    });
+                }
+            }
+        }, 100);
         
         // Emit resize event to backend to save window state
         try {
@@ -1036,6 +1040,27 @@ export class TerminalManager {
         } catch (error) {
             console.warn('Error emitting resize event to backend:', error);
         }
+    }
+
+    // Public method to force resize all terminals - useful for debugging or manual fixes
+    async forceResizeAllTerminals() {
+        console.log('Force resizing all terminals...');
+        
+        const resizePromises = [];
+        
+        for (const [sessionId, terminalSession] of this.terminals) {
+            if (terminalSession && terminalSession.terminal && terminalSession.fitAddon) {
+                console.log(`Force resizing terminal session: ${sessionId}`);
+                resizePromises.push(
+                    this.forceResizeSession(sessionId).catch(error => {
+                        console.warn(`Failed to resize session ${sessionId}:`, error);
+                    })
+                );
+            }
+        }
+        
+        await Promise.all(resizePromises);
+        console.log('All terminals resize complete');
     }
 
     scrollToBottom() {
