@@ -11,7 +11,7 @@
 /* Integrated titlebar with window controls */
 .tabs-titlebar {
     height: 32px;
-    background: var(--bg-secondary);
+    background: var(--bg-tertiary);
     display: flex;
     align-items: center;
     user-select: none;
@@ -20,6 +20,7 @@
     width: 100%;
     margin: 0;
     padding: 0;
+    border-bottom: 1px solid var(--border-color);
     /* Wails draggable region */
     --wails-draggable: drag;
 }
@@ -43,8 +44,8 @@
 
 .window-title {
     font-size: 13px;
-    font-weight: 500;
-    color: var(--text-secondary);
+    font-weight: 600;
+    color: var(--text-primary);
     pointer-events: none;
     user-select: none;
     /* Center the title on all platforms */
@@ -52,6 +53,8 @@
     left: 50%;
     transform: translateX(-50%);
     text-align: center;
+    /* Add subtle orange accent for thermic branding */
+    text-shadow: 0 0 8px rgba(var(--thermic-orange-rgb), 0.1);
     /* Inherit draggable from parent */
 }
 
@@ -74,8 +77,8 @@
 }
 
 .window-control {
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     border: none;
     background: transparent;
     color: var(--text-secondary);
@@ -91,7 +94,7 @@
 }
 
 .window-control:hover {
-    background: var(--bg-tertiary);
+    background: var(--bg-quaternary);
     color: var(--text-primary);
 }
 
@@ -209,22 +212,31 @@
     display: flex;
     align-items: center;
     height: 32px;
-    background: var(--bg-secondary);
+    background: var(--bg-tertiary);
     user-select: none;
+    position: relative;
+    z-index: 0;
     /* Make tabs bar draggable */
     --wails-draggable: drag;
+    /* Ensure proper layout for scrollable tabs and fixed buttons */
+    overflow: hidden;
 }
 
 .tabs-list {
-    flex: 1;
     display: flex;
     align-items: center;
     overflow-x: auto;
     scrollbar-width: none;
     -ms-overflow-style: none;
-    background: var(--bg-secondary);
+    background: transparent;
+    padding: 0 8px;
+    position: relative;
+    border-bottom: 1px solid var(--border-color);
     /* Inherit draggable from parent */
     --wails-draggable: drag;
+    /* Allow shrinking but maintain minimum space for buttons */
+    flex: 1;
+    min-width: 0;
 }
 
 .tabs-list::-webkit-scrollbar {
@@ -237,11 +249,15 @@
     height: 32px;
     min-width: 120px;
     max-width: 200px;
-    background: var(--bg-tertiary);
-    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    color: var(--text-tertiary);
     cursor: pointer;
-    transition: background-color 0.15s ease, transform 0.15s ease;
+    transition: all 0.2s ease;
     position: relative;
+    margin-right: 2px;
+    border: 1px solid transparent;
+    border-bottom: 1px solid var(--border-color);
+    z-index: 1;
     /* Tabs themselves should not be draggable - they need to be clickable */
     --wails-draggable: no-drag;
 }
@@ -256,13 +272,17 @@
 }
 
 .tab.drag-over {
-    border-left: 3px solid var(--accent-color);
+    border-left: 3px solid var(--thermic-orange);
     background: var(--bg-quaternary);
+    box-shadow: 0 2px 8px rgba(var(--thermic-orange-rgb), 0.3);
+    z-index: 50;
 }
 
 .tab.drag-over-right {
-    border-right: 3px solid var(--accent-color);
+    border-right: 3px solid var(--thermic-orange);
     background: var(--bg-quaternary);
+    box-shadow: 0 2px 8px rgba(var(--thermic-orange-rgb), 0.3);
+    z-index: 50;
 }
 
 .tabs-list.drag-active {
@@ -274,25 +294,42 @@
     display: flex;
     align-items: center;
     width: 100%;
-    padding: 0 12px;
+    padding: 0 14px;
     pointer-events: auto;
+    height: 100%;
 }
 
 .tab.active {
     background: var(--bg-primary);
     color: var(--text-primary);
-    border-bottom: 2px solid var(--accent-color);
+    border: 1px solid var(--border-color);
+    border-bottom: 3px solid var(--thermic-orange);
+    box-shadow: 0 2px 8px rgba(var(--thermic-orange-rgb), 0.2);
+    transform: translateY(-1px);
+    z-index: 100;
+    margin-bottom: -1px;
 }
 
 .tab:hover:not(.active):not(.dragging) {
-    background: var(--bg-quaternary);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border-color: var(--border-color);
+    transform: translateY(-0.5px);
+    z-index: 10;
 }
 
 .tab-icon {
-    width: 14px;
-    height: 14px;
-    margin-right: 6px;
+    width: 16px;
+    height: 16px;
+    margin-right: 8px;
     flex-shrink: 0;
+    opacity: 0.8;
+    transition: opacity 0.2s ease;
+}
+
+.tab.active .tab-icon {
+    opacity: 1;
+    color: var(--thermic-orange);
 }
 
 .tab-title {
@@ -301,9 +338,16 @@
     overflow: hidden;
     text-overflow: ellipsis;
     font-size: 13px;
+    font-weight: 500;
     line-height: 1;
     /* Add right padding when no close button to match spacing */
-    padding-right: 6px;
+    padding-right: 8px;
+    transition: color 0.2s ease;
+}
+
+.tab.active .tab-title {
+    font-weight: 600;
+    color: var(--text-primary);
 }
 
 /* Remove padding when close button is present */
@@ -335,8 +379,14 @@
 
 /* Activity indicator for inactive tabs with new output */
 .tab.has-activity:not(.active) .tab-status-indicator {
-    background: var(--success-color);
-    animation: activity-blink 1.5s ease-in-out infinite;
+    background: var(--thermic-orange);
+    animation: activity-blink 2.5s ease-in-out infinite;
+    box-shadow: 0 0 6px rgba(var(--thermic-orange-rgb), 0.5);
+}
+
+/* Add a subtle glow effect to tabs with activity */
+.tab.has-activity:not(.active) {
+    border-color: rgba(var(--thermic-orange-rgb), 0.3);
 }
 
 /* Override activity blinking for SSH connections with specific status */
@@ -350,8 +400,9 @@
 
 /* For local shells (no SSH status), always show activity blink when inactive */
 .tab.has-activity:not(.active):not(.ssh-tab) .tab-status-indicator {
-    background: var(--success-color);
-    animation: activity-blink 1.5s ease-in-out infinite;
+    background: var(--thermic-orange);
+    animation: activity-blink 2.5s ease-in-out infinite;
+    box-shadow: 0 0 6px rgba(var(--thermic-orange-rgb), 0.5);
 }
 
 /* Status-based styling */
@@ -423,10 +474,10 @@
 }
 
 .tab-close {
-    width: 16px;
-    height: 16px;
-    margin-left: 6px;
-    border-radius: 3px;
+    width: 18px;
+    height: 18px;
+    margin-left: 8px;
+    border-radius: 2px;
     background: none;
     border: none;
     color: var(--text-tertiary);
@@ -436,16 +487,22 @@
     justify-content: center;
     flex-shrink: 0;
     opacity: 0;
-    transition: opacity 0.15s ease, background-color 0.15s ease;
+    transition: all 0.2s ease;
 }
 
 .tab:hover .tab-close {
-    opacity: 1;
+    opacity: 0.7;
+}
+
+.tab.active .tab-close {
+    opacity: 0.6;
 }
 
 .tab-close:hover {
+    opacity: 1 !important;
     background: var(--error-color);
     color: white;
+    transform: scale(1.1);
 }
 
 /* Status-based tab styling */
@@ -470,39 +527,46 @@
     background: linear-gradient(45deg, var(--bg-tertiary), rgba(255, 193, 7, 0.1));
 }
 
-/* New tab buttons (inline with tabs) */
+/* New tab buttons (always visible, after tabs) */
 .new-tab-buttons {
     display: flex;
     align-items: center;
-    padding: 0 8px;
-    gap: 4px;
+    padding: 0 12px;
+    gap: 6px;
     height: 32px;
-    background: var(--bg-secondary);
+    background: var(--bg-tertiary);
+    border-left: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+    /* Flex shrink 0 to prevent buttons from being hidden */
+    flex-shrink: 0;
     /* New tab buttons should not be draggable - they need to be clickable */
     --wails-draggable: no-drag;
 }
 
 .new-tab-btn,
 .new-ssh-tab-btn {
-    width: 24px;
-    height: 24px;
-    border: none;
-    background: none;
+    width: 26px;
+    height: 26px;
+    border: 1px solid transparent;
+    background: var(--bg-secondary);
     color: var(--text-tertiary);
     cursor: pointer;
     border-radius: 3px;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background-color 0.15s ease, color 0.15s ease;
+    transition: all 0.2s ease;
     /* Buttons should not be draggable */
     --wails-draggable: no-drag;
 }
 
 .new-tab-btn:hover,
 .new-ssh-tab-btn:hover {
-    background: var(--bg-quaternary);
-    color: var(--text-primary);
+    background: var(--thermic-orange);
+    color: white;
+    border-color: var(--thermic-orange);
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(var(--thermic-orange-rgb), 0.3);
 }
 
 /* Tooltip for truncated tab names */
@@ -531,19 +595,20 @@
 
 /* SSH tab styling */
 .tab.ssh-tab {
-    border-left: 3px solid var(--warning-color);
+    /* Removed yellow border line */
 }
 
 .tab.ssh-tab .tab-icon {
     color: var(--warning-color);
 }
 
-/* Override SSH styling when status is available */
+/* Override SSH styling when status is available - remove all left borders */
 .tab.ssh-tab.connecting,
 .tab.ssh-tab.connected,
 .tab.ssh-tab.failed,
-.tab.ssh-tab.disconnected {
-    /* Status-based border will override SSH border */
+.tab.ssh-tab.disconnected,
+.tab.ssh-tab.hanging {
+    border-left: none !important;
 }
 
 /* Closing tab styling */
@@ -556,13 +621,18 @@
 
 .tab.closing .tab-close {
     opacity: 1;
-    animation: spin 1s linear infinite;
 }
 
 /* Animations */
 @keyframes activity-blink {
-    0%, 50% { opacity: 1; }
-    25%, 75% { opacity: 0.3; }
+    0%, 50% { 
+        opacity: 1; 
+        transform: scale(1);
+    }
+    25%, 75% { 
+        opacity: 0.7; 
+        transform: scale(0.9);
+    }
 }
 
 @keyframes pulse {

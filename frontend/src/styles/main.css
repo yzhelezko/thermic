@@ -65,7 +65,7 @@
 }
 
 .suggestion-item.selected {
-    background: var(--accent-color);
+    background: var(--thermic-orange);
     color: white;
 }
 
@@ -229,6 +229,6 @@
 }
 
 .suggestion-item.selected {
-    background: var(--accent-color);
+    background: var(--thermic-orange);
     color: white;
 } 

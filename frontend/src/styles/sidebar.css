@@ -132,12 +132,12 @@
 }
 
 .tree-item.selected {
-    background-color: var(--accent-color) !important; 
+    background-color: var(--thermic-orange-muted) !important; 
     color: #ffffff !important; 
 }
 
 .tree-item.selected:hover {
-    background-color: var(--accent-color) !important; /* Keep selected background on hover */
+    background-color: var(--thermic-orange-muted) !important; /* Keep selected background on hover */
     color: #ffffff !important; /* Keep selected text color on hover */
 }
 
@@ -231,7 +231,7 @@
 .profile-action-btn:hover {
     background: var(--bg-primary);
     color: var(--text-primary);
-    border-color: var(--accent-color);
+    border-color: var(--thermic-orange-muted);
 }
 
 .profile-tree {
@@ -301,7 +301,7 @@
 .tree-item[data-type="profile"]:active .tree-item-content,
 .virtual-profile:active .tree-item-content,
 .search-result:active .tree-item-content {
-    background: var(--accent-color);
+    background: var(--thermic-orange-muted);
     color: white;
     transform: scale(0.98);
 }
@@ -330,7 +330,7 @@
 }
 
 .tree-item.drop-target {
-    background-color: var(--accent-color) !important;
+    background-color: var(--thermic-orange-muted) !important;
     color: white !important;
 }
 
@@ -341,7 +341,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    border: 2px dashed var(--accent-color);
+    border: 2px dashed var(--thermic-orange-muted);
     border-radius: 3px;
     pointer-events: none;
 }
@@ -603,7 +603,7 @@
 
 .history-item.tree-item.virtual-profile:hover {
     background: var(--bg-quaternary) !important;
-    border-color: var(--accent-color) !important;
+    border-color: var(--thermic-orange-muted) !important;
     transform: translateY(-1px) !important;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
     outline: none !important;
@@ -690,7 +690,7 @@
 }
 
 .history-meta .usage-count {
-    background: var(--accent-color);
+    background: var(--thermic-orange-muted);
     color: white;
     padding: 2px 6px;
     border-radius: 10px;
@@ -727,7 +727,7 @@
 
 .history-actions .btn:hover {
     background: var(--bg-quaternary);
-    border-color: var(--accent-color);
+    border-color: var(--thermic-orange-muted);
     transform: translateY(-1px);
 }
 
@@ -787,8 +787,8 @@
 
 .search-input:focus {
     outline: none;
-    border-color: var(--accent-color);
-    box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.2);
+    border-color: var(--thermic-orange-muted);
+    box-shadow: 0 0 0 2px rgba(var(--thermic-orange-muted-rgb), 0.2);
 }
 
 .tag-filter label {
@@ -821,9 +821,9 @@
 }
 
 .tag-btn.selected {
-    background: var(--accent-color);
+    background: var(--thermic-orange-muted);
     color: white;
-    border-color: var(--accent-color);
+    border-color: var(--thermic-orange-muted);
 }
 
 .search-results {
@@ -959,7 +959,7 @@
 
 .profile-search-indicator .search-icon {
     font-size: 14px;
-    color: var(--accent-color);
+    color: var(--thermic-orange-muted);
 }
 
 .profile-search-indicator .search-query {
