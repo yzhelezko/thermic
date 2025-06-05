@@ -70,7 +70,7 @@
 
 .activity-btn.active {
     background: var(--bg-primary);
-    color: var(--accent-color);
+    color: var(--thermic-orange);
 }
 
 .activity-btn.active::before {
@@ -81,7 +81,7 @@
     transform: translateY(-50%);
     width: 2px;
     height: 16px;
-    background: var(--accent-color);
+    background: var(--thermic-orange);
     border-radius: 0 2px 2px 0;
 }
 

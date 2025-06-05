@@ -1162,8 +1162,13 @@ export class TabsManager {
     // Method to mark tab as having new activity
     markTabActivity(tabId) {
         if (tabId !== this.activeTabId) {
-            this.tabActivity.set(tabId, true);
-            this.renderTabs(); // Re-render to show blinking dot
+            // Only re-render if the tab wasn't already marked as having activity
+            // This prevents the blinking animation from restarting on every piece of output
+            const wasAlreadyActive = this.tabActivity.get(tabId);
+            if (!wasAlreadyActive) {
+                this.tabActivity.set(tabId, true);
+                this.renderTabs(); // Re-render to show blinking dot only when state changes
+            }
         }
     }
 

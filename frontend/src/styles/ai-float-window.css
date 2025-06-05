@@ -85,7 +85,7 @@
     position: absolute;
     top: -2px;
     right: -2px;
-    background: var(--accent-color);
+    background: var(--thermic-orange);
     color: white;
     font-size: 9px;
     font-weight: bold;
@@ -107,8 +107,8 @@
 .ai-context-indicator {
     margin-bottom: 8px;
     padding: 6px 8px;
-    background: rgba(var(--accent-color-rgb), 0.1);
-    border: 1px solid rgba(var(--accent-color-rgb), 0.3);
+    background: rgba(var(--thermic-orange-rgb), 0.1);
+    border: 1px solid rgba(var(--thermic-orange-rgb), 0.3);
     border-radius: 4px;
     font-size: 11px;
 }
@@ -117,7 +117,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    color: var(--accent-color);
+    color: var(--thermic-orange);
 }
 
 .ai-context-content .svg-icon {
@@ -173,7 +173,7 @@
 }
 
 .ai-prompt-input:focus {
-    border-color: var(--accent-color);
+    border-color: var(--thermic-orange);
 }
 
 .ai-prompt-input::placeholder {
@@ -287,7 +287,7 @@
     width: 16px;
     height: 16px;
     border: 2px solid var(--border-color);
-    border-top: 2px solid var(--accent-color);
+    border-top: 2px solid var(--thermic-orange);
     border-radius: 50%;
     animation: ai-spin 1s linear infinite;
 }
@@ -329,20 +329,20 @@
 
 /* Command-specific styles */
 .ai-command-line {
-    background: rgba(var(--accent-color-rgb), 0.1);
-    border-left: 3px solid var(--accent-color);
+    background: rgba(var(--thermic-orange-rgb), 0.1);
+    border-left: 3px solid var(--thermic-orange);
     padding: 4px 8px;
     margin: 4px 0;
     border-radius: 3px;
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
     font-size: 13px;
-    color: var(--accent-color);
+    color: var(--thermic-orange);
 }
 
 .ai-command-button {
-    background: var(--accent-color);
-    color: white;
-    border: none;
+    background: var(--bg-quaternary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
     padding: 8px 12px;
     border-radius: 4px;
     font-size: 12px;
@@ -361,12 +361,15 @@
 }
 
 .ai-command-button:hover {
-    background: rgba(var(--accent-color-rgb), 0.8);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(var(--accent-color-rgb), 0.3);
+    background: var(--bg-tertiary);
+    border-color: var(--thermic-orange-muted);
 }
 
-.ai-command-button:active {
+.ai-command-button:active,
+.ai-command-button.selected {
+    background: var(--thermic-orange-muted);
+    color: white;
+    border-color: var(--thermic-orange-muted);
     transform: translateY(0);
 }
 

@@ -68,7 +68,7 @@
 .setting-select:focus,
 .shell-selector:focus {
     outline: none;
-    border-color: var(--accent-color);
+    border-color: var(--thermic-orange);
 }
 
 .setting-input {
@@ -83,7 +83,7 @@
 
 .setting-input:focus {
     outline: none;
-    border-color: var(--accent-color);
+    border-color: var(--thermic-orange);
 }
 
 .color-indicator {
@@ -104,7 +104,7 @@
 .setting-checkbox input[type="checkbox"] {
     width: 14px;
     height: 14px;
-    accent-color: var(--accent-color);
+    accent-color: var(--thermic-orange);
 }
 
 .setting-checkbox label {
@@ -126,7 +126,7 @@
 
 .setting-button:hover {
     background: var(--bg-quaternary);
-    border-color: var(--accent-color);
+    border-color: var(--thermic-orange);
 }
 
 .setting-button.uploaded {
@@ -175,7 +175,7 @@
 }
 
 input:checked + .slider {
-    background-color: var(--accent-color);
+    background-color: var(--thermic-orange);
 }
 
 input:checked + .slider:before {

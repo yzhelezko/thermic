@@ -85,8 +85,8 @@
 }
 
 .settings-tab.active {
-    color: var(--accent-color);
-    border-bottom: 2px solid var(--accent-color);
+    color: var(--thermic-orange);
+    border-bottom: 2px solid var(--thermic-orange);
     background: transparent;
 }
 
@@ -201,7 +201,7 @@
 
 .setting-item-badge {
     display: inline-block;
-    background: var(--accent-color);
+    background: var(--thermic-orange);
     color: white;
     font-size: 10px;
     font-weight: 600;
@@ -264,12 +264,12 @@
 }
 
 .modern-toggle:hover .toggle-slider {
-    border-color: var(--accent-color);
+    border-color: var(--thermic-orange);
 }
 
 .modern-toggle input:checked + .toggle-slider {
-    background-color: var(--accent-color);
-    border-color: var(--accent-color);
+    background-color: var(--thermic-orange);
+    border-color: var(--thermic-orange);
 }
 
 .modern-toggle input:checked + .toggle-slider:before {
@@ -278,7 +278,7 @@
 }
 
 .modern-toggle input:focus + .toggle-slider {
-    box-shadow: 0 0 0 3px rgba(var(--accent-color-rgb), 0.2);
+    box-shadow: 0 0 0 3px rgba(var(--thermic-orange-rgb), 0.2);
 }
 
 .modern-toggle input:disabled + .toggle-slider {
@@ -304,8 +304,8 @@
 .modern-select:focus,
 .modern-input:focus {
     outline: none;
-    border-color: var(--accent-color);
-    box-shadow: 0 0 0 2px rgba(var(--accent-color-rgb), 0.1);
+    border-color: var(--thermic-orange);
+    box-shadow: 0 0 0 2px rgba(var(--thermic-orange-rgb), 0.1);
 }
 
 .modern-select:hover,
@@ -314,7 +314,7 @@
 }
 
 .modern-button {
-    background: var(--accent-color);
+    background: var(--thermic-orange);
     color: white;
     border: none;
     padding: 8px 16px;
@@ -328,9 +328,9 @@
 }
 
 .modern-button:hover {
-    background: var(--accent-color-hover, var(--accent-color));
+    background: var(--thermic-orange-light);
     transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(var(--accent-color-rgb), 0.3);
+    box-shadow: 0 2px 8px rgba(var(--thermic-orange-rgb), 0.3);
 }
 
 .modern-button:active {
@@ -366,7 +366,7 @@
 }
 
 .color-indicator:hover {
-    border-color: var(--accent-color);
+    border-color: var(--thermic-orange);
     transform: scale(1.05);
 }
 
@@ -493,12 +493,12 @@
 .setting-select:focus,
 .setting-input:focus {
     outline: none;
-    border-color: var(--accent-color);
-    box-shadow: 0 0 0 2px rgba(var(--accent-color-rgb), 0.1);
+    border-color: var(--thermic-orange);
+    box-shadow: 0 0 0 2px rgba(var(--thermic-orange-rgb), 0.1);
 }
 
 .setting-button {
-    background: var(--accent-color);
+    background: var(--thermic-orange);
     color: white;
     border: none;
     padding: 6px 10px;
@@ -509,7 +509,7 @@
 }
 
 .setting-button:hover {
-    background: var(--accent-color-hover, var(--accent-color));
+    background: var(--thermic-orange-light);
     transform: translateY(-1px);
 }
 
@@ -713,8 +713,8 @@
 .form-input:focus,
 .form-select:focus {
     outline: none;
-    border-color: var(--accent-color);
-    box-shadow: 0 0 0 3px rgba(var(--accent-color-rgb), 0.1);
+    border-color: var(--thermic-orange);
+    box-shadow: 0 0 0 3px rgba(var(--thermic-orange-rgb), 0.1);
 }
 
 .form-input:hover,
@@ -761,13 +761,13 @@
 
 .icon-selector-button:hover {
     background: var(--bg-tertiary);
-    border-color: var(--accent-color);
+    border-color: var(--thermic-orange);
 }
 
 .icon-selector-button.active {
-    background: var(--accent-color);
+    background: var(--thermic-orange);
     color: white;
-    border-color: var(--accent-color);
+    border-color: var(--thermic-orange);
 }
 
 .current-icon {
@@ -831,10 +831,10 @@
 }
 
 .icon-grid-compact .icon-option:hover {
-    background: var(--accent-color);
+    background: var(--thermic-orange);
     color: white;
     transform: scale(1.1);
-    border-color: var(--accent-color);
+    border-color: var(--thermic-orange);
 }
 
 /* Legacy Icon Selector - Keep for backward compatibility but hide by default */
@@ -856,14 +856,14 @@
 }
 
 .btn-primary {
-    background: var(--accent-color);
+    background: var(--thermic-orange);
     color: white;
 }
 
 .btn-primary:hover {
-    background: var(--accent-color-hover, var(--accent-color));
+    background: var(--thermic-orange-light);
     transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(var(--accent-color-rgb), 0.3);
+    box-shadow: 0 2px 8px rgba(var(--thermic-orange-rgb), 0.3);
 }
 
 .btn-secondary {
@@ -1017,8 +1017,8 @@
 }
 
 .profile-tab.active {
-    color: var(--accent-color);
-    border-bottom: 2px solid var(--accent-color);
+    color: var(--thermic-orange);
+    border-bottom: 2px solid var(--thermic-orange);
     background: transparent;
 }
 
