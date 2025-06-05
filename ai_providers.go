@@ -41,6 +41,14 @@ func (p *OpenAIProvider) SendRequest(ctx context.Context, prompt, systemMessage 
 		return "", fmt.Errorf("OpenAI API key is not configured")
 	}
 
+	if p.modelID == "" {
+		return "", fmt.Errorf("OpenAI model ID is not configured")
+	}
+
+	if prompt == "" {
+		return "", fmt.Errorf("prompt cannot be empty")
+	}
+
 	messages := []openai.ChatCompletionMessage{}
 
 	// Add system message if provided
@@ -64,16 +72,41 @@ func (p *OpenAIProvider) SendRequest(ctx context.Context, prompt, systemMessage 
 		Temperature: 0.1,
 	}
 
+	// Debug logging
+	fmt.Printf("OpenAI Request - Model: %s, Messages: %d, API URL: %s\n", p.modelID, len(messages), p.apiURL)
+
 	resp, err := p.client.CreateChatCompletion(ctx, req)
 	if err != nil {
-		return "", fmt.Errorf("OpenAI API error: %w", err)
+		// Enhanced error reporting for debugging
+		errMsg := err.Error()
+
+		// Check for common API error patterns
+		if strings.Contains(errMsg, "401") {
+			return "", fmt.Errorf("OpenAI API error: invalid API key, status code: 401")
+		}
+		if strings.Contains(errMsg, "429") {
+			return "", fmt.Errorf("OpenAI API error: rate limit exceeded, status code: 429")
+		}
+		if strings.Contains(errMsg, "500") {
+			return "", fmt.Errorf("OpenAI API error: server error, status code: 500, message: %s", errMsg)
+		}
+		if strings.Contains(errMsg, "timeout") {
+			return "", fmt.Errorf("OpenAI API error: request timeout, message: %s", errMsg)
+		}
+
+		return "", fmt.Errorf("OpenAI API error: %s", errMsg)
 	}
 
 	if len(resp.Choices) == 0 {
-		return "", fmt.Errorf("no response from OpenAI API")
+		return "", fmt.Errorf("OpenAI API returned no choices in response")
 	}
 
-	return resp.Choices[0].Message.Content, nil
+	content := resp.Choices[0].Message.Content
+	if content == "" {
+		return "", fmt.Errorf("OpenAI API returned empty content")
+	}
+
+	return content, nil
 }
 
 // TestConnection tests the connection to OpenAI API

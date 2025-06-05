@@ -1086,26 +1086,45 @@ export class TerminalManager {
     }
 
     pasteText(text) {
-        // Paste text into the active terminal
+        // Paste text into the active terminal using xterm.js native paste handling
+        // This properly handles bracketed paste mode for multiline commands
         if (this.activeSessionId) {
             const terminalSession = this.terminals.get(this.activeSessionId);
             if (terminalSession && terminalSession.terminal && terminalSession.isConnected) {
                 try {
-                    WriteToShell(this.activeSessionId, text);
-                    console.log('Text pasted to active terminal via backend');
+                    // Use xterm.js native paste method which handles bracketed paste mode
+                    terminalSession.terminal.paste(text);
+                    console.log('Text pasted to active terminal via xterm.js native paste');
                     return true;
                 } catch (error) {
                     console.error('Failed to paste text to active terminal:', error);
+                    // Fallback to direct shell write if native paste fails
+                    try {
+                        WriteToShell(this.activeSessionId, text);
+                        console.log('Text pasted to active terminal via backend fallback');
+                        return true;
+                    } catch (fallbackError) {
+                        console.error('Failed to paste text via fallback:', fallbackError);
+                    }
                 }
             }
         } else if (this.terminal && this.isConnected) {
             // Fallback to default terminal
             try {
-                WriteToShell(this.sessionId, text);
-                console.log('Text pasted to default terminal via backend');
+                // Use xterm.js native paste method
+                this.terminal.paste(text);
+                console.log('Text pasted to default terminal via xterm.js native paste');
                 return true;
             } catch (error) {
                 console.error('Failed to paste text to default terminal:', error);
+                // Fallback to direct shell write if native paste fails
+                try {
+                    WriteToShell(this.sessionId, text);
+                    console.log('Text pasted to default terminal via backend fallback');
+                    return true;
+                } catch (fallbackError) {
+                    console.error('Failed to paste text via fallback:', fallbackError);
+                }
             }
         } else {
             console.warn('No active terminal session to paste text into');

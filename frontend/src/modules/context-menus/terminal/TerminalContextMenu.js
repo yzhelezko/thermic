@@ -2,7 +2,6 @@
 import { ContextMenuBase } from '../base/ContextMenuBase.js';
 import { ContextMenuBuilder } from '../base/ContextMenuBuilder.js';
 import { TerminalCommandRegistry } from './TerminalCommandRegistry.js';
-import { WriteToShell } from '../../../../wailsjs/go/main/App.js';
 
 export class TerminalContextMenu extends ContextMenuBase {
     constructor(terminalManager) {
@@ -120,7 +119,8 @@ export class TerminalContextMenu extends ContextMenuBase {
                 try {
                     const text = await navigator.clipboard.readText();
                     if (text && text.trim()) {
-                        await WriteToShell(this.terminalManager.sessionId, text);
+                        // Use terminal manager's native paste method for proper multiline handling
+                        this.terminalManager.pasteText(text);
                         console.log('Pasted:', text.substring(0, 50) + '...');
                     }
                 } catch (error) {

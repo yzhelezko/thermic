@@ -292,8 +292,56 @@ export class AIFloatWindow {
             
         } catch (error) {
             console.error('AI request failed:', error);
-            this.displayError(error.message || 'Failed to get AI response');
-            showNotification('AI request failed: ' + (error.message || 'Unknown error'), 'error');
+            
+            // Enhanced error parsing and display
+            let errorMessage = 'Failed to get AI response';
+            let detailedError = error.message || 'Unknown error';
+            
+            // Parse OpenAI API errors for better user feedback
+            if (detailedError.includes('OpenAI API error')) {
+                const statusMatch = detailedError.match(/status code: (\d+)/);
+                const messageMatch = detailedError.match(/message: '([^']+)'/);
+                
+                if (statusMatch && messageMatch) {
+                    const statusCode = statusMatch[1];
+                    const apiMessage = messageMatch[1];
+                    
+                    if (statusCode === '500') {
+                        errorMessage = 'Server Error';
+                        detailedError = `AI service encountered an internal error: ${apiMessage}`;
+                    } else if (statusCode === '401') {
+                        errorMessage = 'Authentication Error';
+                        detailedError = 'Invalid API key. Please check AI settings.';
+                    } else if (statusCode === '429') {
+                        errorMessage = 'Rate Limit Exceeded';
+                        detailedError = 'Too many requests. Please wait and try again.';
+                    } else if (statusCode === '403') {
+                        errorMessage = 'Access Forbidden';
+                        detailedError = 'AI service access denied. Check your API key permissions.';
+                    } else {
+                        errorMessage = `API Error (${statusCode})`;
+                        detailedError = apiMessage;
+                    }
+                }
+            } else if (detailedError.includes('AI features are disabled')) {
+                errorMessage = 'AI Disabled';
+                detailedError = 'AI features are disabled. Enable them in Settings → AI Assistant.';
+            } else if (detailedError.includes('network') || detailedError.includes('fetch')) {
+                errorMessage = 'Network Error';
+                detailedError = 'Cannot connect to AI service. Check your internet connection.';
+            }
+            
+            this.displayError(`${errorMessage}: ${detailedError}`);
+            showNotification(`AI ${errorMessage}: ${detailedError}`, 'error', 5000);
+            
+            // Log full error details for debugging
+            console.error('Full AI error details:', {
+                message: error.message,
+                stack: error.stack,
+                response: error.response,
+                originalError: detailedError,
+                parsedErrorMessage: errorMessage
+            });
         } finally {
             this.setLoading(false);
         }

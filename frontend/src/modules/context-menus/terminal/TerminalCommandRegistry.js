@@ -97,8 +97,13 @@ export class TerminalCommandRegistry extends CommandRegistry {
         try {
             const text = await navigator.clipboard.readText();
             if (text && text.trim()) {
-                await WriteToShell(this.terminalManager.sessionId, text);
-                console.log('Pasted text:', text.substring(0, 50) + '...');
+                // Use terminal manager's native paste method for proper multiline handling
+                const success = this.terminalManager.pasteText(text);
+                if (success) {
+                    console.log('Pasted text:', text.substring(0, 50) + '...');
+                } else {
+                    throw new Error('Paste operation failed');
+                }
             }
         } catch (error) {
             console.error('Failed to paste text:', error);
