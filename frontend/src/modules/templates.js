@@ -967,7 +967,7 @@ export function createAISettingsContent() {
     return `
         <div class="settings-section">
             <div class="settings-section-title">
-                <span class="settings-section-icon"><img src="./icons/ai.svg" class="svg-icon" alt="🤖"></span>
+                <span class="settings-section-icon"><img src="./assets/icons/ai.svg" class="svg-icon" alt="🤖"></span>
                 AI Assistant Configuration
             </div>
             <div class="settings-list">
@@ -1014,7 +1014,7 @@ export function createAISettingsContent() {
                     <div class="setting-item-content">
                         <div class="setting-item-info">
                             <div class="setting-item-title">Model ID</div>
-                            <div class="setting-item-description">AI model to use for responses (e.g. gpt-4o-mini, gpt-4, claude-3-sonnet)</div>
+                            <div class="setting-item-description">AI model to use for responses</div>
                         </div>
                         <div class="setting-item-control">
                             <div class="input-with-suggestion">
@@ -1037,11 +1037,15 @@ export function createAISettingsContent() {
                             <div class="setting-item-description">Your API key for the selected provider</div>
                         </div>
                         <div class="setting-item-control">
-                            <div class="input-with-button">
-                                <input type="password" id="ai-api-key-input" class="modern-input" placeholder="Enter your API key">
-                                <button type="button" class="input-button" id="ai-api-key-toggle" title="Show/Hide API Key">
-                                    <img src="./icons/eye.svg" class="svg-icon" alt="👁️">
+                            <div class="api-key-input-container">
+                                <input type="password" id="ai-api-key-input" class="modern-input api-key-input" placeholder="Enter your API key">
+                                <button type="button" class="api-key-toggle-btn" id="ai-api-key-toggle" title="Show/Hide API Key">
+                                    Show
                                 </button>
+                                <div class="api-key-status" id="ai-api-key-status">
+                                    <img src="./assets/icons/warning.svg" class="svg-icon small" alt="⚠️">
+                                    <span>Not configured</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1051,7 +1055,7 @@ export function createAISettingsContent() {
 
         <div class="settings-section">
             <div class="settings-section-title">
-                <span class="settings-section-icon"><img src="./icons/keyboard.svg" class="svg-icon" alt="⌨️"></span>
+                <span class="settings-section-icon"><img src="./assets/icons/keyboard.svg" class="svg-icon" alt="⌨️"></span>
                 Hotkeys & Interaction
             </div>
             <div class="settings-list">
@@ -1062,7 +1066,12 @@ export function createAISettingsContent() {
                             <div class="setting-item-description">Keyboard shortcut to open AI assistant</div>
                         </div>
                         <div class="setting-item-control">
-                            <input type="text" id="ai-hotkey-input" class="modern-input" placeholder="ctrl+k" readonly>
+                            <div class="hotkey-display">
+                                <input type="text" id="ai-hotkey-input" class="modern-input hotkey-input" placeholder="ctrl+k" readonly>
+                                <div class="hotkey-indicator">
+                                    <img src="./assets/icons/keyboard.svg" class="svg-icon small" alt="⌨️">
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1071,7 +1080,7 @@ export function createAISettingsContent() {
 
         <div class="settings-section">
             <div class="settings-section-title">
-                <span class="settings-section-icon"><img src="./icons/network.svg" class="svg-icon" alt="🌐"></span>
+                <span class="settings-section-icon"><img src="./assets/icons/globe.svg" class="svg-icon" alt="🌐"></span>
                 Connection & Testing
             </div>
             <div class="settings-list">
@@ -1082,9 +1091,9 @@ export function createAISettingsContent() {
                             <div class="setting-item-description">Verify your AI provider configuration</div>
                         </div>
                         <div class="setting-item-control">
-                            <button class="modern-button primary" id="ai-test-connection-btn">
-                                <img src="./icons/network.svg" class="svg-icon" alt="🌐">
-                                Test Connection
+                            <button class="modern-button primary test-connection-btn" id="ai-test-connection-btn">
+                                <img src="./assets/icons/globe.svg" class="svg-icon" alt="🌐">
+                                <span>Test Connection</span>
                             </button>
                         </div>
                     </div>
@@ -1096,7 +1105,12 @@ export function createAISettingsContent() {
                             <div class="setting-item-description">Current status of AI service connection</div>
                         </div>
                         <div class="setting-item-control">
-                            <span class="setting-status" id="ai-connection-status">Not tested</span>
+                            <div class="connection-status-display">
+                                <span class="setting-status" id="ai-connection-status">
+                                    <img src="./assets/icons/circle.svg" class="svg-icon small status-indicator" alt="●">
+                                    <span>Not tested</span>
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>

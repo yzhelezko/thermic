@@ -62,7 +62,8 @@ export const DEFAULT_TERMINAL_OPTIONS = {
     scrollSensitivity: 1,        // Normal scroll sensitivity
     smoothScrollDuration: 0,     // Disable smooth scrolling for better performance
     convertEol: true,            // Convert EOL sequences
-    disableStdin: false          // Allow input
+    disableStdin: false,         // Allow input
+    ignoreBracketedPasteMode: false  // Enable bracketed paste mode for proper multiline paste handling
 };
 
 export function generateSessionId() {

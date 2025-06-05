@@ -136,7 +136,7 @@ func (am *AIManager) SendRequest(ctx context.Context, prompt string) (*AIRespons
 
 	// Send request to provider
 	content, err := am.currentProvider.SendRequest(ctx, prompt, am.config.SystemMessage)
-	fmt.Println("content", content)
+
 	response := &AIResponse{
 		Provider:  am.currentProvider.GetProviderName(),
 		Model:     am.config.ModelID,
@@ -144,10 +144,22 @@ func (am *AIManager) SendRequest(ctx context.Context, prompt string) (*AIRespons
 	}
 
 	if err != nil {
+		// Enhanced error logging
+		fmt.Printf("AI request failed: %v\n", err)
+		fmt.Printf("Provider: %s, Model: %s\n", response.Provider, response.Model)
+		fmt.Printf("Prompt length: %d\n", len(prompt))
+
 		response.Error = err.Error()
 		return response, err
 	}
 
+	if content == "" {
+		err = fmt.Errorf("AI provider returned empty response")
+		response.Error = err.Error()
+		return response, err
+	}
+
+	fmt.Printf("AI response successful: %d characters\n", len(content))
 	response.Content = content
 	return response, nil
 }

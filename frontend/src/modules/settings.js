@@ -739,14 +739,40 @@ export class SettingsManager {
                 });
             }
 
-            // API key input
+                            // API key input with enhanced status display
             if (aiApiKeyInput) {
+                const aiApiKeyStatus = document.getElementById('ai-api-key-status');
+                
+                // Update API key status
+                const updateApiKeyStatus = (apiKey) => {
+                    if (!aiApiKeyStatus) return;
+                    
+                    if (apiKey && apiKey.length > 0) {
+                        aiApiKeyStatus.innerHTML = `
+                            <img src="./assets/icons/success.svg" class="svg-icon small" alt="✓">
+                            <span>Configured (${apiKey.length} chars)</span>
+                        `;
+                        aiApiKeyStatus.className = 'api-key-status configured';
+                    } else {
+                        aiApiKeyStatus.innerHTML = `
+                            <img src="./assets/icons/warning.svg" class="svg-icon small" alt="⚠️">
+                            <span>Not configured</span>
+                        `;
+                        aiApiKeyStatus.className = 'api-key-status';
+                    }
+                };
+                
+                // Initial status update
+                updateApiKeyStatus(aiApiKeyInput.value);
+                
                 let apiKeyDebounceTimeout;
                 aiApiKeyInput.addEventListener('input', (event) => {
+                    const apiKey = event.target.value.trim();
+                    updateApiKeyStatus(apiKey);
+                    
                     clearTimeout(apiKeyDebounceTimeout);
                     apiKeyDebounceTimeout = setTimeout(async () => {
                         try {
-                            const apiKey = event.target.value.trim();
                             await window.go.main.App.ConfigSet('AIAPIKey', apiKey);
                         } catch (error) {
                             console.error('Error updating AI API key:', error);
@@ -754,11 +780,12 @@ export class SettingsManager {
                     }, 1000);
                 });
 
-                // API key show/hide toggle
+                // API key show/hide toggle with simple text button
                 if (aiApiKeyToggle) {
                     aiApiKeyToggle.addEventListener('click', () => {
                         const isPassword = aiApiKeyInput.type === 'password';
                         aiApiKeyInput.type = isPassword ? 'text' : 'password';
+                        aiApiKeyToggle.textContent = isPassword ? 'Hide' : 'Show';
                     });
                 }
             }
@@ -781,28 +808,40 @@ export class SettingsManager {
 
 
 
-            // Test connection button
+            // Test connection button with enhanced status display
             if (aiTestConnectionBtn && aiConnectionStatus) {
                 aiTestConnectionBtn.addEventListener('click', async () => {
                     try {
                         aiTestConnectionBtn.disabled = true;
-                        aiConnectionStatus.textContent = 'Testing...';
+                        aiConnectionStatus.innerHTML = `
+                            <img src="./assets/icons/refresh.svg" class="svg-icon small status-indicator" alt="⟳">
+                            <span>Testing...</span>
+                        `;
                         aiConnectionStatus.className = 'setting-status testing';
 
                         const result = await window.go.main.App.TestAIConnection();
                         
                         if (result.Success) {
-                            aiConnectionStatus.textContent = 'Connected';
+                            aiConnectionStatus.innerHTML = `
+                                <img src="./assets/icons/success.svg" class="svg-icon small status-indicator" alt="✓">
+                                <span>Connected</span>
+                            `;
                             aiConnectionStatus.className = 'setting-status success';
                             showNotification('AI connection test successful', 'success');
                         } else {
-                            aiConnectionStatus.textContent = `Failed: ${result.Error}`;
+                            aiConnectionStatus.innerHTML = `
+                                <img src="./assets/icons/error.svg" class="svg-icon small status-indicator" alt="✗">
+                                <span>Failed: ${result.Error}</span>
+                            `;
                             aiConnectionStatus.className = 'setting-status error';
                             showNotification(`AI connection test failed: ${result.Error}`, 'error');
                         }
                     } catch (error) {
                         console.error('Error testing AI connection:', error);
-                        aiConnectionStatus.textContent = `Error: ${error.message}`;
+                        aiConnectionStatus.innerHTML = `
+                            <img src="./assets/icons/error.svg" class="svg-icon small status-indicator" alt="✗">
+                            <span>Error: ${error.message}</span>
+                        `;
                         aiConnectionStatus.className = 'setting-status error';
                         showNotification(`AI connection test error: ${error.message}`, 'error');
                     } finally {
