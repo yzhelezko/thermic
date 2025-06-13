@@ -8,7 +8,8 @@
 
 A modern, cross-platform terminal emulator built with **Wails** and **xterm.js**, delivering a **VS Code-like terminal experience** with native performance and comprehensive **WSL support**.
 
-![Thermic Screenshot](https://via.placeholder.com/800x500/0c0c0c/ffffff?text=Thermic+Terminal+Screenshot)
+![Thermic Main Window](pictures/main.png)
+![Thermic File Browser](pictures/files.png)
 
 ## ✨ Features
 
