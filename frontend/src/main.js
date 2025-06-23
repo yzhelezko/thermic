@@ -280,7 +280,8 @@ class ThermicTerminal {
 
         // Connect UI resize events to terminal
         this.uiManager.setTerminalResizeCallback(() => {
-            this.terminalManager.fit();
+            // NEW: Use the improved resize handling
+            this.terminalManager.handleResize();
         });
 
         // Initialize settings dark mode toggle with current theme
