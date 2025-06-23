@@ -36,6 +36,12 @@ export class TerminalManager {
         this.resizeObserver = null;
         this.cleanupInterval = null;
         
+        // NEW: Terminal sizing system
+        this.pendingSizeQueue = new Set(); // Sessions that need sizing when visible
+        this.containerObservers = new Map(); // ResizeObserver for each container
+        this.visibilityObserver = null; // MutationObserver for visibility changes
+        this.sizingInProgress = new Set(); // Track ongoing sizing operations
+        
         // Host key prompt mode
         this.hostKeyPromptMode = {
             active: false,
@@ -59,11 +65,57 @@ export class TerminalManager {
         // Start resource monitoring
         this.startResourceMonitoring();
 
+        // NEW: Initialize visibility monitoring
+        this.setupVisibilityMonitoring();
+
+        // NEW: Start periodic pending size processor  
+        this.startPendingSizeProcessor();
+
         // Initialize AI float window after DOM is ready
         this.aiFloatWindow = null;
         
         // Expose resize method globally for debugging
         window.forceResizeTerminals = () => this.forceResizeAllTerminals();
+        
+        // NEW: Expose pending queue processing for debugging
+        window.processPendingSizes = () => this.processPendingSizeQueue();
+        
+        // NEW: Phase 2 - Expose enhanced sizing for debugging
+        window.enhanceTerminalSizing = (sessionId) => {
+            if (sessionId) {
+                return this.performEnhancedSizing(sessionId);
+            } else {
+                // Enhance all visible terminals
+                const promises = [];
+                for (const [sid, session] of this.terminals) {
+                    if (session.container && this.isContainerVisible(session.container)) {
+                        promises.push(this.performEnhancedSizing(sid));
+                    }
+                }
+                return Promise.all(promises);
+            }
+        };
+        
+        // NEW: Phase 2 - Debug method to check terminal states
+        window.debugTerminalStates = () => {
+            const states = {};
+            for (const [sessionId, session] of this.terminals) {
+                states[sessionId] = {
+                    visible: session.container ? this.isContainerVisible(session.container) : false,
+                    validDimensions: session.container ? this.validateEnhancedContainerDimensions(session.container) : false,
+                    containerSize: session.container ? {
+                        offset: `${session.container.offsetWidth}x${session.container.offsetHeight}`,
+                        client: `${session.container.clientWidth}x${session.container.clientHeight}`
+                    } : null,
+                    terminalSize: session.terminal ? `${session.terminal.cols}x${session.terminal.rows}` : null,
+                    retryCount: session.retryCount || 0,
+                    isConnected: session.isConnected,
+                    hasObserver: !!session.containerObserver
+                };
+            }
+            console.table(states);
+            return states;
+        };
     }
 
     initializeAIWindow() {
@@ -251,7 +303,8 @@ export class TerminalManager {
         terminal.open(terminalWrapper);
 
         // DON'T call fit() here - container is hidden so measurements will be wrong
-        // Fitting will happen in switchToSession() when container becomes visible
+        // NEW: Add to pending size queue for when container becomes visible
+        this.addToPendingSizeQueue(sessionId);
 
         // Handle terminal input - send to shell
         terminal.onData((data) => {
@@ -351,13 +404,23 @@ export class TerminalManager {
             created: Date.now(),
             lastActivity: Date.now(),
             resizeHandler: null,
-            resizeTimeout: null
+            resizeTimeout: null,
+            // NEW: Phase 2 - Enhanced resize coordination
+            containerObserver: null,
+            retryCount: 0,
+            maxRetries: 5,
+            retryBackoff: 100, // Start with 100ms, exponential backoff
+            lastSizeAttempt: 0,
+            sizeAttemptDelay: 50 // Minimum delay between size attempts
         };
 
         this.terminals.set(sessionId, terminalSession);
 
         // Set up resize handling for this terminal
         this.setupTerminalResize(sessionId);
+
+        // NEW: Phase 2 - Set up container-specific resize observer
+        this.setupContainerResizeObserver(sessionId);
 
         return terminalSession;
     }
@@ -664,7 +727,7 @@ export class TerminalManager {
         }
     }
 
-    switchToSession(sessionId) {
+    async switchToSession(sessionId) {
         console.log(`Switching to session: ${sessionId}, current active: ${this.activeSessionId}`);
         
         // Skip if already active
@@ -691,8 +754,6 @@ export class TerminalManager {
         if (newSession && newSession.container && newSession.terminal) {
             console.log(`Showing new session: ${sessionId}`);
             try {
-                newSession.container.style.display = 'block';
-                
                 // Update active session first
                 this.activeSessionId = sessionId;
                 
@@ -703,31 +764,35 @@ export class TerminalManager {
                 this.isConnected = newSession.isConnected;
                 this.eventUnsubscribe = this.globalOutputListener;
                 
-                // Force reflow to ensure container has proper dimensions
-                newSession.container.offsetHeight;
+                // Show the container
+                newSession.container.style.display = 'block';
                 
-                // Use requestAnimationFrame to ensure container is fully rendered
-                requestAnimationFrame(() => {
-                    this.forceResizeSession(sessionId).then(() => {
-                        // Focus after resizing is complete
-                        try {
-                            newSession.terminal.focus();
-                            console.log(`Terminal ${sessionId} resized (${newSession.terminal.cols}x${newSession.terminal.rows}) and focused`);
-                        } catch (error) {
-                            console.warn('Error focusing terminal:', error);
-                        }
-                    }).catch(error => {
-                        console.warn('Error during forced resize:', error);
-                        // Fallback focus
-                        try {
-                            newSession.terminal.focus();
-                        } catch (focusError) {
-                            console.warn('Error focusing terminal in fallback:', focusError);
-                        }
-                    });
-                });
+                // NEW: Wait for layout to settle after making visible
+                await this.waitForLayoutSettle();
                 
-                console.log(`Successfully switched to session: ${sessionId}`);
+                // NEW: Validate container dimensions before sizing
+                if (!this.validateContainerDimensions(newSession.container)) {
+                    console.warn(`Container for session ${sessionId} has invalid dimensions after becoming visible`);
+                    // Add to pending queue for retry
+                    this.addToPendingSizeQueue(sessionId);
+                } else {
+                    // NEW: Phase 2 - Use enhanced sizing if available, fallback to visibility-aware
+                    try {
+                        await this.performEnhancedSizing(sessionId);
+                    } catch (error) {
+                        console.warn(`Enhanced sizing failed for ${sessionId}, using fallback:`, error);
+                        await this.performVisibilityAwareSizing(sessionId);
+                    }
+                }
+                
+                // Focus the terminal
+                try {
+                    newSession.terminal.focus();
+                    console.log(`Successfully switched to session: ${sessionId}`);
+                } catch (error) {
+                    console.warn('Error focusing terminal:', error);
+                }
+                
             } catch (error) {
                 console.error('Error during session switch:', error);
             }
@@ -751,6 +816,82 @@ export class TerminalManager {
                     console.error('Error creating missing session:', error);
                 }
             }
+        }
+    }
+
+    // NEW: Perform visibility-aware sizing with proper timing
+    async performVisibilityAwareSizing(sessionId) {
+        const terminalSession = this.terminals.get(sessionId);
+        if (!terminalSession || !terminalSession.fitAddon) {
+            console.warn(`Cannot perform visibility-aware sizing for ${sessionId} - session invalid`);
+            return;
+        }
+
+        console.log(`Performing visibility-aware sizing for session: ${sessionId}`);
+
+        try {
+            // Remove from pending queue since we're processing it now
+            this.pendingSizeQueue.delete(sessionId);
+            this.sizingInProgress.add(sessionId);
+
+            // Force reflow to ensure accurate measurements
+            terminalSession.container.offsetWidth;
+            terminalSession.container.offsetHeight;
+
+            // Wait one more frame for measurements to be accurate
+            await new Promise(resolve => requestAnimationFrame(resolve));
+
+            // Get proposed dimensions - this should be accurate now
+            const proposedDimensions = terminalSession.fitAddon.proposeDimensions();
+            
+            if (proposedDimensions && proposedDimensions.cols > 0 && proposedDimensions.rows > 0) {
+                console.log(`Using proposed dimensions for ${sessionId}: ${proposedDimensions.cols}x${proposedDimensions.rows}`);
+                
+                // Resize terminal to proposed dimensions
+                terminalSession.terminal.resize(proposedDimensions.cols, proposedDimensions.rows);
+                
+                // Wait for resize to take effect
+                await new Promise(resolve => setTimeout(resolve, 10));
+                
+                // Follow up with fit to ensure proper layout
+                terminalSession.fitAddon.fit();
+                
+                // Get final dimensions
+                const finalCols = terminalSession.terminal.cols;
+                const finalRows = terminalSession.terminal.rows;
+                
+                console.log(`Visibility-aware sizing complete for ${sessionId}: ${finalCols}x${finalRows}`);
+                
+                // Update backend if connected
+                if (terminalSession.isConnected) {
+                    await ResizeShell(sessionId, finalCols, finalRows).catch(error => {
+                        console.warn('Error updating backend shell size:', error);
+                    });
+                }
+            } else {
+                console.warn(`Proposed dimensions invalid for ${sessionId}, using fallback`);
+                // Fallback to multiple fits
+                terminalSession.fitAddon.fit();
+                await new Promise(resolve => setTimeout(resolve, 20));
+                terminalSession.fitAddon.fit();
+                
+                const finalCols = terminalSession.terminal.cols;
+                const finalRows = terminalSession.terminal.rows;
+                
+                console.log(`Fallback sizing complete for ${sessionId}: ${finalCols}x${finalRows}`);
+                
+                // Update backend if connected
+                if (terminalSession.isConnected) {
+                    await ResizeShell(sessionId, finalCols, finalRows).catch(error => {
+                        console.warn('Error updating backend shell size:', error);
+                    });
+                }
+            }
+
+        } catch (error) {
+            console.error(`Error during visibility-aware sizing for ${sessionId}:`, error);
+        } finally {
+            this.sizingInProgress.delete(sessionId);
         }
     }
 
@@ -779,6 +920,18 @@ export class TerminalManager {
                     console.warn('Error removing resize handler:', error);
                 }
                 terminalSession.resizeHandler = null;
+            }
+
+            // NEW: Phase 2 - Cleanup container observer
+            if (terminalSession.containerObserver) {
+                try {
+                    terminalSession.containerObserver.disconnect();
+                    console.log(`Container observer disconnected for session: ${sessionId}`);
+                } catch (error) {
+                    console.warn(`Error disconnecting container observer for ${sessionId}:`, error);
+                }
+                terminalSession.containerObserver = null;
+                this.containerObservers.delete(sessionId);
             }
             
             // Properly dispose of the terminal instance to free memory and event listeners
@@ -1009,12 +1162,38 @@ export class TerminalManager {
         // Handle window resize - aggressively resize all terminals
         console.log('Handling window resize...');
         
-        // Force resize the active session immediately
+        // NEW: Use the new sizing system for better coordination
+        
+        // Force resize the active session immediately with proper validation
         if (this.activeSessionId) {
-            this.forceResizeSession(this.activeSessionId).catch(error => {
-                console.warn('Error force resizing active session:', error);
-            });
+            const activeSession = this.terminals.get(this.activeSessionId);
+            if (activeSession && activeSession.container && this.isContainerVisible(activeSession.container)) {
+                // NEW: Phase 2 - Use enhanced validation and sizing
+                if (this.validateEnhancedContainerDimensions(activeSession.container)) {
+                    this.performEnhancedSizing(this.activeSessionId).catch(error => {
+                        console.warn('Enhanced resize failed for active session:', error);
+                        // Fallback to visibility-aware sizing
+                        this.performVisibilityAwareSizing(this.activeSessionId).catch(fallbackError => {
+                            console.warn('Visibility-aware fallback failed:', fallbackError);
+                            // Final fallback to old method
+                            this.forceResizeSession(this.activeSessionId).catch(finalError => {
+                                console.warn('Final fallback resize also failed:', finalError);
+                            });
+                        });
+                    });
+                } else {
+                    // Add to pending queue for retry
+                    this.addToPendingSizeQueue(this.activeSessionId);
+                }
+            }
         }
+        
+        // Process any terminals that became visible due to the resize
+        setTimeout(() => {
+            this.processPendingSizeQueue().catch(error => {
+                console.warn('Error processing pending size queue:', error);
+            });
+        }, 50);
         
         // Also resize any other visible terminals (with a small delay to avoid overwhelming)
         setTimeout(() => {
@@ -1023,11 +1202,21 @@ export class TerminalManager {
                     terminalSession && 
                     terminalSession.fitAddon && 
                     terminalSession.container && 
-                    terminalSession.container.style.display !== 'none') {
+                    this.isContainerVisible(terminalSession.container)) {
                     
-                    this.forceResizeSession(sessionId).catch(error => {
-                        console.warn(`Error force resizing session ${sessionId}:`, error);
-                    });
+                    // NEW: Phase 2 - Use enhanced sizing method if container is valid
+                    if (this.validateEnhancedContainerDimensions(terminalSession.container)) {
+                        this.performEnhancedSizing(sessionId).catch(error => {
+                            console.warn(`Enhanced resize failed for session ${sessionId}:`, error);
+                            // Fallback to visibility-aware sizing
+                            this.performVisibilityAwareSizing(sessionId).catch(fallbackError => {
+                                console.warn(`Visibility-aware fallback failed for session ${sessionId}:`, fallbackError);
+                            });
+                        });
+                    } else {
+                        // Add to pending queue for retry
+                        this.addToPendingSizeQueue(sessionId);
+                    }
                 }
             }
         }, 100);
@@ -1051,16 +1240,57 @@ export class TerminalManager {
         for (const [sessionId, terminalSession] of this.terminals) {
             if (terminalSession && terminalSession.terminal && terminalSession.fitAddon) {
                 console.log(`Force resizing terminal session: ${sessionId}`);
-                resizePromises.push(
-                    this.forceResizeSession(sessionId).catch(error => {
-                        console.warn(`Failed to resize session ${sessionId}:`, error);
-                    })
-                );
+                
+                // NEW: Phase 2 - Use enhanced sizing if container is visible
+                if (terminalSession.container && this.isContainerVisible(terminalSession.container)) {
+                    if (this.validateEnhancedContainerDimensions(terminalSession.container)) {
+                        resizePromises.push(
+                            this.performEnhancedSizing(sessionId).catch(error => {
+                                console.warn(`Enhanced resize failed for session ${sessionId}:`, error);
+                                // Fallback to visibility-aware sizing
+                                return this.performVisibilityAwareSizing(sessionId).catch(fallbackError => {
+                                    console.warn(`Visibility-aware fallback failed for ${sessionId}:`, fallbackError);
+                                    // Final fallback to old method
+                                    return this.forceResizeSession(sessionId).catch(finalError => {
+                                        console.warn(`Final fallback resize also failed for ${sessionId}:`, finalError);
+                                    });
+                                });
+                            })
+                        );
+                    } else {
+                        // Add to pending queue for later processing
+                        this.addToPendingSizeQueue(sessionId);
+                    }
+                } else {
+                    // Container not visible, use old method as fallback
+                    resizePromises.push(
+                        this.forceResizeSession(sessionId).catch(error => {
+                            console.warn(`Failed to resize session ${sessionId}:`, error);
+                        })
+                    );
+                }
             }
         }
         
         await Promise.all(resizePromises);
+        
+        // Also process any pending size operations
+        await this.processPendingSizeQueue();
+        
         console.log('All terminals resize complete');
+    }
+
+    // NEW: Start periodic processing of pending size queue
+    startPendingSizeProcessor() {
+        // Process pending size queue every 2 seconds
+        setInterval(() => {
+            if (this.pendingSizeQueue.size > 0) {
+                console.log(`Processing ${this.pendingSizeQueue.size} pending size operations`);
+                this.processPendingSizeQueue().catch(error => {
+                    console.warn('Error in periodic pending size processing:', error);
+                });
+            }
+        }, 2000);
     }
 
     scrollToBottom() {
@@ -1411,6 +1641,38 @@ export class TerminalManager {
     }
 
     cleanup() {
+        console.log('Starting terminal cleanup...');
+        
+        // NEW: Clean up sizing system first
+        console.log('Cleaning up sizing system...');
+        
+        // Clean up visibility observer
+        if (this.visibilityObserver) {
+            try {
+                this.visibilityObserver.disconnect();
+                console.log('Visibility observer disconnected');
+            } catch (error) {
+                console.warn('Error disconnecting visibility observer:', error);
+            }
+            this.visibilityObserver = null;
+        }
+        
+        // Clean up container observers
+        for (const [sessionId, observer] of this.containerObservers) {
+            try {
+                observer.disconnect();
+                console.log(`Container observer disconnected for session: ${sessionId}`);
+            } catch (error) {
+                console.warn(`Error disconnecting container observer for ${sessionId}:`, error);
+            }
+        }
+        this.containerObservers.clear();
+        
+        // Clear sizing queues and tracking
+        this.pendingSizeQueue.clear();
+        this.sizingInProgress.clear();
+        console.log('Sizing queues cleared');
+        
         // Stop resource monitoring
         if (this.cleanupInterval) {
             clearInterval(this.cleanupInterval);
@@ -1502,6 +1764,8 @@ export class TerminalManager {
         
         // Clear terminals map
         this.terminals.clear();
+        
+        console.log('Terminal cleanup completed successfully');
     }
 
     checkForReconnection(sessionId) {
@@ -1761,6 +2025,431 @@ export class TerminalManager {
         if (terminalSession && terminalSession.terminal) {
             // Always clear everything including scrollback buffer
             terminalSession.terminal.reset();
+        }
+    }
+
+    // NEW: Initialize visibility monitoring
+    setupVisibilityMonitoring() {
+        // Set up MutationObserver to detect when terminal containers become visible
+        this.visibilityObserver = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+                    const target = mutation.target;
+                    if (target.classList.contains('terminal-instance')) {
+                        const sessionId = target.dataset.sessionId;
+                        if (sessionId && this.isContainerVisible(target)) {
+                            console.log(`Terminal container became visible: ${sessionId}`);
+                            this.handleContainerBecameVisible(sessionId);
+                        }
+                    }
+                }
+            });
+        });
+
+        // Observe the main terminal container for changes
+        const mainContainer = document.getElementById('terminal');
+        if (mainContainer) {
+            this.visibilityObserver.observe(mainContainer, {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                attributeFilter: ['style']
+            });
+        }
+    }
+
+    // NEW: Check if container is visible and has valid dimensions
+    isContainerVisible(container) {
+        if (!container) return false;
+        
+        const computedStyle = window.getComputedStyle(container);
+        if (computedStyle.display === 'none' || computedStyle.visibility === 'hidden') {
+            return false;
+        }
+        
+        const rect = container.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+    }
+
+    // NEW: Validate container dimensions for terminal fitting
+    validateContainerDimensions(container, minWidth = 100, minHeight = 50) {
+        if (!container) {
+            console.warn('Container validation failed: no container provided');
+            return false;
+        }
+
+        const rect = container.getBoundingClientRect();
+        const isValid = rect.width >= minWidth && rect.height >= minHeight;
+        
+        if (!isValid) {
+            console.warn(`Container dimensions invalid: ${rect.width}x${rect.height} (min: ${minWidth}x${minHeight})`);
+        }
+        
+        return isValid;
+    }
+
+    // NEW: Handle when a container becomes visible
+    async handleContainerBecameVisible(sessionId) {
+        // Avoid duplicate processing
+        if (this.sizingInProgress.has(sessionId)) {
+            console.log(`Sizing already in progress for ${sessionId}, skipping`);
+            return;
+        }
+
+        const terminalSession = this.terminals.get(sessionId);
+        if (!terminalSession || !terminalSession.container) {
+            console.warn(`No terminal session found for visible container: ${sessionId}`);
+            return;
+        }
+
+        // Remove from pending queue if it was waiting
+        this.pendingSizeQueue.delete(sessionId);
+
+        // Wait for layout to settle after visibility change
+        await this.waitForLayoutSettle();
+
+        // Validate container before attempting to size
+        if (!this.validateContainerDimensions(terminalSession.container)) {
+            console.warn(`Container ${sessionId} became visible but dimensions are invalid, will retry`);
+            // Add back to pending queue for retry
+            this.pendingSizeQueue.add(sessionId);
+            return;
+        }
+
+        // Perform the sizing operation
+        await this.performDeferredSizing(sessionId);
+    }
+
+    // NEW: Wait for DOM layout to settle
+    async waitForLayoutSettle() {
+        // Wait for multiple animation frames to ensure layout is complete
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        // Additional small delay for complex layouts
+        await new Promise(resolve => setTimeout(resolve, 10));
+    }
+
+    // NEW: Perform deferred sizing for a terminal
+    async performDeferredSizing(sessionId) {
+        this.sizingInProgress.add(sessionId);
+        
+        try {
+            console.log(`Performing deferred sizing for session: ${sessionId}`);
+            
+            // NEW: Phase 2 - Try enhanced sizing first, with fallbacks
+            const terminalSession = this.terminals.get(sessionId);
+            if (terminalSession && terminalSession.container) {
+                if (this.validateEnhancedContainerDimensions(terminalSession.container)) {
+                    await this.performEnhancedSizing(sessionId);
+                } else if (this.validateContainerDimensions(terminalSession.container)) {
+                    await this.performVisibilityAwareSizing(sessionId);
+                } else {
+                    await this.forceResizeSession(sessionId);
+                }
+            } else {
+                await this.forceResizeSession(sessionId);
+            }
+            
+            console.log(`Deferred sizing completed for session: ${sessionId}`);
+        } catch (error) {
+            console.error(`Deferred sizing failed for session ${sessionId}:`, error);
+        } finally {
+            this.sizingInProgress.delete(sessionId);
+        }
+    }
+
+    // NEW: Add session to pending size queue
+    addToPendingSizeQueue(sessionId) {
+        this.pendingSizeQueue.add(sessionId);
+        console.log(`Added ${sessionId} to pending size queue`);
+    }
+
+    // NEW: Process pending size queue
+    async processPendingSizeQueue() {
+        const pending = Array.from(this.pendingSizeQueue);
+        console.log(`Processing ${pending.length} pending size operations`);
+        
+        for (const sessionId of pending) {
+            const terminalSession = this.terminals.get(sessionId);
+            if (terminalSession && terminalSession.container && this.isContainerVisible(terminalSession.container)) {
+                await this.handleContainerBecameVisible(sessionId);
+            }
+        }
+    }
+
+    // NEW: Phase 2 - Set up container-specific resize observer
+    setupContainerResizeObserver(sessionId) {
+        const terminalSession = this.terminals.get(sessionId);
+        if (!terminalSession || !terminalSession.container) {
+            console.warn(`Cannot setup container observer for ${sessionId} - session invalid`);
+            return;
+        }
+
+        console.log(`Setting up container resize observer for session: ${sessionId}`);
+
+        // Create ResizeObserver for this specific container
+        const containerObserver = new ResizeObserver((entries) => {
+            for (const entry of entries) {
+                if (entry.target === terminalSession.container) {
+                    // Debounce resize events to prevent overwhelming
+                    const now = Date.now();
+                    if (now - terminalSession.lastSizeAttempt < terminalSession.sizeAttemptDelay) {
+                        console.log(`Skipping resize for ${sessionId} - too soon after last attempt`);
+                        return;
+                    }
+                    terminalSession.lastSizeAttempt = now;
+
+                    console.log(`Container size changed for ${sessionId}:`, entry.contentRect.width, 'x', entry.contentRect.height);
+                    
+                    // Only trigger if container is visible and has valid dimensions
+                    if (this.isContainerVisible(terminalSession.container) && 
+                        this.validateContainerDimensions(terminalSession.container)) {
+                        
+                        // Use enhanced sizing with retry logic
+                        this.performEnhancedSizing(sessionId).catch(error => {
+                            console.warn(`Enhanced sizing failed for ${sessionId}:`, error);
+                        });
+                    } else {
+                        // Add to pending queue for later processing
+                        this.addToPendingSizeQueue(sessionId);
+                    }
+                    break;
+                }
+            }
+        });
+
+        // Start observing the container
+        containerObserver.observe(terminalSession.container);
+        
+        // Store the observer for cleanup
+        terminalSession.containerObserver = containerObserver;
+        this.containerObservers.set(sessionId, containerObserver);
+        
+        console.log(`Container resize observer set up for session: ${sessionId}`);
+    }
+
+    // NEW: Phase 2 - Enhanced sizing with retry logic and fallback
+    async performEnhancedSizing(sessionId) {
+        const terminalSession = this.terminals.get(sessionId);
+        if (!terminalSession || !terminalSession.fitAddon) {
+            console.warn(`Cannot perform enhanced sizing for ${sessionId} - session invalid`);
+            return;
+        }
+
+        // Avoid concurrent sizing operations for the same session
+        if (this.sizingInProgress.has(sessionId)) {
+            console.log(`Sizing already in progress for ${sessionId}, skipping enhanced sizing`);
+            return;
+        }
+
+        console.log(`Performing enhanced sizing for session: ${sessionId} (attempt ${terminalSession.retryCount + 1})`);
+        this.sizingInProgress.add(sessionId);
+
+        try {
+            // Reset retry count on successful start
+            terminalSession.retryCount = 0;
+            
+            // Enhanced layout settling - wait for multiple conditions
+            await this.waitForEnhancedLayoutSettle(terminalSession.container);
+
+            // Validate container dimensions with enhanced checks
+            if (!this.validateEnhancedContainerDimensions(terminalSession.container)) {
+                throw new Error('Container dimensions validation failed');
+            }
+
+            // Perform the actual sizing with enhanced precision
+            const success = await this.performPrecisionSizing(sessionId);
+            
+            if (!success) {
+                throw new Error('Precision sizing failed');
+            }
+
+            console.log(`Enhanced sizing completed successfully for session: ${sessionId}`);
+            
+            // Remove from pending queue on success
+            this.pendingSizeQueue.delete(sessionId);
+
+        } catch (error) {
+            console.warn(`Enhanced sizing failed for session ${sessionId}:`, error);
+            
+            // Implement exponential backoff retry
+            if (terminalSession.retryCount < terminalSession.maxRetries) {
+                terminalSession.retryCount++;
+                const delay = terminalSession.retryBackoff * Math.pow(2, terminalSession.retryCount - 1);
+                
+                console.log(`Retrying enhanced sizing for ${sessionId} in ${delay}ms (attempt ${terminalSession.retryCount})`);
+                
+                setTimeout(() => {
+                    if (this.terminals.has(sessionId) && this.isContainerVisible(terminalSession.container)) {
+                        this.performEnhancedSizing(sessionId);
+                    }
+                }, delay);
+            } else {
+                console.warn(`Max retries reached for enhanced sizing of ${sessionId}, adding to pending queue`);
+                this.addToPendingSizeQueue(sessionId);
+                // Reset retry count for future attempts
+                terminalSession.retryCount = 0;
+            }
+        } finally {
+            this.sizingInProgress.delete(sessionId);
+        }
+    }
+
+    // NEW: Phase 2 - Enhanced layout settling with multiple validation checks
+    async waitForEnhancedLayoutSettle(container) {
+        // Wait for multiple animation frames
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        
+        // Wait for layout to stabilize by checking if dimensions change
+        let previousWidth = container.offsetWidth;
+        let previousHeight = container.offsetHeight;
+        
+        // Check stability over multiple frames
+        for (let i = 0; i < 3; i++) {
+            await new Promise(resolve => requestAnimationFrame(resolve));
+            
+            const currentWidth = container.offsetWidth;
+            const currentHeight = container.offsetHeight;
+            
+            if (currentWidth !== previousWidth || currentHeight !== previousHeight) {
+                console.log('Layout still settling, waiting more...');
+                previousWidth = currentWidth;
+                previousHeight = currentHeight;
+                // Add small delay for complex layouts
+                await new Promise(resolve => setTimeout(resolve, 10));
+            }
+        }
+        
+        // Final small delay to ensure layout is completely stable
+        await new Promise(resolve => setTimeout(resolve, 15));
+    }
+
+    // NEW: Phase 2 - Enhanced container validation with more thorough checks
+    validateEnhancedContainerDimensions(container, minWidth = 100, minHeight = 50) {
+        if (!container) {
+            console.warn('Enhanced validation failed: no container provided');
+            return false;
+        }
+
+        // Check if container is actually in the DOM
+        if (!container.isConnected) {
+            console.warn('Enhanced validation failed: container not in DOM');
+            return false;
+        }
+
+        // Check computed styles
+        const computedStyle = window.getComputedStyle(container);
+        if (computedStyle.display === 'none' || computedStyle.visibility === 'hidden') {
+            console.warn('Enhanced validation failed: container is hidden');
+            return false;
+        }
+
+        // Check both offset and client dimensions
+        const offsetValid = container.offsetWidth >= minWidth && container.offsetHeight >= minHeight;
+        const clientValid = container.clientWidth >= minWidth && container.clientHeight >= minHeight;
+        
+        if (!offsetValid || !clientValid) {
+            console.warn(`Enhanced validation failed: dimensions too small`, {
+                offset: `${container.offsetWidth}x${container.offsetHeight}`,
+                client: `${container.clientWidth}x${container.clientHeight}`,
+                required: `${minWidth}x${minHeight}`
+            });
+            return false;
+        }
+
+        // Check if container has a valid bounding rect
+        const rect = container.getBoundingClientRect();
+        if (rect.width < minWidth || rect.height < minHeight) {
+            console.warn(`Enhanced validation failed: bounding rect too small`, {
+                rect: `${rect.width}x${rect.height}`,
+                required: `${minWidth}x${minHeight}`
+            });
+            return false;
+        }
+
+        return true;
+    }
+
+    // NEW: Phase 2 - Precision sizing with multiple techniques
+    async performPrecisionSizing(sessionId) {
+        const terminalSession = this.terminals.get(sessionId);
+        if (!terminalSession || !terminalSession.fitAddon) {
+            console.warn(`Cannot perform precision sizing for ${sessionId} - session invalid`);
+            return false;
+        }
+
+        console.log(`Performing precision sizing for session: ${sessionId}`);
+
+        try {
+            // Method 1: Use proposeDimensions (most accurate)
+            const proposedDimensions = terminalSession.fitAddon.proposeDimensions();
+            
+            if (proposedDimensions && proposedDimensions.cols > 0 && proposedDimensions.rows > 0) {
+                console.log(`Using proposed dimensions for ${sessionId}: ${proposedDimensions.cols}x${proposedDimensions.rows}`);
+                
+                // Resize terminal to proposed dimensions
+                terminalSession.terminal.resize(proposedDimensions.cols, proposedDimensions.rows);
+                
+                // Wait for resize to take effect
+                await new Promise(resolve => setTimeout(resolve, 10));
+                
+                // Follow up with fit to ensure proper layout
+                terminalSession.fitAddon.fit();
+                
+                // Verify the sizing worked
+                const finalCols = terminalSession.terminal.cols;
+                const finalRows = terminalSession.terminal.rows;
+                
+                if (finalCols > 0 && finalRows > 0) {
+                    console.log(`Precision sizing successful for ${sessionId}: ${finalCols}x${finalRows}`);
+                    
+                    // Update backend if connected
+                    if (terminalSession.isConnected) {
+                        await ResizeShell(sessionId, finalCols, finalRows).catch(error => {
+                            console.warn('Error updating backend shell size:', error);
+                        });
+                    }
+                    
+                    return true;
+                }
+            }
+            
+            // Method 2: Fallback to multiple fits with validation
+            console.log(`Proposed dimensions failed for ${sessionId}, using fallback method`);
+            
+            // Force container reflow
+            terminalSession.container.offsetWidth;
+            terminalSession.container.offsetHeight;
+            
+            // Progressive fitting with validation
+            for (let attempt = 0; attempt < 3; attempt++) {
+                terminalSession.fitAddon.fit();
+                await new Promise(resolve => setTimeout(resolve, 20));
+                
+                const cols = terminalSession.terminal.cols;
+                const rows = terminalSession.terminal.rows;
+                
+                if (cols > 0 && rows > 0) {
+                    console.log(`Fallback sizing successful for ${sessionId}: ${cols}x${rows} (attempt ${attempt + 1})`);
+                    
+                    // Update backend if connected
+                    if (terminalSession.isConnected) {
+                        await ResizeShell(sessionId, cols, rows).catch(error => {
+                            console.warn('Error updating backend shell size:', error);
+                        });
+                    }
+                    
+                    return true;
+                }
+            }
+            
+            console.warn(`All precision sizing methods failed for ${sessionId}`);
+            return false;
+            
+        } catch (error) {
+            console.error(`Error during precision sizing for ${sessionId}:`, error);
+            return false;
         }
     }
 } 
