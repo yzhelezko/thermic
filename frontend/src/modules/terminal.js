@@ -229,6 +229,22 @@ export class TerminalManager {
                     }
                 });
 
+                // NEW: Set up reconnection sizing listener to handle enhanced sizing after tab reconnection
+                this.globalReconnectionSizingListener = EventsOn('tab-reconnected-sizing', (data) => {
+                    console.log('Global listener received tab reconnection sizing event:', data);
+                    const { sessionId, tabId, immediate } = data;
+                    
+                    if (!sessionId) {
+                        console.warn('Tab reconnection sizing event missing sessionId');
+                        return;
+                    }
+                    
+                    // Trigger enhanced terminal sizing for reconnected tab
+                    this.handleReconnectionSizing(sessionId, immediate).catch(error => {
+                        console.error('Failed to handle reconnection sizing:', error);
+                    });
+                });
+
                 // Set up host key prompt listener
                 this.globalHostKeyPromptListener = EventsOn('host-key-prompt', (data) => {
                     console.log('Global listener received host key prompt:', data);
@@ -1712,6 +1728,16 @@ export class TerminalManager {
             }
             this.globalTabSwitchListener = null;
         }
+
+        // NEW: Clean up global reconnection sizing listener
+        if (this.globalReconnectionSizingListener) {
+            try {
+                this.globalReconnectionSizingListener();
+            } catch (error) {
+                console.warn('Error cleaning up global reconnection sizing listener:', error);
+            }
+            this.globalReconnectionSizingListener = null;
+        }
         
         if (this.globalSizeSyncListener) {
             try {
@@ -2452,4 +2478,118 @@ export class TerminalManager {
             return false;
         }
     }
+
+    // NEW: Handle enhanced terminal sizing for reconnected tabs
+    async handleReconnectionSizing(sessionId, immediate = true) {
+        console.log(`Handling reconnection sizing for session: ${sessionId}, immediate: ${immediate}`);
+        
+        const terminalSession = this.terminals.get(sessionId);
+        if (!terminalSession || !terminalSession.terminal) {
+            console.warn(`Cannot handle reconnection sizing for ${sessionId} - session invalid`);
+            return;
+        }
+
+        // IMPORTANT: Do NOT reset terminal state to preserve SSH login banner and content
+        // Only reset sizing-related cache and state information
+        
+        // Clear any cached size information to force fresh sizing
+        delete terminalSession.lastSyncedSize;
+        delete terminalSession.lastSizeSync;
+        terminalSession.retryCount = 0; // Reset retry count for fresh attempts
+
+        // For immediate reconnection sizing, use aggressive enhanced sizing approach
+        if (immediate) {
+            console.log(`Performing immediate reconnection sizing for ${sessionId}`);
+            
+            // Wait for terminal to be ready after reconnection
+            await new Promise(resolve => setTimeout(resolve, 200));
+            
+            // Check if container is visible and validate dimensions
+            if (this.isContainerVisible(terminalSession.container)) {
+                if (this.validateEnhancedContainerDimensions(terminalSession.container)) {
+                    // Use Phase 2 enhanced sizing system
+                    await this.performEnhancedSizing(sessionId);
+                } else {
+                    console.log(`Container not ready for enhanced sizing, using fallback for ${sessionId}`);
+                    // Wait a bit more and try fallback
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    await this.performVisibilityAwareSizing(sessionId);
+                }
+            } else {
+                console.log(`Container not visible for ${sessionId}, adding to pending queue`);
+                // Add to pending queue for processing when visible
+                this.addToPendingSizeQueue(sessionId);
+            }
+        } else {
+            // For non-immediate reconnection sizing, use standard approach
+            console.log(`Performing deferred reconnection sizing for ${sessionId}`);
+            await this.performDeferredSizing(sessionId);
+        }
+
+        // Additional sizing attempts for SSH reconnections to ensure stability
+        setTimeout(async () => {
+            if (this.terminals.has(sessionId) && terminalSession.isConnected) {
+                console.log(`Follow-up sizing for reconnected session: ${sessionId}`);
+                try {
+                    // Force another enhanced sizing attempt
+                    if (this.isContainerVisible(terminalSession.container) && 
+                        this.validateEnhancedContainerDimensions(terminalSession.container)) {
+                        await this.performEnhancedSizing(sessionId);
+                    }
+                } catch (error) {
+                    console.warn(`Follow-up sizing failed for ${sessionId}:`, error);
+                }
+            }
+        }, 1000); // Secondary attempt after 1 second for stability
+    }
 } 
+
+// NEW: Debug tools for reconnection sizing (available globally for console testing)
+window.debugReconnectionSizing = function(sessionId) {
+    if (!window.terminalManager) {
+        console.error('Terminal manager not available');
+        return;
+    }
+    
+    console.log('=== Reconnection Sizing Debug ===');
+    const terminalSession = window.terminalManager.terminals.get(sessionId);
+    
+    if (!terminalSession) {
+        console.error(`Session ${sessionId} not found`);
+        return;
+    }
+    
+    console.log(`Session ID: ${sessionId}`);
+    console.log(`Terminal connected: ${terminalSession.isConnected}`);
+    console.log(`Container visible: ${window.terminalManager.isContainerVisible(terminalSession.container)}`);
+    console.log(`Enhanced validation: ${window.terminalManager.validateEnhancedContainerDimensions(terminalSession.container)}`);
+    console.log(`Basic validation: ${window.terminalManager.validateContainerDimensions(terminalSession.container)}`);
+    console.log(`Retry count: ${terminalSession.retryCount}`);
+    console.log(`In sizing queue: ${window.terminalManager.pendingSizeQueue.has(sessionId)}`);
+    console.log(`Sizing in progress: ${window.terminalManager.sizingInProgress.has(sessionId)}`);
+    
+    if (terminalSession.container) {
+        const rect = terminalSession.container.getBoundingClientRect();
+        console.log(`Container dimensions: ${terminalSession.container.offsetWidth}x${terminalSession.container.offsetHeight}`);
+        console.log(`Container client: ${terminalSession.container.clientWidth}x${terminalSession.container.clientHeight}`);
+        console.log(`Container rect: ${rect.width}x${rect.height}`);
+    }
+    
+    if (terminalSession.terminal) {
+        console.log(`Terminal dimensions: ${terminalSession.terminal.cols}x${terminalSession.terminal.rows}`);
+    }
+    
+    console.log('=== End Debug ===');
+};
+
+window.testReconnectionSizing = function(sessionId) {
+    if (!window.terminalManager) {
+        console.error('Terminal manager not available');
+        return;
+    }
+    
+    console.log(`Testing reconnection sizing for session: ${sessionId}`);
+    window.terminalManager.handleReconnectionSizing(sessionId, true).catch(error => {
+        console.error('Test reconnection sizing failed:', error);
+    });
+};

@@ -405,6 +405,22 @@ func (a *App) ReconnectTab(tabId string) error {
 
 	a.messages.SessionReady(tab.SessionID)
 
+	// NEW: Trigger enhanced terminal sizing after successful reconnection
+	// This addresses the terminal sizing issue when tabs reconnect
+	if a.ctx != nil {
+		go func() {
+			// Give the connection a moment to stabilize
+			time.Sleep(100 * time.Millisecond)
+
+			// Emit reconnection sizing event to frontend to trigger Phase 2 sizing system
+			wailsRuntime.EventsEmit(a.ctx, "tab-reconnected-sizing", map[string]interface{}{
+				"sessionId": tab.SessionID,
+				"tabId":     tabId,
+				"immediate": true, // Flag for immediate enhanced sizing
+			})
+		}()
+	}
+
 	return nil
 }
 
