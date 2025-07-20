@@ -6,27 +6,56 @@ export class ContextMenuBase {
     }
 
     positionMenu(menu, x, y) {
-        const menuRect = menu.getBoundingClientRect();
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
+        // Get viewport dimensions
+        const viewport = {
+            width: window.innerWidth,
+            height: window.innerHeight
+        };
+        
+        // Force a layout calculation to ensure accurate measurements
+        menu.offsetHeight; // Trigger reflow
+        
+        // Get menu dimensions
+        const rect = menu.getBoundingClientRect();
+        const menuWidth = rect.width || menu.offsetWidth;
+        const menuHeight = rect.height || menu.offsetHeight;
+
+        // Use threshold-based positioning for more predictable behavior
+        const margin = 8;
+        const bottomThreshold = 0.7; // If cursor is below 70% of window height
+        const rightThreshold = 0.7;  // If cursor is beyond 70% of window width
 
         let menuX = x;
         let menuY = y;
 
-        // Adjust if menu would go off-screen horizontally
-        if (x + menuRect.width > viewportWidth) {
-            menuX = x - menuRect.width;
-            if (menuX < 0) menuX = 0;
+        // Position horizontally: if cursor is in right 30% of window, show menu to the left
+        if (x > viewport.width * rightThreshold) {
+            menuX = x - menuWidth;
         }
 
-        // Adjust if menu would go off-screen vertically
-        if (y + menuRect.height > viewportHeight) {
-            menuY = y - menuRect.height;
-            if (menuY < 0) menuY = 0;
+        // Position vertically: if cursor is in bottom 30% of window, show menu above
+        if (y > viewport.height * bottomThreshold) {
+            menuY = y - menuHeight;
         }
 
+        // Ensure menu doesn't go off edges with margins
+        menuX = Math.max(margin, Math.min(menuX, viewport.width - menuWidth - margin));
+        menuY = Math.max(margin, Math.min(menuY, viewport.height - menuHeight - margin));
+
+        // Apply positioning
         menu.style.left = `${menuX}px`;
         menu.style.top = `${menuY}px`;
+        
+        // Debug logging
+        console.log('Context menu positioned (Base, threshold-based):', {
+            cursor: { x, y },
+            menu: { x: menuX, y: menuY, width: menuWidth, height: menuHeight },
+            viewport: viewport,
+            thresholds: {
+                inBottomArea: y > viewport.height * bottomThreshold,
+                inRightArea: x > viewport.width * rightThreshold
+            }
+        });
     }
 
     showMenu(menu) {

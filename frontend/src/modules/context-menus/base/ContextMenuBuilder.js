@@ -45,7 +45,7 @@ export class ContextMenuBuilder {
     create() {
         this.menuElement = document.createElement('div');
         this.menuElement.className = 'context-menu';
-        this.menuElement.style.position = 'absolute';
+        this.menuElement.style.position = 'fixed'; // Use fixed positioning to match CSS
         this.menuElement.style.zIndex = '10000';
         return this;
     }
@@ -110,27 +110,81 @@ export class ContextMenuBuilder {
             return;
         }
         
+        // Add to DOM first to get accurate measurements
         document.body.appendChild(this.menuElement);
-        this.positionMenu(x, y);
+        
+        // Temporarily set to active state to get correct dimensions
         this.menuElement.classList.add('active');
+        
+        // Force a layout calculation to ensure accurate measurements
+        this.menuElement.offsetHeight; // Trigger reflow
+        
+        // Position with correct dimensions
+        this.positionMenu(x, y);
+        
+        // Reset and reapply active class for proper animation
+        this.menuElement.classList.remove('active');
+        
+        // Use requestAnimationFrame to ensure positioning is applied before animation
+        requestAnimationFrame(() => {
+            this.menuElement.classList.add('active');
+        });
+        
         return this.menuElement;
     }
 
     positionMenu(x, y) {
-        // Ensure menu is in DOM to get accurate measurements
+        // Get viewport dimensions
+        const viewport = {
+            width: window.innerWidth,
+            height: window.innerHeight
+        };
+        
+        // Get menu dimensions after it's in DOM
         const rect = this.menuElement.getBoundingClientRect();
-        const viewport = { 
-            width: window.innerWidth, 
-            height: window.innerHeight 
-        };
+        const menuWidth = rect.width || this.menuElement.offsetWidth;
+        const menuHeight = rect.height || this.menuElement.offsetHeight;
         
-        const position = {
-            x: Math.min(x, viewport.width - rect.width),
-            y: Math.min(y, viewport.height - rect.height)
-        };
+        // Use threshold-based positioning for more predictable behavior
+        const margin = 8;
+        const bottomThreshold = 0.7; // If cursor is below 70% of window height
+        const rightThreshold = 0.7;  // If cursor is beyond 70% of window width
         
-        this.menuElement.style.left = `${Math.max(0, position.x)}px`;
-        this.menuElement.style.top = `${Math.max(0, position.y)}px`;
+        let menuX = x;
+        let menuY = y;
+        
+        // Position horizontally: if cursor is in right 30% of window, show menu to the left
+        if (x > viewport.width * rightThreshold) {
+            menuX = x - menuWidth;
+        }
+        
+        // Position vertically: if cursor is in bottom 30% of window, show menu above
+        if (y > viewport.height * bottomThreshold) {
+            menuY = y - menuHeight;
+        }
+        
+        // Ensure menu doesn't go off edges with margins
+        menuX = Math.max(margin, Math.min(menuX, viewport.width - menuWidth - margin));
+        menuY = Math.max(margin, Math.min(menuY, viewport.height - menuHeight - margin));
+        
+        // Apply positioning
+        this.menuElement.style.left = `${menuX}px`;
+        this.menuElement.style.top = `${menuY}px`;
+        
+        // Debug logging
+        console.log('🎯 Context menu positioned (threshold-based):', {
+            cursor: { x, y },
+            menu: { x: menuX, y: menuY, width: menuWidth, height: menuHeight },
+            viewport: viewport,
+            thresholds: {
+                inBottomArea: y > viewport.height * bottomThreshold,
+                inRightArea: x > viewport.width * rightThreshold
+            },
+            positioning: {
+                cursorInBottomArea: y > viewport.height * bottomThreshold ? 'YES - Menu shown ABOVE cursor' : 'NO - Menu shown below cursor',
+                cursorInRightArea: x > viewport.width * rightThreshold ? 'YES - Menu shown LEFT of cursor' : 'NO - Menu shown right of cursor'
+            }
+        });
     }
 
     getElement() {

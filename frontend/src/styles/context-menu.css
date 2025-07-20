@@ -1,13 +1,14 @@
 /* Custom Context Menu Styles */
 
 .context-menu {
-    position: fixed;
+    position: fixed; /* Fixed positioning relative to viewport */
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 6px;
     box-shadow: 0 4px 12px var(--shadow);
     z-index: 10000;
     min-width: 160px;
+    max-width: 250px; /* Prevent menu from becoming too wide */
     opacity: 0;
     visibility: hidden;
     transform: scale(0.95);
