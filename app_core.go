@@ -256,6 +256,12 @@ func createAppOptions(app *App, assets embed.FS, isFrameless bool) *options.App 
 			WindowIsTranslucent:  false,
 			DisableWindowIcon:    false,
 		},
+		DragAndDrop: &options.DragAndDrop{
+			EnableFileDrop:     true,
+			DisableWebViewDrop: false,
+			CSSDropProperty:    "--wails-drop-target",
+			CSSDropValue:       "drop",
+		},
 		Linux: &linux.Options{
 			Icon: nil,
 		},

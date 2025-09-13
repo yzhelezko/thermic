@@ -26,9 +26,19 @@ export class FileContextMenu extends ContextMenuBase {
         this.contextMenuManager.currentFileItem = fileItem;
         this.contextMenuManager.currentFileData = fileData;
 
+        // Derive multi-selection context from DOM
+        const selectedElements = Array.from(document.querySelectorAll('.file-item.selected'))
+            .filter(el => el.dataset.isParent !== 'true');
+        const selectedFiles = selectedElements.map(el => ({
+            name: el.dataset.name,
+            path: el.dataset.path,
+            isDir: el.dataset.isDir === 'true',
+        }));
+
         const context = {
             fileItem: fileItem,
             fileData: fileData,
+            selected: selectedFiles,
             isFile: fileData.type === 'file',
             isDirectory: fileData.type === 'directory',
             event: event
