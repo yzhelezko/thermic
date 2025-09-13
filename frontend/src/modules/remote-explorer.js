@@ -1,5 +1,6 @@
 // Remote File Explorer module for SFTP file browsing
 import { updateStatus, showNotification } from './utils.js';
+import { EventsOn, OnFileDrop } from '../../wailsjs/runtime/runtime';
 import { modal } from '../components/Modal.js';
 import { LiveSearch } from '../components/LiveSearch.js';
 
@@ -27,6 +28,10 @@ export class RemoteExplorerManager {
         
         // Bind methods to preserve 'this' context
         this.handleActiveTabChanged = this.handleActiveTabChanged.bind(this);
+        this.sftpProgressUnsub = null;
+
+        // Multi-select state
+        this.lastSelectedIndex = null;
     }
 
     init() {
@@ -34,6 +39,62 @@ export class RemoteExplorerManager {
         
         console.log('🔵 Initializing Remote Explorer Manager...');
         this.setupEventListeners();
+        // Subscribe once to backend upload progress events
+        try {
+            if (!this.sftpProgressUnsub && typeof EventsOn === 'function') {
+                this.sftpProgressUnsub = EventsOn('sftp-upload-progress', (data) => {
+                    this.handleUploadProgressEvent(data);
+                });
+            } else if (!this.sftpProgressUnsub && window.runtime && typeof window.runtime.EventsOn === 'function') {
+                this.sftpProgressUnsub = window.runtime.EventsOn('sftp-upload-progress', (data) => {
+                    this.handleUploadProgressEvent(data);
+                });
+            }
+        } catch (e) {
+            console.warn('Failed to subscribe to sftp-upload-progress:', e);
+        }
+
+        // Register OS-level file drop (drag & drop) support
+        try {
+            if (!this.fileDropRegistered && typeof OnFileDrop === 'function') {
+                OnFileDrop(async (x, y, paths) => {
+                    // Only handle when file panel is active and path is set
+                    if (!this.isActivePanel || !this.currentSessionID || !this.currentRemotePath) return;
+                    if (!paths || paths.length === 0) return;
+
+                    // Ensure drop point is inside our file list area
+                    const container = document.querySelector('.remote-files-container');
+                    if (container) {
+                        const rect = container.getBoundingClientRect();
+                        const within = x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+                        if (!within) return;
+                    }
+
+                    try {
+                        this.showUploadProgress({ fileIndex: 0, totalFiles: paths.length, percent: 0, fileName: '' });
+                        await window.go.main.App.UploadRemoteFiles(this.currentSessionID, paths, this.currentRemotePath);
+                        this.hideUploadProgress();
+                        showNotification(`${paths.length} file(s) uploaded successfully`, 'success');
+                        await this.refreshCurrentDirectory();
+                    } catch (err) {
+                        console.error('DnD upload failed:', err);
+                        this.hideUploadProgress();
+                        showNotification(`Failed to upload: ${err.message}`, 'error');
+                    }
+                }, true); // rely on Wails drop-target detection
+                this.fileDropRegistered = true;
+
+                // Ensure we unregister file-drop listeners when the app unloads
+                if (typeof OnFileDropOff === 'function' && !this.fileDropOffHooked) {
+                    window.addEventListener('beforeunload', () => {
+                        try { OnFileDropOff(); } catch (_) {}
+                    });
+                    this.fileDropOffHooked = true;
+                }
+            }
+        } catch (e) {
+            console.warn('Failed to set up OnFileDrop:', e);
+        }
         this.isInitialized = true;
         
         // Make globally accessible for onclick handlers
@@ -114,8 +175,16 @@ export class RemoteExplorerManager {
             if (e.target.closest('.file-item')) {
                 const fileItem = e.target.closest('.file-item');
                 
-                // Select the file item before showing context menu (standard UX pattern)
-                this.selectFileItem(fileItem);
+                // Preserve multi-selection: if the item is already selected, keep current set.
+                // Otherwise, single-select this item for the context menu actions.
+                if (!fileItem.classList.contains('selected')) {
+                    const all = Array.from(document.querySelectorAll('.file-item'));
+                    all.forEach(it => it.classList.remove('selected'));
+                    if (fileItem.dataset.isParent !== 'true') {
+                        fileItem.classList.add('selected');
+                    }
+                    this.lastSelectedIndex = all.indexOf(fileItem);
+                }
                 
                 // Extract file data from the DOM element and convert to new format
                 const isDir = fileItem.dataset.isDir === 'true';
@@ -178,7 +247,7 @@ export class RemoteExplorerManager {
                 return;
             }
 
-            // Delete - Delete selected item (with confirmation)
+            // Delete - Delete selected item(s) (with confirmation)
             if (e.key === 'Delete') {
                 // Check if a file preview is currently open - if so, don't handle Delete
                 const filePreviewOpen = document.getElementById('file-preview-overlay');
@@ -188,13 +257,33 @@ export class RemoteExplorerManager {
                 }
                 
                 e.preventDefault();
-                const selectedFile = document.querySelector('.file-item.selected');
-                if (selectedFile && selectedFile.dataset.isParent !== 'true') {
-                    this.showDeleteConfirmation(
-                        selectedFile.dataset.path,
-                        selectedFile.dataset.name,
-                        selectedFile.dataset.isDir === 'true'
-                    );
+                const selected = Array.from(document.querySelectorAll('.file-item.selected'))
+                    .filter(el => el.dataset.isParent !== 'true');
+                if (selected.length === 0) return;
+
+                if (selected.length === 1) {
+                    const el = selected[0];
+                    this.showDeleteConfirmation(el.dataset.path, el.dataset.name, el.dataset.isDir === 'true');
+                } else {
+                    const count = selected.length;
+                    const confirmMsg = `Delete ${count} selected items?`;
+                    if (window.modal) {
+                        window.modal.show({
+                            title: 'Delete items',
+                            message: confirmMsg,
+                            icon: '🗑️',
+                            buttons: [
+                                { text: 'Cancel', style: 'secondary', action: 'cancel' },
+                                { text: 'Delete', style: 'danger', action: 'confirm' }
+                            ]
+                        }).then(async (result) => {
+                            if (result === 'confirm') {
+                                await this.deleteMultiple(selected);
+                            }
+                        });
+                    } else if (confirm(confirmMsg)) {
+                        this.deleteMultiple(selected);
+                    }
                 }
                 return;
             }
@@ -869,6 +958,8 @@ export class RemoteExplorerManager {
                 }
             });
         });
+
+        // Subscription moved to init() to ensure a single global listener
     }
 
     initializeLiveSearch() {
@@ -902,6 +993,67 @@ export class RemoteExplorerManager {
         });
         
         this.liveSearch.enable();
+    }
+
+    // Handle progress events from backend
+    handleUploadProgressEvent(data) {
+        if (!data || data.sessionId !== this.currentSessionID) return;
+        const phase = data.phase || '';
+
+        if (phase === 'batch-start') {
+            this.showUploadProgress({ fileIndex: 0, totalFiles: data.totalFiles || 0, percent: 0, fileName: '' });
+            return;
+        }
+
+        if (phase === 'start' || phase === 'progress') {
+            const percent = typeof data.percent === 'number' ? data.percent : 0;
+            this.showUploadProgress({
+                fileIndex: data.fileIndex || 1,
+                totalFiles: data.totalFiles || 1,
+                percent,
+                fileName: data.fileName || ''
+            });
+            return;
+        }
+
+        if (phase === 'complete') {
+            this.showUploadProgress({
+                fileIndex: data.fileIndex || 1,
+                totalFiles: data.totalFiles || 1,
+                percent: 100,
+                fileName: data.fileName || ''
+            });
+            return;
+        }
+
+        if (phase === 'batch-complete') {
+            this.hideUploadProgress();
+            // Refresh directory after uploads
+            if (this.currentRemotePath) {
+                this.refreshCurrentDirectory();
+            }
+            return;
+        }
+    }
+
+    showUploadProgress({ fileIndex = 0, totalFiles = 1, percent = 0, fileName = '' } = {}) {
+        const container = document.getElementById('upload-progress');
+        const text = document.getElementById('upload-progress-text');
+        const fill = document.getElementById('upload-progress-fill');
+        if (!container || !text || !fill) return;
+
+        container.style.display = '';
+        const safePercent = Math.max(0, Math.min(100, percent));
+        fill.style.width = `${safePercent}%`;
+        const namePart = fileName ? ` - ${fileName}` : '';
+        text.textContent = `File ${fileIndex}/${totalFiles}${namePart} • ${safePercent.toFixed(0)}%`;
+    }
+
+    hideUploadProgress() {
+        const container = document.getElementById('upload-progress');
+        if (container) {
+            container.style.display = 'none';
+        }
     }
 
     performFileSearch(query) {
@@ -1034,27 +1186,57 @@ export class RemoteExplorerManager {
         return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
     }
 
-    selectFileItem(fileItem) {
-        // Clear previous selections
-        document.querySelectorAll('.file-item.selected').forEach(item => {
-            item.classList.remove('selected');
-        });
+    selectFileItem(fileItem, event = null) {
+        const items = Array.from(document.querySelectorAll('.file-item'));
+        const index = items.indexOf(fileItem);
 
-        // Select current item
-        fileItem.classList.add('selected');
-
-        const fileName = fileItem.dataset.name;
         const isParent = fileItem.dataset.isParent === 'true';
-        
-        if (isParent) {
-            updateStatus('Selected: Parent directory');
+
+        // Determine selection mode
+        const shift = event?.shiftKey === true;
+        const ctrl = event?.ctrlKey === true || event?.metaKey === true;
+
+        if (shift && this.lastSelectedIndex !== null) {
+            // Range selection
+            const start = Math.min(this.lastSelectedIndex, index);
+            const end = Math.max(this.lastSelectedIndex, index);
+            items.forEach((it, i) => {
+                if (i >= start && i <= end && it.dataset.isParent !== 'true') {
+                    it.classList.add('selected');
+                } else if (!ctrl) {
+                    it.classList.remove('selected');
+                }
+            });
+        } else if (ctrl) {
+            // Toggle selection
+            if (fileItem.dataset.isParent !== 'true') {
+                fileItem.classList.toggle('selected');
+            }
+            // Keep others as-is
+            this.lastSelectedIndex = index;
         } else {
-            updateStatus(`Selected: ${fileName}`);
+            // Single selection
+            document.querySelectorAll('.file-item.selected').forEach(it => it.classList.remove('selected'));
+            if (fileItem.dataset.isParent !== 'true') {
+                fileItem.classList.add('selected');
+            }
+            this.lastSelectedIndex = index;
+        }
+
+        // Update status with selection count
+        const selected = Array.from(document.querySelectorAll('.file-item.selected'));
+        if (selected.length === 0) {
+            updateStatus('No selection');
+        } else if (selected.length === 1) {
+            const name = selected[0].dataset.name;
+            updateStatus(`Selected: ${name}`);
+        } else {
+            updateStatus(`Selected ${selected.length} items`);
         }
     }
 
     handleFileItemClick(fileItem, event) {
-        this.selectFileItem(fileItem);
+        this.selectFileItem(fileItem, event);
     }
 
     handleFileItemDoubleClick(fileItem) {
@@ -1251,8 +1433,17 @@ export class RemoteExplorerManager {
                 <div class="file-breadcrumbs">
                     <!-- Breadcrumbs will be rendered here -->
                 </div>
-                <div class="remote-files-container">
-                    <div class="remote-files-list">
+                <div class="upload-progress" id="upload-progress" style="display:none;">
+                    <div class="upload-progress-summary">
+                        <span class="upload-progress-title">Uploading…</span>
+                        <span class="upload-progress-text" id="upload-progress-text"></span>
+                    </div>
+                    <div class="upload-progress-bar">
+                        <div class="upload-progress-fill" id="upload-progress-fill" style="width:0%"></div>
+                    </div>
+                </div>
+                <div class="remote-files-container" style="--wails-drop-target: drop;">
+                    <div class="remote-files-list" style="--wails-drop-target: drop;">
                         <!-- File list will be rendered here -->
                     </div>
                 </div>
@@ -1262,6 +1453,20 @@ export class RemoteExplorerManager {
         
         // Set up toolbar event listeners after UI is rendered
         this.setupToolbarEventListeners();
+
+        // Visual drag-over feedback for DnD
+        const dropContainer = document.querySelector('.remote-files-container');
+        if (dropContainer) {
+            const enter = () => dropContainer.classList.add('drag-over');
+            const leave = () => dropContainer.classList.remove('drag-over');
+            dropContainer.addEventListener('dragenter', (e) => { e.preventDefault(); enter(); });
+            dropContainer.addEventListener('dragover', (e) => { e.preventDefault(); enter(); });
+            dropContainer.addEventListener('dragleave', (e) => { e.preventDefault(); leave(); });
+            dropContainer.addEventListener('drop', (e) => {
+                e.preventDefault();
+                leave();
+            });
+        }
     }
 
     async handleToolbarAction(action) {
@@ -1733,6 +1938,29 @@ export class RemoteExplorerManager {
         }
     }
 
+    async deleteMultiple(selectedElements) {
+        if (!this.currentSessionID) {
+            showNotification('No active session', 'error');
+            return;
+        }
+
+        try {
+            // Delete sequentially to keep backend simple and show progress in status
+            for (const el of selectedElements) {
+                const path = el.dataset.path;
+                const name = el.dataset.name;
+                const isDir = el.dataset.isDir === 'true';
+                await window.go.main.App.DeleteRemotePath(this.currentSessionID, path);
+                console.log('🗑️ Deleted:', path);
+            }
+            showNotification(`Deleted ${selectedElements.length} item(s)`, 'success');
+            await this.refreshCurrentDirectory();
+        } catch (error) {
+            console.error('Failed to delete multiple:', error);
+            showNotification(`Failed to delete items: ${error.message}`, 'error');
+        }
+    }
+
     async downloadFile(filePath, fileName, isDir) {
         if (!this.currentSessionID) {
             showNotification('No active session', 'error');
@@ -1789,11 +2017,21 @@ export class RemoteExplorerManager {
                     return; // User cancelled
                 }
                 
-                showNotification(`Uploading ${localPaths.length} file(s)...`, 'info');
+                // Show progress header immediately
+                this.showUploadProgress({
+                    fileIndex: 0,
+                    totalFiles: localPaths.length,
+                    percent: 0,
+                    fileName: ''
+                });
                 
-                // Call backend upload method
+                // Call backend upload method (progress arrives via events)
                 await window.go.main.App.UploadRemoteFiles(this.currentSessionID, localPaths, targetPath);
                 
+                // Fallback: ensure the progress bar is cleared when call finishes
+                this.hideUploadProgress();
+                
+                // Keep success toast
                 showNotification(`${localPaths.length} file(s) uploaded successfully`, 'success');
                 
                 // Refresh the current directory to show uploaded files
@@ -1843,8 +2081,12 @@ export class RemoteExplorerManager {
                 // Calculate remote path
                 const remotePath = `${this.currentRemotePath}/${file.name}`;
                 
-                // Upload via backend API that accepts base64 content
+                // Begin progress for single file
+                this.showUploadProgress({ fileIndex: 1, totalFiles: 1, percent: 0, fileName: file.name });
+                // Upload via backend API that accepts base64 content (progress handled by events)
                 await window.go.main.App.UploadFileContent(this.currentSessionID, remotePath, base64Content);
+                // Fallback clear
+                this.hideUploadProgress();
             }
             
             showNotification(`${files.length} file(s) uploaded successfully`, 'success');

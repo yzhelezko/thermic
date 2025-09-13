@@ -7,8 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/pkg/sftp"
+	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // joinRemotePath properly joins remote paths using forward slashes
@@ -38,6 +40,61 @@ func (w *SFTPClientWrapper) Close() error {
 }
 
 // SFTP File Explorer Methods
+
+// progressReader wraps an io.Reader and periodically emits upload progress events
+type progressReader struct {
+	reader      io.Reader
+	app         *App
+	sessionID   string
+	fileName    string
+	fileIndex   int
+	totalFiles  int
+	totalBytes  int64
+	readBytes   int64
+	lastEmitted time.Time
+}
+
+func (pr *progressReader) Read(p []byte) (int, error) {
+	n, err := pr.reader.Read(p)
+	if n > 0 {
+		pr.readBytes += int64(n)
+		now := time.Now()
+		if pr.readBytes == pr.totalBytes || now.Sub(pr.lastEmitted) >= 200*time.Millisecond {
+			percent := float64(0)
+			if pr.totalBytes > 0 {
+				percent = float64(pr.readBytes) * 100.0 / float64(pr.totalBytes)
+			}
+			if pr.app != nil && pr.app.ctx != nil {
+				wailsRuntime.EventsEmit(pr.app.ctx, "sftp-upload-progress", map[string]interface{}{
+					"sessionId":   pr.sessionID,
+					"phase":       "progress",
+					"fileName":    pr.fileName,
+					"fileIndex":   pr.fileIndex,
+					"totalFiles":  pr.totalFiles,
+					"transferred": pr.readBytes,
+					"total":       pr.totalBytes,
+					"percent":     percent,
+				})
+			}
+			pr.lastEmitted = now
+		}
+	}
+	return n, err
+}
+
+func (a *App) emitUploadEvent(sessionID string, phase string, payload map[string]interface{}) {
+	if a == nil || a.ctx == nil {
+		return
+	}
+	data := map[string]interface{}{
+		"sessionId": sessionID,
+		"phase":     phase,
+	}
+	for k, v := range payload {
+		data[k] = v
+	}
+	wailsRuntime.EventsEmit(a.ctx, "sftp-upload-progress", data)
+}
 
 // InitializeFileExplorerSession initializes an SFTP client for the given SSH session
 func (a *App) InitializeFileExplorerSession(sessionID string) error {
@@ -354,7 +411,14 @@ func (a *App) UploadRemoteFiles(sessionID string, localFilePaths []string, remot
 		return fmt.Errorf("SFTP client not initialized for session %s", sessionID)
 	}
 
-	for _, localFilePath := range localFilePaths {
+	totalFiles := len(localFilePaths)
+	// Emit batch start
+	a.emitUploadEvent(sessionID, "batch-start", map[string]interface{}{
+		"totalFiles": totalFiles,
+		"targetPath": remotePath,
+	})
+
+	for idx, localFilePath := range localFilePaths {
 		// Open local file
 		localFile, err := os.Open(localFilePath)
 		if err != nil {
@@ -366,6 +430,20 @@ func (a *App) UploadRemoteFiles(sessionID string, localFilePaths []string, remot
 		// Use proper remote path joining
 		remoteFilePath := joinRemotePath(remotePath, fileName)
 
+		// Stat to get size
+		var totalBytes int64
+		if info, err := localFile.Stat(); err == nil {
+			totalBytes = info.Size()
+		}
+
+		// Emit file start
+		a.emitUploadEvent(sessionID, "start", map[string]interface{}{
+			"fileName":   fileName,
+			"fileIndex":  idx + 1,
+			"totalFiles": totalFiles,
+			"total":      totalBytes,
+		})
+
 		// Create remote file
 		remoteFile, err := sftpClient.Create(remoteFilePath)
 		if err != nil {
@@ -373,8 +451,17 @@ func (a *App) UploadRemoteFiles(sessionID string, localFilePaths []string, remot
 			return fmt.Errorf("failed to create remote file %s: %w", remoteFilePath, err)
 		}
 
-		// Copy data
-		_, err = io.Copy(remoteFile, localFile)
+		// Copy data with progress
+		pr := &progressReader{
+			reader:     localFile,
+			app:        a,
+			sessionID:  sessionID,
+			fileName:   fileName,
+			fileIndex:  idx + 1,
+			totalFiles: totalFiles,
+			totalBytes: totalBytes,
+		}
+		_, err = io.Copy(remoteFile, pr)
 
 		// Close files
 		localFile.Close()
@@ -383,7 +470,23 @@ func (a *App) UploadRemoteFiles(sessionID string, localFilePaths []string, remot
 		if err != nil {
 			return fmt.Errorf("failed to copy file %s: %w", localFilePath, err)
 		}
+
+		// Emit file complete
+		a.emitUploadEvent(sessionID, "complete", map[string]interface{}{
+			"fileName":    fileName,
+			"fileIndex":   idx + 1,
+			"totalFiles":  totalFiles,
+			"total":       totalBytes,
+			"transferred": totalBytes,
+			"percent":     100.0,
+		})
 	}
+
+	// Emit batch complete
+	a.emitUploadEvent(sessionID, "batch-complete", map[string]interface{}{
+		"totalFiles": len(localFilePaths),
+		"targetPath": remotePath,
+	})
 
 	return nil
 }
@@ -604,11 +707,54 @@ func (a *App) UploadFileContent(sessionID string, remotePath string, base64Conte
 	}
 	defer file.Close()
 
-	// Write the decoded content
-	_, err = file.Write(content)
-	if err != nil {
-		return fmt.Errorf("failed to write file content: %w", err)
+	// Emit start for single file upload
+	fileName := filepath.Base(remotePath)
+	totalBytes := int64(len(content))
+	a.emitUploadEvent(sessionID, "start", map[string]interface{}{
+		"fileName":   fileName,
+		"fileIndex":  1,
+		"totalFiles": 1,
+		"total":      totalBytes,
+	})
+
+	// Write content in chunks to emit progress
+	const chunkSize = 64 * 1024
+	var written int64
+	for written < totalBytes {
+		end := written + chunkSize
+		if end > totalBytes {
+			end = totalBytes
+		}
+		n, err := file.Write(content[written:end])
+		if n > 0 {
+			written += int64(n)
+			percent := float64(0)
+			if totalBytes > 0 {
+				percent = float64(written) * 100.0 / float64(totalBytes)
+			}
+			a.emitUploadEvent(sessionID, "progress", map[string]interface{}{
+				"fileName":    fileName,
+				"fileIndex":   1,
+				"totalFiles":  1,
+				"transferred": written,
+				"total":       totalBytes,
+				"percent":     percent,
+			})
+		}
+		if err != nil {
+			return fmt.Errorf("failed to write file content: %w", err)
+		}
 	}
+
+	// Emit complete
+	a.emitUploadEvent(sessionID, "complete", map[string]interface{}{
+		"fileName":    fileName,
+		"fileIndex":   1,
+		"totalFiles":  1,
+		"transferred": totalBytes,
+		"total":       totalBytes,
+		"percent":     100.0,
+	})
 
 	return nil
 }

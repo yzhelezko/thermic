@@ -71,8 +71,8 @@ export class FileCommandRegistry extends CommandRegistry {
             'file-delete',
             'Delete',
             'delete',
-            (context) => this.handleFileDelete(context),
-            (context) => context.isFile || context.isDirectory
+            (context) => this.handleDelete(context),
+            (context) => (context.isFile || context.isDirectory)
         ));
 
         this.registerSeparator();
@@ -172,13 +172,47 @@ export class FileCommandRegistry extends CommandRegistry {
         await this.remoteExplorerManager.copyPathToClipboard(currentFileData.path);
     }
 
-    async handleFileDelete(context) {
-        const currentFileData = this.contextMenuManager.currentFileData;
-        if (!currentFileData || !this.remoteExplorerManager) return;
+    async handleDelete(context) {
+        if (!this.remoteExplorerManager) return;
 
+        // If multiple selected, prefer bulk delete
+        const selected = Array.isArray(context.selected) ? context.selected.filter(i => i && i.path) : [];
+        if (selected.length > 1) {
+            const count = selected.length;
+            const msg = `Delete ${count} selected items?`;
+            if (window.modal) {
+                window.modal.show({
+                    title: 'Delete items',
+                    message: msg,
+                    icon: '🗑️',
+                    buttons: [
+                        { text: 'Cancel', style: 'secondary', action: 'cancel' },
+                        { text: 'Delete', style: 'danger', action: 'confirm' }
+                    ]
+                }).then(async (result) => {
+                    if (result === 'confirm') {
+                        // Map to DOM elements by path
+                        const byPath = new Map();
+                        document.querySelectorAll('.file-item').forEach(el => byPath.set(el.dataset.path, el));
+                        const selectedEls = selected.map(s => byPath.get(s.path)).filter(Boolean);
+                        await this.remoteExplorerManager.deleteMultiple(selectedEls);
+                    }
+                });
+            } else if (confirm(msg)) {
+                const byPath = new Map();
+                document.querySelectorAll('.file-item').forEach(el => byPath.set(el.dataset.path, el));
+                const selectedEls = selected.map(s => byPath.get(s.path)).filter(Boolean);
+                await this.remoteExplorerManager.deleteMultiple(selectedEls);
+            }
+            return;
+        }
+
+        // Fallback to single item
+        const currentFileData = this.contextMenuManager.currentFileData;
+        if (!currentFileData) return;
         this.remoteExplorerManager.showDeleteConfirmation(
-            currentFileData.path, 
-            currentFileData.name, 
+            currentFileData.path,
+            currentFileData.name,
             currentFileData.isDir || currentFileData.type === 'directory'
         );
     }
