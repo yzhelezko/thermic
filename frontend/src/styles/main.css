@@ -21,6 +21,7 @@
 @import 'version-manager.css'; 
 @import 'remote-explorer.css';
 @import 'ai-float-window.css';
+@import 'graph-modal.css';
 @import 'icons.css';
 
 /* AI Model Suggestions */

@@ -127,13 +127,13 @@ export function createStatusBarTemplate() {
             <div class="status-monitoring" id="status-monitoring">
                 <span id="platform-info">Loading...</span>
                 <span class="separator">•</span>
-                <span data-stat="cpu">CPU: 0%</span>
+                <span data-stat="system" data-metrics="cpu,memory,load" title="System Resources">CPU: 0% RAM: 0Mb L: 0.0</span>
                 <span class="separator">•</span>
-                <span data-stat="memory">RAM: 0%</span>
+                <span data-stat="disk-usage">DISK: 0%</span>
+                <span class="separator">•</span>
+                <span data-stat="disk-io">↓0 ↑0</span>
                 <span class="separator">•</span>
                 <span data-stat="network">NET: ↓0 ↑0</span>
-                <span class="separator" data-for="load">•</span>
-                <span data-stat="load" style="display: none;">LOAD: 0.0</span>
                 <span class="separator" data-for="uptime">•</span>
                 <span data-stat="uptime" style="display: none;">UP: N/A</span>
             </div>

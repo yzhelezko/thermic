@@ -5,9 +5,11 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/load"
 	"github.com/shirou/gopsutil/v3/mem"
@@ -28,6 +30,9 @@ func (a *App) GetSystemStats() map[string]interface{} {
 		"memory_used":  "0 MB",
 		"network_rx":   "0 MB/s",
 		"network_tx":   "0 MB/s",
+		"disk_usage":   "0%",
+		"disk_read":    "0 MB/s",
+		"disk_write":   "0 MB/s",
 	}
 
 	// Get hostname
@@ -63,6 +68,16 @@ func (a *App) GetSystemStats() map[string]interface{} {
 	rxMB, txMB := a.getNetworkStats()
 	stats["network_rx"] = fmt.Sprintf("%.1f MB/s", rxMB)
 	stats["network_tx"] = fmt.Sprintf("%.1f MB/s", txMB)
+
+	// Get disk usage
+	if diskUsage, err := a.getDiskUsage(); err == nil {
+		stats["disk_usage"] = fmt.Sprintf("%.1f%%", diskUsage)
+	}
+
+	// Get disk I/O
+	readMB, writeMB := a.getDiskIO("local")
+	stats["disk_read"] = fmt.Sprintf("%.1f MB/s", readMB)
+	stats["disk_write"] = fmt.Sprintf("%.1f MB/s", writeMB)
 
 	return stats
 }
@@ -178,6 +193,97 @@ func (a *App) formatDuration(d time.Duration) string {
 	}
 }
 
+// getDiskUsage returns disk usage percentage for the main disk
+func (a *App) getDiskUsage() (float64, error) {
+	// Get the main disk path based on OS
+	var path string
+	switch runtime.GOOS {
+	case "windows":
+		path = "C:\\"
+	default:
+		path = "/"
+	}
+
+	usage, err := disk.Usage(path)
+	if err != nil {
+		return 0, err
+	}
+
+	return usage.UsedPercent, nil
+}
+
+// getDiskIO returns disk read/write speeds in MB/s
+func (a *App) getDiskIO(sessionID string) (float64, float64) {
+	// Get disk I/O counters
+	ioCounters, err := disk.IOCounters()
+	if err != nil {
+		return 0.0, 0.0
+	}
+
+	// Sum up all physical disks (skip partitions)
+	var totalReadBytes, totalWriteBytes uint64
+	for name, counter := range ioCounters {
+		// Filter out partition-level stats to avoid double-counting
+		// On Linux: skip things like sda1, sda2, keep only sda
+		// On Windows: keep all (simpler naming)
+		// On macOS: keep disk0, disk1 (physical disks)
+		if runtime.GOOS == "linux" && len(name) > 3 {
+			// Skip partition numbers (e.g., sda1, nvme0n1p1)
+			lastChar := name[len(name)-1]
+			if lastChar >= '0' && lastChar <= '9' {
+				continue
+			}
+		}
+
+		totalReadBytes += counter.ReadBytes
+		totalWriteBytes += counter.WriteBytes
+	}
+
+	// Get or create previous state for rate calculation
+	a.monitoring.mutex.Lock()
+	defer a.monitoring.mutex.Unlock()
+
+	prevState, exists := a.monitoring.diskIOTracking[sessionID]
+	currentTime := time.Now().UnixMilli()
+
+	if !exists || prevState == nil {
+		// First reading, just store state
+		a.monitoring.diskIOTracking[sessionID] = &DiskIOState{
+			ReadBytes:  totalReadBytes,
+			WriteBytes: totalWriteBytes,
+			Timestamp:  currentTime,
+		}
+		return 0.0, 0.0
+	}
+
+	// Calculate time difference
+	timeDiff := float64(currentTime-prevState.Timestamp) / 1000.0 // Convert to seconds
+	if timeDiff <= 0 {
+		return 0.0, 0.0
+	}
+
+	// Calculate rates
+	readRate := float64(totalReadBytes-prevState.ReadBytes) / timeDiff / 1024 / 1024    // MB/s
+	writeRate := float64(totalWriteBytes-prevState.WriteBytes) / timeDiff / 1024 / 1024 // MB/s
+
+	// Update state for next calculation
+	a.monitoring.diskIOTracking[sessionID] = &DiskIOState{
+		ReadBytes:  totalReadBytes,
+		WriteBytes: totalWriteBytes,
+		Timestamp:  currentTime,
+	}
+
+	// Ensure non-negative rates (in case of counter reset)
+	if readRate < 0 {
+		readRate = 0
+	}
+	if writeRate < 0 {
+		writeRate = 0
+	}
+
+	return readRate, writeRate
+}
+
 // GetRemoteSystemStats executes system commands on remote SSH session to get stats
 func (a *App) GetRemoteSystemStats(sessionID string) map[string]interface{} {
 	stats := map[string]interface{}{
@@ -192,6 +298,9 @@ func (a *App) GetRemoteSystemStats(sessionID string) map[string]interface{} {
 		"kernel":       "unknown",
 		"network_rx":   "unknown",
 		"network_tx":   "unknown",
+		"disk_usage":   "unknown",
+		"disk_read":    "unknown",
+		"disk_write":   "unknown",
 	}
 
 	// Check if we have an active SSH session
@@ -214,19 +323,143 @@ func (a *App) GetRemoteSystemStats(sessionID string) map[string]interface{} {
 	}
 
 	// Execute commands using the monitoring session
-	// These run in parallel to avoid blocking
+	// Run commands in parallel to avoid timeout issues
+	var wg sync.WaitGroup
+	statsMutex := &sync.Mutex{} // Protect concurrent writes to stats map
 
-	// Basic system info
-	a.executeRemoteStatsCommand(sshSession, "hostname", &stats, "hostname")
-	a.executeRemoteStatsCommand(sshSession, "uname -sr", &stats, "kernel")
-	a.executeRemoteStatsCommand(sshSession, "uname -m", &stats, "arch")
+	// Helper to safely write to stats map
+	safeSetStat := func(key string, value interface{}) {
+		statsMutex.Lock()
+		defer statsMutex.Unlock()
+		stats[key] = value
+	}
 
-	// System stats with more complex parsing
-	a.executeRemoteUptimeCommand(sshSession, &stats)
-	a.executeRemoteMemoryCommand(sshSession, &stats)
-	a.executeRemoteCPUCommand(sshSession, &stats)
-	a.executeRemoteLoadCommand(sshSession, &stats)
-	a.executeRemoteNetworkCommand(sshSession, &stats)
+	// Create thread-safe stats pointer wrapper
+	statsWrapper := &struct {
+		data  *map[string]interface{}
+		mutex *sync.Mutex
+		set   func(string, interface{})
+	}{
+		data:  &stats,
+		mutex: statsMutex,
+		set:   safeSetStat,
+	}
+
+	// Basic system info - run in parallel
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		// Execute and store result safely
+		if cached, exists := a.GetCachedMonitoringResult(sshSession, "hostname"); exists {
+			statsWrapper.set("hostname", strings.TrimSpace(cached))
+		} else if output, err := a.ExecuteMonitoringCommand(sshSession, "hostname"); err == nil {
+			result := strings.TrimSpace(output)
+			if result != "" {
+				statsWrapper.set("hostname", result)
+				a.CacheMonitoringResult(sshSession, "hostname", result)
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		if cached, exists := a.GetCachedMonitoringResult(sshSession, "uname -sr"); exists {
+			statsWrapper.set("kernel", strings.TrimSpace(cached))
+		} else if output, err := a.ExecuteMonitoringCommand(sshSession, "uname -sr"); err == nil {
+			result := strings.TrimSpace(output)
+			if result != "" {
+				statsWrapper.set("kernel", result)
+				a.CacheMonitoringResult(sshSession, "uname -sr", result)
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		if cached, exists := a.GetCachedMonitoringResult(sshSession, "uname -m"); exists {
+			statsWrapper.set("arch", strings.TrimSpace(cached))
+		} else if output, err := a.ExecuteMonitoringCommand(sshSession, "uname -m"); err == nil {
+			result := strings.TrimSpace(output)
+			if result != "" {
+				statsWrapper.set("arch", result)
+				a.CacheMonitoringResult(sshSession, "uname -m", result)
+			}
+		}
+	}()
+
+	// System stats with more complex parsing - run in parallel
+	// These functions write to the map, so we need to pass mutex-protected access
+	wg.Add(7)
+	go func() {
+		defer wg.Done()
+		localStats := make(map[string]interface{})
+		a.executeRemoteUptimeCommand(sshSession, &localStats)
+		for k, v := range localStats {
+			statsWrapper.set(k, v)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		localStats := make(map[string]interface{})
+		a.executeRemoteMemoryCommand(sshSession, &localStats)
+		for k, v := range localStats {
+			statsWrapper.set(k, v)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		localStats := make(map[string]interface{})
+		a.executeRemoteCPUCommand(sshSession, &localStats)
+		for k, v := range localStats {
+			statsWrapper.set(k, v)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		localStats := make(map[string]interface{})
+		a.executeRemoteLoadCommand(sshSession, &localStats)
+		for k, v := range localStats {
+			statsWrapper.set(k, v)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		localStats := make(map[string]interface{})
+		a.executeRemoteNetworkCommand(sshSession, &localStats)
+		for k, v := range localStats {
+			statsWrapper.set(k, v)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		localStats := make(map[string]interface{})
+		a.executeRemoteDiskUsageCommand(sshSession, &localStats)
+		for k, v := range localStats {
+			statsWrapper.set(k, v)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		localStats := make(map[string]interface{})
+		a.executeRemoteDiskIOCommand(sshSession, sessionID, &localStats)
+		for k, v := range localStats {
+			statsWrapper.set(k, v)
+		}
+	}()
+
+	// Wait for all commands to complete with a timeout
+	doneChan := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(doneChan)
+	}()
+
+	select {
+	case <-doneChan:
+		// All commands completed successfully
+		fmt.Printf("All remote stats collected successfully for session %s\n", sessionID)
+	case <-time.After(1200 * time.Millisecond):
+		// Timeout after 1.2 seconds (leave 300ms buffer for GetActiveTabInfo)
+		fmt.Printf("Warning: Some remote commands timed out for session %s\n", sessionID)
+	}
 
 	return stats
 }
@@ -258,14 +491,15 @@ func (a *App) executeRemoteStatsCommand(sshSession *SSHSession, command string, 
 func (a *App) executeRemoteUptimeCommand(sshSession *SSHSession, stats *map[string]interface{}) {
 	// Try uptime -p first (prettier format) - this gives "up X days, Y hours, Z minutes"
 	output, err := a.ExecuteMonitoringCommand(sshSession, "uptime -p 2>/dev/null")
+	fmt.Printf("Remote uptime command output: %q, err: %v\n", output, err)
+
 	if err == nil && strings.TrimSpace(output) != "" {
 		uptime := strings.TrimSpace(output)
-		if strings.HasPrefix(uptime, "up ") {
-			uptime = strings.TrimPrefix(uptime, "up ")
-		}
+		uptime = strings.TrimPrefix(uptime, "up ")
 		// Clean up the uptime format
 		uptime = strings.TrimSpace(uptime)
 		if uptime != "" {
+			fmt.Printf("Setting remote uptime to: %q\n", uptime)
 			(*stats)["uptime"] = uptime
 		}
 	}
@@ -390,7 +624,18 @@ func (a *App) executeRemoteLoadCommand(sshSession *SSHSession, stats *map[string
 // executeRemoteNetworkCommand gets network interface statistics
 func (a *App) executeRemoteNetworkCommand(sshSession *SSHSession, stats *map[string]interface{}) {
 	// Try to get network stats from /proc/net/dev (Linux)
-	output, err := a.ExecuteMonitoringCommand(sshSession, "cat /proc/net/dev 2>/dev/null | grep -E 'eth|ens|enp|wlan|wlp' | head -1")
+	// Prioritize real physical/virtual interfaces, exclude management/virtual/loopback
+	// Priority order: eth*, ens*, enp*, eno* (physical), then others
+	// Exclude: lo, docker*, veth*, dummy*, tunl*, sit*, bond* (virtual/management)
+	output, err := a.ExecuteMonitoringCommand(sshSession, "cat /proc/net/dev 2>/dev/null | grep -E '(eth|ens|enp|eno)[0-9]:' | head -1")
+
+	// If no standard interface found, try broader search but still exclude virtual
+	if err != nil || strings.TrimSpace(output) == "" {
+		output, err = a.ExecuteMonitoringCommand(sshSession, "cat /proc/net/dev 2>/dev/null | grep -vE 'lo:|docker|veth|Inter|face|dummy|tunl|sit|bond' | grep ':' | grep -E '[0-9]' | head -1")
+	}
+
+	fmt.Printf("Network command output: %q\n", output)
+
 	if err == nil && strings.TrimSpace(output) != "" {
 		// Parse network interface line: "  eth0: 12345678 1234 0 0 0 0 0 0 87654321 4321 0 0 0 0 0 0"
 		line := strings.TrimSpace(output)
@@ -398,11 +643,15 @@ func (a *App) executeRemoteNetworkCommand(sshSession *SSHSession, stats *map[str
 			parts := strings.Split(line, ":")
 			if len(parts) == 2 {
 				fields := strings.Fields(parts[1])
+				fmt.Printf("Network fields count: %d, fields: %v\n", len(fields), fields)
+
 				if len(fields) >= 9 {
 					// fields[0] = RX bytes, fields[8] = TX bytes
 					var rxBytes, txBytes int64
 					fmt.Sscanf(fields[0], "%d", &rxBytes)
 					fmt.Sscanf(fields[8], "%d", &txBytes)
+
+					fmt.Printf("Parsed network bytes - RX: %d, TX: %d\n", rxBytes, txBytes)
 
 					// Check cache for previous values to calculate rate
 					cacheKey := "network_bytes"
@@ -418,9 +667,14 @@ func (a *App) executeRemoteNetworkCommand(sshSession *SSHSession, stats *map[str
 							currentTime := time.Now().Unix()
 							timeDiff := currentTime - prevTimestamp
 
+							fmt.Printf("Network rate calculation - timeDiff: %d, prev RX: %d, curr RX: %d, prev TX: %d, curr TX: %d\n",
+								timeDiff, prevRxBytes, rxBytes, prevTxBytes, txBytes)
+
 							if timeDiff > 0 {
 								rxRate := float64(rxBytes-prevRxBytes) / float64(timeDiff) / 1024 / 1024 // MB/s
 								txRate := float64(txBytes-prevTxBytes) / float64(timeDiff) / 1024 / 1024 // MB/s
+
+								fmt.Printf("Calculated rates - RX: %.3f MB/s, TX: %.3f MB/s\n", rxRate, txRate)
 
 								if rxRate >= 0 && txRate >= 0 { // Ensure positive rates
 									(*stats)["network_rx"] = fmt.Sprintf("%.1f MB/s", rxRate)
@@ -428,12 +682,15 @@ func (a *App) executeRemoteNetworkCommand(sshSession *SSHSession, stats *map[str
 								}
 							}
 						}
+					} else {
+						fmt.Printf("No cached network data found - this is the first reading\n")
 					}
 
 					// Cache current values for next calculation
 					currentTime := time.Now().Unix()
 					cacheValue := fmt.Sprintf("%d,%d,%d", rxBytes, txBytes, currentTime)
 					a.CacheMonitoringResult(sshSession, cacheKey, cacheValue)
+					fmt.Printf("Cached network values for next calculation\n")
 				}
 			}
 		}
@@ -447,6 +704,82 @@ func (a *App) executeRemoteNetworkCommand(sshSession *SSHSession, stats *map[str
 		// For now, just indicate network interface is available
 		(*stats)["network_rx"] = "0.0 MB/s"
 		(*stats)["network_tx"] = "0.0 MB/s"
+	}
+}
+
+// executeRemoteDiskUsageCommand gets disk usage percentage
+func (a *App) executeRemoteDiskUsageCommand(sshSession *SSHSession, stats *map[string]interface{}) {
+	// Use df to get disk usage for the root filesystem
+	output, err := a.ExecuteMonitoringCommand(sshSession, "df -h / | tail -1")
+	if err == nil && strings.TrimSpace(output) != "" {
+		// Parse df output: "Filesystem  Size  Used  Avail Use% Mounted on"
+		// Example: "/dev/sda1      50G   25G    23G  53% /"
+		fields := strings.Fields(output)
+		if len(fields) >= 5 {
+			// The Use% field is typically at index 4
+			usageStr := fields[4]
+			// Remove the % sign
+			usageStr = strings.TrimSuffix(usageStr, "%")
+
+			var usage float64
+			if n, _ := fmt.Sscanf(usageStr, "%f", &usage); n == 1 {
+				(*stats)["disk_usage"] = fmt.Sprintf("%.1f%%", usage)
+				return
+			}
+		}
+	}
+}
+
+// executeRemoteDiskIOCommand gets disk I/O statistics
+func (a *App) executeRemoteDiskIOCommand(sshSession *SSHSession, sessionID string, stats *map[string]interface{}) {
+	// Try to get disk I/O from /proc/diskstats (Linux)
+	// Format: major minor name reads ... sectors_read ... writes ... sectors_written ...
+	output, err := a.ExecuteMonitoringCommand(sshSession, "cat /proc/diskstats 2>/dev/null | grep -E '(sda|nvme0n1|vda|xvda|hda)\\s' | head -1")
+	if err == nil && strings.TrimSpace(output) != "" {
+		fields := strings.Fields(output)
+		if len(fields) >= 14 {
+			// Field 5 = sectors read, Field 9 = sectors written
+			// Sectors are typically 512 bytes
+			var sectorsRead, sectorsWritten uint64
+			fmt.Sscanf(fields[5], "%d", &sectorsRead)
+			fmt.Sscanf(fields[9], "%d", &sectorsWritten)
+
+			// Convert sectors to bytes (512 bytes per sector)
+			readBytes := sectorsRead * 512
+			writeBytes := sectorsWritten * 512
+
+			// Check cache for previous values to calculate rate
+			cacheKey := "disk_io_bytes"
+			if cached, exists := a.GetCachedMonitoringResult(sshSession, cacheKey); exists {
+				// Parse cached values: "readBytes,writeBytes,timestamp"
+				cacheParts := strings.Split(cached, ",")
+				if len(cacheParts) == 3 {
+					var prevReadBytes, prevWriteBytes uint64
+					var prevTimestamp int64
+					fmt.Sscanf(cacheParts[0], "%d", &prevReadBytes)
+					fmt.Sscanf(cacheParts[1], "%d", &prevWriteBytes)
+					fmt.Sscanf(cacheParts[2], "%d", &prevTimestamp)
+
+					currentTime := time.Now().Unix()
+					timeDiff := currentTime - prevTimestamp
+
+					if timeDiff > 0 {
+						readRate := float64(readBytes-prevReadBytes) / float64(timeDiff) / 1024 / 1024    // MB/s
+						writeRate := float64(writeBytes-prevWriteBytes) / float64(timeDiff) / 1024 / 1024 // MB/s
+
+						if readRate >= 0 && writeRate >= 0 { // Ensure positive rates
+							(*stats)["disk_read"] = fmt.Sprintf("%.1f MB/s", readRate)
+							(*stats)["disk_write"] = fmt.Sprintf("%.1f MB/s", writeRate)
+						}
+					}
+				}
+			}
+
+			// Cache current values for next calculation
+			currentTime := time.Now().Unix()
+			cacheValue := fmt.Sprintf("%d,%d,%d", readBytes, writeBytes, currentTime)
+			a.CacheMonitoringResult(sshSession, cacheKey, cacheValue)
+		}
 	}
 }
 
@@ -476,16 +809,18 @@ func (a *App) GetActiveTabInfo() map[string]interface{} {
 
 		// Get tab info quickly (without holding mutex for long)
 		a.mutex.RLock()
+		sessionID := activeTab.SessionID
+		sshConfig := activeTab.SSHConfig
+		isSSH := activeTab.ConnectionType == "ssh"
+
 		info := map[string]interface{}{
 			"hasActiveTab":   true,
 			"tabId":          activeTab.ID,
+			"sessionId":      sessionID, // Add session ID for metric tracking
 			"title":          activeTab.Title,
 			"connectionType": activeTab.ConnectionType,
 			"status":         activeTab.Status,
 		}
-		sessionID := activeTab.SessionID
-		sshConfig := activeTab.SSHConfig
-		isSSH := activeTab.ConnectionType == "ssh"
 		a.mutex.RUnlock()
 
 		// Add system stats based on connection type and status (outside of mutex)
@@ -504,6 +839,9 @@ func (a *App) GetActiveTabInfo() map[string]interface{} {
 				// Get remote system stats (this might be slow, so do it outside mutex)
 				remoteStats := a.GetRemoteSystemStats(sessionID)
 				info["systemStats"] = remoteStats
+
+				// Record metrics to history
+				a.RecordStats(sessionID, remoteStats)
 			} else {
 				// For connecting/failed/disconnected SSH, return empty stats
 				info["systemStats"] = map[string]interface{}{
@@ -529,6 +867,9 @@ func (a *App) GetActiveTabInfo() map[string]interface{} {
 				// Get local system stats (this is fast)
 				localStats := a.GetSystemStats()
 				info["systemStats"] = localStats
+
+				// Record metrics to history
+				a.RecordStats(sessionID, localStats)
 			} else {
 				// For connecting local shells, return empty stats
 				info["systemStats"] = map[string]interface{}{
