@@ -193,6 +193,44 @@ type SSHManager struct {
 	resourceManager  *ResourceManager
 }
 
+// MonitoringManager handles system metrics history and update rates
+type MonitoringManager struct {
+	sessionHistories map[string]*SessionMetrics // Per-session metric histories
+	updateRates      map[string]int             // Per-session update rates (milliseconds)
+	diskIOTracking   map[string]*DiskIOState    // Track previous disk I/O for rate calculation
+	mutex            sync.RWMutex
+	resourceManager  *ResourceManager
+}
+
+// SessionMetrics stores metric history for a session
+type SessionMetrics struct {
+	CPU       *MetricHistory
+	Memory    *MetricHistory
+	Load      *MetricHistory
+	DiskUsage *MetricHistory
+	DiskRead  *MetricHistory
+	DiskWrite *MetricHistory
+	NetworkRX *MetricHistory
+	NetworkTX *MetricHistory
+	mutex     sync.RWMutex
+}
+
+// MetricHistory stores time-series data for a single metric
+type MetricHistory struct {
+	Timestamps []int64   // Unix timestamps in milliseconds
+	Values     []float64 // Metric values
+	MaxSize    int       // Maximum number of data points to keep
+	nextIndex  int       // Next position to write (circular buffer)
+	isFull     bool      // True once we've filled the buffer once
+}
+
+// DiskIOState tracks disk I/O for rate calculation
+type DiskIOState struct {
+	ReadBytes  uint64
+	WriteBytes uint64
+	Timestamp  int64 // Unix timestamp in milliseconds
+}
+
 // ConfigManager handles application configuration
 type ConfigManager struct {
 	config          *AppConfig
@@ -211,6 +249,7 @@ type App struct {
 	config          *ConfigManager
 	messages        *MessageManager
 	ai              *AIManager
+	monitoring      *MonitoringManager
 	resourceManager *ResourceManager
 	mutex           sync.RWMutex
 }
@@ -555,12 +594,23 @@ func NewApp() *App {
 	}
 	mainRM.Register(config.resourceManager)
 
+	// Create monitoring manager with resource management
+	monitoringRM := NewResourceManager()
+	monitoring := &MonitoringManager{
+		sessionHistories: make(map[string]*SessionMetrics),
+		updateRates:      make(map[string]int),
+		diskIOTracking:   make(map[string]*DiskIOState),
+		resourceManager:  monitoringRM,
+	}
+	mainRM.Register(monitoring.resourceManager)
+
 	// Create the app
 	app := &App{
 		terminal:        terminal,
 		profiles:        profiles,
 		ssh:             ssh,
 		config:          config,
+		monitoring:      monitoring,
 		resourceManager: mainRM,
 	}
 
@@ -755,4 +805,17 @@ func (rm *ResourceManager) Cleanup() error {
 // Close implements the Cleanup interface for ResourceManager
 func (rm *ResourceManager) Close() error {
 	return rm.Cleanup()
+}
+
+// Close implements the Cleanup interface for MonitoringManager
+func (mm *MonitoringManager) Close() error {
+	mm.mutex.Lock()
+	defer mm.mutex.Unlock()
+
+	// Clear all histories
+	mm.sessionHistories = make(map[string]*SessionMetrics)
+	mm.updateRates = make(map[string]int)
+	mm.diskIOTracking = make(map[string]*DiskIOState)
+
+	return nil
 }

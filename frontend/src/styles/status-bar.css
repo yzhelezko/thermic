@@ -72,18 +72,17 @@
     color: #FFA500;
 }
 
-/* System stats styling */
+/* System stats styling - VSCode Style */
 .status-monitoring span[data-stat] {
-    cursor: help;
-    transition: all 0.3s ease;
-    padding: 2px 4px;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    padding: 3px 6px;
     border-radius: 3px;
-    font-family: 'Courier New', monospace; /* Monospace for better alignment */
+    font-family: 'Courier New', 'Consolas', monospace; /* Monospace for better alignment */
 }
 
 .status-monitoring span[data-stat]:hover {
-    background-color: rgba(255, 255, 255, 0.2);
-    transform: scale(1.05);
+    background-color: rgba(255, 255, 255, 0.1);
 }
 
 /* Network stats specific styling */

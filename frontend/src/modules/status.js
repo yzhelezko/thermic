@@ -1,5 +1,6 @@
 // Enhanced Status management module
-import { GetPlatformInfo, GetActiveTabInfo, GetSystemStats } from '../../wailsjs/go/main/App';
+import { GetPlatformInfo, GetActiveTabInfo, GetSystemStats, GetMetricHistory, SetUpdateRate } from '../../wailsjs/go/main/App';
+import { GraphModal } from '../components/GraphModal.js';
 
 export class StatusManager {
     constructor() {
@@ -12,6 +13,13 @@ export class StatusManager {
         this.hoverTimeouts = new Map(); // For hover tooltips
         this.updateDebounceTimer = null; // For debouncing rapid updates
         this.isUpdating = false; // Prevent concurrent updates
+        
+        // Graph modal for hover visualization
+        this.graphModal = new GraphModal();
+        this.hoveredMetric = null;
+        this.hoverUpdateInterval = null;
+        this.originalUpdateRate = 3000;
+        this.hoverDebounceTimer = null;
     }
 
     setTabsManager(tabsManager) {
@@ -125,9 +133,9 @@ export class StatusManager {
 
     updateSystemStats() {
         const platformInfo = document.getElementById('platform-info');
-        const cpuElement = document.querySelector('span[data-stat="cpu"]');
-        const memElement = document.querySelector('span[data-stat="memory"]');
-        const loadElement = document.querySelector('span[data-stat="load"]');
+        const systemElement = document.querySelector('span[data-stat="system"]');
+        const diskUsageElement = document.querySelector('span[data-stat="disk-usage"]');
+        const diskIOElement = document.querySelector('span[data-stat="disk-io"]');
         const uptimeElement = document.querySelector('span[data-stat="uptime"]');
         const networkElement = document.querySelector('span[data-stat="network"]');
 
@@ -143,9 +151,9 @@ export class StatusManager {
             }
             
             // Hide system stats when no active tab
-            this.updateStatElement(cpuElement, 'CPU', null);
-            this.updateStatElement(memElement, 'RAM', null);
-            this.updateStatElement(loadElement, 'LOAD', null);
+            this.updateStatElement(systemElement, 'SYSTEM', null);
+            this.updateStatElement(diskUsageElement, 'DISK', null);
+            this.updateStatElement(diskIOElement, 'DISK I/O', null);
             this.updateStatElement(uptimeElement, 'UP', null);
             this.updateStatElement(networkElement, 'NET', null);
             return;
@@ -222,12 +230,42 @@ export class StatusManager {
             statusMonitoring.style.display = 'flex';
         }
 
-        // Update individual stats - only show if they have real values
-        this.updateStatElement(cpuElement, 'CPU', stats.cpu);
-        this.updateStatElement(memElement, isRemote ? 'MEM' : 'RAM', stats.memory);
+        // Update combined system stats (CPU + Memory + Load)
+        if (systemElement) {
+            this.updateCombinedSystemElement(systemElement, stats);
+        }
         
-        if (loadElement) {
-            this.updateStatElement(loadElement, 'LOAD', stats.load);
+        // Update disk stats
+        if (diskUsageElement) {
+            this.updateStatElement(diskUsageElement, 'DISK', stats.disk_usage);
+        }
+        
+        if (diskIOElement) {
+            // Format disk I/O to show both read and write
+            const diskRead = stats.disk_read || '0 MB/s';
+            const diskWrite = stats.disk_write || '0 MB/s';
+            
+            // Extract numeric values
+            const readValue = parseFloat(diskRead.replace(' MB/s', ''));
+            const writeValue = parseFloat(diskWrite.replace(' MB/s', ''));
+            
+            if (readValue > 0 || writeValue > 0) {
+                // Extract numeric values for display
+                const readDisplay = diskRead.replace(' MB/s', '');
+                const writeDisplay = diskWrite.replace(' MB/s', '');
+                
+                diskIOElement.textContent = `↓${readDisplay} ↑${writeDisplay}`;
+                diskIOElement.style.display = 'inline';
+                
+                // Show the separator
+                const separator = diskIOElement.previousElementSibling;
+                if (separator && separator.classList.contains('separator')) {
+                    separator.style.display = 'inline';
+                }
+            } else {
+                // Hide disk I/O element when no activity
+                this.updateStatElement(diskIOElement, 'DISK I/O', null);
+            }
         }
         
         if (uptimeElement) {
@@ -267,6 +305,61 @@ export class StatusManager {
         this.toggleMonitoringStatsVisibility(stats, isRemote);
     }
 
+    updateCombinedSystemElement(element, stats) {
+        if (!element) return;
+        
+        // Parse CPU (percentage)
+        const cpu = stats.cpu || 'unknown';
+        const cpuValue = cpu !== 'unknown' ? cpu.replace('%', '') : '0';
+        
+        // Parse Memory (convert to MB, then to GB if large)
+        const memory = stats.memory || 'unknown';
+        const memoryUsed = stats.memory_used || 'unknown';
+        let memoryDisplay = '0Mb';
+        
+        if (memoryUsed !== 'unknown') {
+            // memory_used is in format "405 MB" or "1.2 GB"
+            const memMatch = memoryUsed.match(/^([\d.]+)\s*(MB|GB)/i);
+            if (memMatch) {
+                const value = parseFloat(memMatch[1]);
+                const unit = memMatch[2].toUpperCase();
+                const memoryMB = unit === 'GB' ? value * 1024 : value;
+                
+                // If >= 1024 MB, show as GB
+                if (memoryMB >= 1024) {
+                    memoryDisplay = `${(memoryMB / 1024).toFixed(2)}Gb`;
+                } else {
+                    memoryDisplay = `${Math.round(memoryMB)}Mb`;
+                }
+            }
+        }
+        
+        // Parse Load (float)
+        const load = stats.load || 'unknown';
+        const loadValue = load !== 'unknown' ? load : '0.0';
+        
+        // Check if we have real data
+        const hasRealData = cpu !== 'unknown' || memory !== 'unknown' || load !== 'unknown';
+        
+        if (!hasRealData) {
+            element.style.display = 'none';
+            const separator = element.previousElementSibling;
+            if (separator && separator.classList.contains('separator')) {
+                separator.style.display = 'none';
+            }
+            return;
+        }
+        
+        // Format: "CPU: 10% RAM: 20.03Gb L: 1.2" or "CPU: 10% RAM: 405Mb L: 1.2"
+        element.textContent = `CPU: ${cpuValue}% RAM: ${memoryDisplay} L: ${loadValue}`;
+        element.style.display = 'inline';
+        
+        const separator = element.previousElementSibling;
+        if (separator && separator.classList.contains('separator')) {
+            separator.style.display = 'inline';
+        }
+    }
+    
     updateStatElement(element, label, value) {
         if (!element) return;
         
@@ -369,99 +462,149 @@ export class StatusManager {
     }
 
     setupTooltips() {
-        // Setup tooltips for status elements - use event delegation since elements may be shown/hidden
+        // Setup hover handlers for metric graphs - use event delegation since elements may be shown/hidden
         const statusMonitoring = document.querySelector('.status-monitoring');
         if (!statusMonitoring) return;
         
         statusMonitoring.addEventListener('mouseenter', (e) => {
             if (e.target.dataset.stat) {
-                this.showTooltip(e.target);
+                this.onMetricHover(e.target);
             }
         }, true);
         
         statusMonitoring.addEventListener('mouseleave', (e) => {
             if (e.target.dataset.stat) {
-                this.hideTooltip(e.target);
+                this.onMetricLeave(e.target);
             }
         }, true);
     }
 
-    showTooltip(element) {
-        const stat = element.dataset.stat;
-        if (!stat || !this.activeTabInfo) return;
-
-        const stats = this.activeTabInfo.systemStats;
-        const isRemote = this.activeTabInfo.isRemote;
+    async onMetricHover(element) {
+        const metric = element.dataset.stat;
+        if (!metric || !this.activeTabInfo) return;
         
-        let tooltipText = '';
+        // Debounce hover events
+        if (this.hoverDebounceTimer) {
+            clearTimeout(this.hoverDebounceTimer);
+        }
         
-        switch (stat) {
-            case 'cpu':
-                const cpuCores = this.platformInfo?.num_cpu || 'unknown';
-                tooltipText = `CPU Usage: ${stats.cpu}
-${isRemote ? 'Remote system' : 'Local system'} processor utilization
-CPU Cores: ${cpuCores}
-Architecture: ${isRemote ? (stats.arch || 'unknown') : (this.platformInfo?.arch || 'unknown')}`;
-                break;
-            case 'memory':
-                let memoryDetails = `Memory Usage: ${stats.memory}
-${isRemote ? 'Remote system' : 'Local system'} RAM utilization`;
+        this.hoverDebounceTimer = setTimeout(async () => {
+            this.hoveredMetric = metric;
+            
+            // Get current session ID - use sessionId from active tab (not tabId!)
+            const sessionID = this.activeTabInfo.sessionId;
+            if (!sessionID) {
+                console.warn('No sessionId found in activeTabInfo:', this.activeTabInfo);
+                return;
+            }
+            
+            console.log('Hovering over metric:', metric, 'for session:', sessionID);
+            
+            try {
+                let history;
                 
-                // Add detailed memory information if available
-                if (stats.memory_total && stats.memory_used) {
-                    memoryDetails += `
-Total Memory: ${stats.memory_total}
-Used Memory: ${stats.memory_used}`;
-                } else if (stats.memory && stats.memory !== 'unknown') {
-                    const percentage = parseFloat(stats.memory.replace('%', ''));
-                    if (!isNaN(percentage)) {
-                        memoryDetails += `
-Memory percentage: ${percentage.toFixed(1)}%`;
-                    }
+                // Handle combined system metric (CPU + Memory + Load)
+                if (metric === 'system') {
+                    // Fetch all three metrics in parallel
+                    const [cpuHistory, memoryHistory, loadHistory] = await Promise.all([
+                        GetMetricHistory(sessionID, 'cpu'),
+                        GetMetricHistory(sessionID, 'memory'),
+                        GetMetricHistory(sessionID, 'load')
+                    ]);
+                    
+                    // Combine into multi-metric format
+                    history = {
+                        cpu: cpuHistory,
+                        memory: memoryHistory,
+                        load: loadHistory
+                    };
+                    
+                    console.log('Got multi-metric history:', history);
+                } else {
+                    // Single metric fetch
+                    history = await GetMetricHistory(sessionID, metric);
+                    console.log('Got history:', history);
                 }
-                tooltipText = memoryDetails;
-                break;
-            case 'load':
-                const coreCount = this.platformInfo?.num_cpu || 1;
-                const loadValue = parseFloat(stats.load);
-                let loadDetails = `Load Average: ${stats.load}
-System load average (1 minute)
-CPU cores: ${coreCount}`;
                 
-                if (!isNaN(loadValue)) {
-                    const loadPerCore = (loadValue / coreCount).toFixed(2);
-                    loadDetails += `
-Load per core: ${loadPerCore}`;
-                }
-                tooltipText = loadDetails;
-                break;
-            case 'uptime':
-                tooltipText = `System Uptime: ${stats.uptime}
-Time since last ${isRemote ? 'remote' : 'local'} system boot
-Host: ${stats.hostname || (this.platformInfo?.hostname || 'unknown')}`;
-                break;
-            case 'network':
-                const rxInfo = stats.network_rx || '0 MB/s';
-                const txInfo = stats.network_tx || '0 MB/s';
+                // Show graph modal with history
+                this.graphModal.show(metric, element, history);
                 
-                // Extract numeric values for more detailed info
-                const rxValue = parseFloat(rxInfo.replace(' MB/s', ''));
-                const txValue = parseFloat(txInfo.replace(' MB/s', ''));
+                // Switch to 500ms update rate
+                await SetUpdateRate(sessionID, 500);
                 
-                tooltipText = `Network Activity:
-Download: ${rxInfo} (${(rxValue * 8).toFixed(1)} Mbps)
-Upload: ${txInfo} (${(txValue * 8).toFixed(1)} Mbps)
-${isRemote ? 'Remote network interface' : 'Local network interfaces'}`;
-                break;
-        }
-
-        if (tooltipText) {
-            element.title = tooltipText;
-        }
+                // Start rapid update loop for graph
+                this.startHoverUpdateLoop(sessionID, metric);
+                
+            } catch (error) {
+                console.error('Failed to fetch metric history:', error);
+            }
+        }, 100); // 100ms debounce
     }
 
-    hideTooltip(element) {
-        // Tooltip cleanup handled by browser
+    onMetricLeave(element) {
+        // Clear debounce timer
+        if (this.hoverDebounceTimer) {
+            clearTimeout(this.hoverDebounceTimer);
+            this.hoverDebounceTimer = null;
+        }
+        
+        // Hide graph modal
+        this.graphModal.hide();
+        
+        // Stop hover update loop
+        this.stopHoverUpdateLoop();
+        
+        // Restore original update rate
+        if (this.activeTabInfo && this.hoveredMetric) {
+            const sessionID = this.activeTabInfo.sessionId;
+            if (sessionID) {
+                SetUpdateRate(sessionID, this.originalUpdateRate).catch(err => {
+                    console.warn('Failed to restore update rate:', err);
+                });
+            }
+        }
+        
+        this.hoveredMetric = null;
+    }
+
+    startHoverUpdateLoop(sessionID, metric) {
+        // Clear any existing loop
+        this.stopHoverUpdateLoop();
+        
+        // Update graph every 500ms
+        this.hoverUpdateInterval = setInterval(async () => {
+            try {
+                let history;
+                
+                // Handle combined system metric
+                if (metric === 'system') {
+                    const [cpuHistory, memoryHistory, loadHistory] = await Promise.all([
+                        GetMetricHistory(sessionID, 'cpu'),
+                        GetMetricHistory(sessionID, 'memory'),
+                        GetMetricHistory(sessionID, 'load')
+                    ]);
+                    
+                    history = {
+                        cpu: cpuHistory,
+                        memory: memoryHistory,
+                        load: loadHistory
+                    };
+                } else {
+                    history = await GetMetricHistory(sessionID, metric);
+                }
+                
+                this.graphModal.update(history);
+            } catch (error) {
+                console.error('Failed to update metric history:', error);
+            }
+        }, 500);
+    }
+
+    stopHoverUpdateLoop() {
+        if (this.hoverUpdateInterval) {
+            clearInterval(this.hoverUpdateInterval);
+            this.hoverUpdateInterval = null;
+        }
     }
 
     startStatusUpdates() {
@@ -501,6 +644,18 @@ ${isRemote ? 'Remote network interface' : 'Local network interfaces'}`;
         if (this.updateDebounceTimer) {
             clearTimeout(this.updateDebounceTimer);
             this.updateDebounceTimer = null;
+        }
+        
+        // Clean up hover state
+        this.stopHoverUpdateLoop();
+        if (this.hoverDebounceTimer) {
+            clearTimeout(this.hoverDebounceTimer);
+            this.hoverDebounceTimer = null;
+        }
+        
+        // Destroy graph modal
+        if (this.graphModal) {
+            this.graphModal.destroy();
         }
     }
 } 

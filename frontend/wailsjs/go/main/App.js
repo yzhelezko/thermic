@@ -18,6 +18,10 @@ export function CheckWSLAvailable() {
   return window['go']['main']['App']['CheckWSLAvailable']();
 }
 
+export function CleanupSessionMetrics(arg1) {
+  return window['go']['main']['App']['CleanupSessionMetrics'](arg1);
+}
+
 export function Close() {
   return window['go']['main']['App']['Close']();
 }
@@ -230,6 +234,10 @@ export function GetFolderByIDAPI(arg1) {
   return window['go']['main']['App']['GetFolderByIDAPI'](arg1);
 }
 
+export function GetMetricHistory(arg1, arg2) {
+  return window['go']['main']['App']['GetMetricHistory'](arg1, arg2);
+}
+
 export function GetMetrics() {
   return window['go']['main']['App']['GetMetrics']();
 }
@@ -330,6 +338,10 @@ export function GetTopProfiles(arg1) {
   return window['go']['main']['App']['GetTopProfiles'](arg1);
 }
 
+export function GetUpdateRate(arg1) {
+  return window['go']['main']['App']['GetUpdateRate'](arg1);
+}
+
 export function GetUsageTrends(arg1) {
   return window['go']['main']['App']['GetUsageTrends'](arg1);
 }
@@ -368,6 +380,10 @@ export function GetWindowMaximizedState() {
 
 export function Greet(arg1) {
   return window['go']['main']['App']['Greet'](arg1);
+}
+
+export function InitSessionMetrics(arg1) {
+  return window['go']['main']['App']['InitSessionMetrics'](arg1);
 }
 
 export function InitializeFileExplorerSession(arg1) {
@@ -436,6 +452,14 @@ export function MoveProfileByIDAPI(arg1, arg2) {
 
 export function ReconnectTab(arg1) {
   return window['go']['main']['App']['ReconnectTab'](arg1);
+}
+
+export function RecordMetric(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RecordMetric'](arg1, arg2, arg3);
+}
+
+export function RecordStats(arg1, arg2) {
+  return window['go']['main']['App']['RecordStats'](arg1, arg2);
 }
 
 export function RenameRemotePath(arg1, arg2, arg3) {
@@ -520,6 +544,10 @@ export function SetAIProvider(arg1) {
 
 export function SetActiveTab(arg1) {
   return window['go']['main']['App']['SetActiveTab'](arg1);
+}
+
+export function SetUpdateRate(arg1, arg2) {
+  return window['go']['main']['App']['SetUpdateRate'](arg1, arg2);
 }
 
 export function ShowMessageDialog(arg1, arg2) {

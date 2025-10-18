@@ -11,6 +11,8 @@ export function CheckForUpdates():Promise<main.UpdateInfo>;
 
 export function CheckWSLAvailable():Promise<boolean>;
 
+export function CleanupSessionMetrics(arg1:string):Promise<void>;
+
 export function Close():Promise<void>;
 
 export function CloseFileExplorerSession(arg1:string):Promise<void>;
@@ -117,6 +119,8 @@ export function GetFolderByID(arg1:string):Promise<main.ProfileFolder>;
 
 export function GetFolderByIDAPI(arg1:string):Promise<main.ProfileFolder>;
 
+export function GetMetricHistory(arg1:string,arg2:string):Promise<Record<string, any>>;
+
 export function GetMetrics():Promise<main.ProfileMetrics>;
 
 export function GetMetricsAPI():Promise<main.ProfileMetrics>;
@@ -167,6 +171,8 @@ export function GetTabs():Promise<Array<main.Tab>>;
 
 export function GetTopProfiles(arg1:number):Promise<Array<main.Profile>>;
 
+export function GetUpdateRate(arg1:string):Promise<number>;
+
 export function GetUsageTrends(arg1:number):Promise<Record<string, any>>;
 
 export function GetVersionInfo():Promise<main.VersionInfo>;
@@ -186,6 +192,8 @@ export function GetWatcherStatus():Promise<Record<string, any>>;
 export function GetWindowMaximizedState():Promise<boolean>;
 
 export function Greet(arg1:string):Promise<string>;
+
+export function InitSessionMetrics(arg1:string):Promise<void>;
 
 export function InitializeFileExplorerSession(arg1:string):Promise<void>;
 
@@ -220,6 +228,10 @@ export function MoveProfileByID(arg1:string,arg2:string):Promise<void>;
 export function MoveProfileByIDAPI(arg1:string,arg2:string):Promise<void>;
 
 export function ReconnectTab(arg1:string):Promise<void>;
+
+export function RecordMetric(arg1:string,arg2:string,arg3:number):Promise<void>;
+
+export function RecordStats(arg1:string,arg2:Record<string, any>):Promise<void>;
 
 export function RenameRemotePath(arg1:string,arg2:string,arg3:string):Promise<void>;
 
@@ -262,6 +274,8 @@ export function SetAIConfig(arg1:main.AIConfig):Promise<void>;
 export function SetAIProvider(arg1:string):Promise<void>;
 
 export function SetActiveTab(arg1:string):Promise<void>;
+
+export function SetUpdateRate(arg1:string,arg2:number):Promise<void>;
 
 export function ShowMessageDialog(arg1:string,arg2:string):Promise<void>;
 

@@ -1,0 +1,83 @@
+/* Graph Modal Styles - VSCode Style */
+
+.graph-modal {
+    position: fixed;
+    z-index: 10000;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    padding: 12px;
+    width: 400px; /* Larger for multi-metric graphs */
+    pointer-events: none; /* Don't block mouse events */
+    transition: opacity 0.15s ease;
+}
+
+.graph-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.graph-modal-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.graph-modal-current {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent-color);
+    font-family: 'Courier New', 'Consolas', monospace;
+}
+
+.graph-modal-canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+/* Arrow pointing to hovered element */
+.graph-modal::after {
+    content: '';
+    position: absolute;
+    bottom: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 8px solid var(--bg-secondary);
+}
+
+/* If modal is shown below element (rare case) */
+.graph-modal.below::after {
+    bottom: auto;
+    top: -8px;
+    border-top: none;
+    border-bottom: 8px solid var(--bg-secondary);
+}
+
+/* Animation */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.graph-modal {
+    animation: fadeIn 0.15s ease;
+}
+
