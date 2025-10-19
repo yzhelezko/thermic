@@ -379,6 +379,7 @@ func (a *App) ReconnectTab(tabId string) error {
 	// Update status to connecting
 	tab.Status = "connecting"
 	tab.ErrorMessage = ""
+	sessionID := tab.SessionID
 	a.terminal.mutex.Unlock()
 
 	// Emit status update
@@ -389,24 +390,54 @@ func (a *App) ReconnectTab(tabId string) error {
 		})
 	}
 
+	// CRITICAL FIX: Clean up old failed/disconnected session before reconnecting
+	fmt.Printf("Cleaning up old session before reconnect: %s\n", sessionID)
+
+	// Close SFTP client for old session
+	a.CloseFileExplorerSession(sessionID)
+
+	// Close and remove old SSH session if it exists
+	a.ssh.sshSessionsMutex.Lock()
+	if oldSession, exists := a.ssh.sshSessions[sessionID]; exists {
+		fmt.Printf("Removing old SSH session: %s\n", sessionID)
+		// Mark as cleaning and close
+		a.CloseSSHSession(oldSession)
+		// Remove from map
+		delete(a.ssh.sshSessions, sessionID)
+	}
+	a.ssh.sshSessionsMutex.Unlock()
+
 	// Start unified connection flow
 	target := fmt.Sprintf("%s@%s:%d", tab.SSHConfig.Username, tab.SSHConfig.Host, tab.SSHConfig.Port)
-	a.messages.StartConnectionFlow(tab.SessionID, target, []string{})
+	a.messages.StartConnectionFlow(sessionID, target, []string{})
 
 	// Get current terminal dimensions from the frontend
 	cols, rows := 80, 24 // default fallback
 
-	// Start SSH session with current dimensions
+	// Start fresh SSH session with current dimensions
 	err := a.startSSHSessionWithSize(tab, cols, rows)
 	if err != nil {
-		a.messages.ConnectionFailed(tab.SessionID, err)
+		a.messages.ConnectionFailed(sessionID, err)
 		return err
 	}
 
-	a.messages.SessionReady(tab.SessionID)
+	a.messages.SessionReady(sessionID)
 
-	// NEW: Trigger enhanced terminal sizing after successful reconnection
-	// This addresses the terminal sizing issue when tabs reconnect
+	// Reinitialize SFTP client for file manager functionality
+	fmt.Printf("Reinitializing SFTP client for session: %s\n", sessionID)
+	if err := a.InitializeFileExplorerSession(sessionID); err != nil {
+		fmt.Printf("Warning: Failed to reinitialize SFTP client: %v\n", err)
+		// Don't fail the reconnection if SFTP init fails
+	} else {
+		// Emit event to refresh file explorer if it's open
+		if a.ctx != nil {
+			wailsRuntime.EventsEmit(a.ctx, "sftp-reconnected", map[string]interface{}{
+				"sessionId": sessionID,
+			})
+		}
+	}
+
+	// Trigger enhanced terminal sizing after successful reconnection
 	if a.ctx != nil {
 		go func() {
 			// Give the connection a moment to stabilize
@@ -414,7 +445,7 @@ func (a *App) ReconnectTab(tabId string) error {
 
 			// Emit reconnection sizing event to frontend to trigger Phase 2 sizing system
 			wailsRuntime.EventsEmit(a.ctx, "tab-reconnected-sizing", map[string]interface{}{
-				"sessionId": tab.SessionID,
+				"sessionId": sessionID,
 				"tabId":     tabId,
 				"immediate": true, // Flag for immediate enhanced sizing
 			})
