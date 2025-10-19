@@ -693,9 +693,23 @@ func (a *App) waitForSSHSessionEnd(sshSession *SSHSession) {
 	if err != nil && !sshSession.IsCleaning() {
 		fmt.Printf("SSH session ended with error: %v\n", err)
 		a.messages.UpdateConnectionStatus(sshSession.sessionID, StatusFailed.String(), fmt.Sprintf("SSH connection lost: %v", err))
+
+		// Auto-cleanup SFTP client when connection fails
+		fmt.Printf("Auto-closing SFTP client for failed session: %s\n", sshSession.sessionID)
+		a.CloseFileExplorerSession(sshSession.sessionID)
+
+		// Close monitoring session
+		a.CloseMonitoringSession(sshSession)
 	} else if !sshSession.IsCleaning() {
 		// Clean disconnection
 		a.messages.UpdateConnectionStatus(sshSession.sessionID, StatusDisconnected.String(), "")
+
+		// Auto-cleanup SFTP client when connection disconnects
+		fmt.Printf("Auto-closing SFTP client for disconnected session: %s\n", sshSession.sessionID)
+		a.CloseFileExplorerSession(sshSession.sessionID)
+
+		// Close monitoring session
+		a.CloseMonitoringSession(sshSession)
 	}
 
 	close(sshSession.done)
@@ -789,6 +803,13 @@ func (a *App) getSSHAgentAuth() (ssh.AuthMethod, error) {
 // handleHangingSession handles SSH sessions that appear to be hanging
 func (a *App) handleHangingSession(sshSession *SSHSession) {
 	a.messages.UpdateConnectionStatus(sshSession.sessionID, StatusHanging, "Connection appears to be hanging - no response from server")
+
+	// Auto-cleanup SFTP client when connection is hanging
+	fmt.Printf("Auto-closing SFTP client for hanging session: %s\n", sshSession.sessionID)
+	a.CloseFileExplorerSession(sshSession.sessionID)
+
+	// Close monitoring session
+	a.CloseMonitoringSession(sshSession)
 }
 
 // ForceDisconnectSSHSession forcefully disconnects a hanging SSH session
