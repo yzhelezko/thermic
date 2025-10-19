@@ -120,22 +120,14 @@ export function createStatusBarTemplate() {
     return `
         <div class="status-left">
             <span id="status-info">Ready</span>
-            <span>•</span>
             <span id="selected-shell">PowerShell</span>
         </div>
         <div class="status-right">
             <div class="status-monitoring" id="status-monitoring">
                 <span id="platform-info">Loading...</span>
-                <span class="separator">•</span>
-                <span data-stat="system" data-metrics="cpu,memory,load" title="System Resources">CPU: 0% RAM: 0Mb L: 0.0</span>
-                <span class="separator">•</span>
-                <span data-stat="disk-usage">DISK: 0%</span>
-                <span class="separator">•</span>
-                <span data-stat="disk-io">↓0 ↑0</span>
-                <span class="separator">•</span>
-                <span data-stat="network">NET: ↓0 ↑0</span>
-                <span class="separator" data-for="uptime">•</span>
-                <span data-stat="uptime" style="display: none;">UP: N/A</span>
+                <span data-stat="system" data-metrics="cpu,memory,load,disk,uptime" title="System Resources - Hover for detailed graphs">CPU: 0% RAM: 0Mb L: 0.0</span>
+                <span data-stat="disk-io">DIS: ↓0 MB/s ↑0 MB/s</span>
+                <span data-stat="network">NET: ↓0 MB/s ↑0 MB/s</span>
             </div>
             <div class="status-version" id="status-version">
                 <!-- Version/upgrade button will be added here by VersionManager -->

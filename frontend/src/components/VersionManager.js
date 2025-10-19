@@ -69,12 +69,7 @@ class VersionManager {
                 return;
             }
             
-            // Add separator
-            const separator = document.createElement('span');
-            separator.textContent = '•';
-            statusVersion.appendChild(separator);
-            
-            // Create version container
+            // Create version container (no separator needed - using gap spacing)
             const versionContainer = document.createElement('span');
             versionContainer.id = 'version-container';
             versionContainer.className = 'version-container';

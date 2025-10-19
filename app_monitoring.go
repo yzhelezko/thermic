@@ -77,6 +77,7 @@ func (a *App) InitSessionMetrics(sessionID string) {
 		DiskUsage: NewMetricHistory(120),
 		DiskRead:  NewMetricHistory(120),
 		DiskWrite: NewMetricHistory(120),
+		DiskIO:    NewMetricHistory(120),
 		NetworkRX: NewMetricHistory(120),
 		NetworkTX: NewMetricHistory(120),
 	}
@@ -117,6 +118,8 @@ func (a *App) RecordMetric(sessionID, metricName string, value float64) {
 		metrics.DiskRead.Add(timestamp, value)
 	case "disk_write":
 		metrics.DiskWrite.Add(timestamp, value)
+	case "disk_io":
+		metrics.DiskIO.Add(timestamp, value)
 	case "network_rx":
 		metrics.NetworkRX.Add(timestamp, value)
 	case "network_tx":
@@ -136,9 +139,19 @@ func (a *App) RecordStats(sessionID string, stats map[string]interface{}) {
 		}
 	}
 
-	if memory, ok := stats["memory"].(string); ok {
-		if val := parsePercentage(memory); val >= 0 {
-			a.RecordMetric(sessionID, "memory", val)
+	// Record memory in MB (not percentage) for better graph display
+	if memoryUsed, ok := stats["memory_used"].(string); ok {
+		// Parse "405 MB" or "1.2 GB" format
+		memMatch := strings.Fields(memoryUsed)
+		if len(memMatch) >= 2 {
+			if val, err := strconv.ParseFloat(memMatch[0], 64); err == nil && val >= 0 {
+				unit := strings.ToUpper(memMatch[1])
+				memoryMB := val
+				if unit == "GB" {
+					memoryMB = val * 1024
+				}
+				a.RecordMetric(sessionID, "memory", memoryMB)
+			}
 		}
 	}
 
@@ -154,17 +167,26 @@ func (a *App) RecordStats(sessionID string, stats map[string]interface{}) {
 		}
 	}
 
+	// Record combined disk I/O (read + write) for the main graph
+	diskReadVal := 0.0
+	diskWriteVal := 0.0
+
 	if diskRead, ok := stats["disk_read"].(string); ok {
 		if val := parseMBps(diskRead); val >= 0 {
+			diskReadVal = val
 			a.RecordMetric(sessionID, "disk_read", val)
 		}
 	}
 
 	if diskWrite, ok := stats["disk_write"].(string); ok {
 		if val := parseMBps(diskWrite); val >= 0 {
+			diskWriteVal = val
 			a.RecordMetric(sessionID, "disk_write", val)
 		}
 	}
+
+	// Record combined disk I/O
+	a.RecordMetric(sessionID, "disk_io", diskReadVal+diskWriteVal)
 
 	if networkRX, ok := stats["network_rx"].(string); ok {
 		if val := parseMBps(networkRX); val >= 0 {
@@ -224,6 +246,8 @@ func (a *App) GetMetricHistory(sessionID, metricName string) map[string]interfac
 		timestamps, values = metrics.DiskRead.GetData()
 	case "disk_write":
 		timestamps, values = metrics.DiskWrite.GetData()
+	case "disk_io":
+		timestamps, values = metrics.DiskIO.GetData()
 	case "network_rx":
 		timestamps, values = metrics.NetworkRX.GetData()
 	case "network_tx":

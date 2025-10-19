@@ -210,6 +210,7 @@ type SessionMetrics struct {
 	DiskUsage *MetricHistory
 	DiskRead  *MetricHistory
 	DiskWrite *MetricHistory
+	DiskIO    *MetricHistory // Combined disk I/O (read + write)
 	NetworkRX *MetricHistory
 	NetworkTX *MetricHistory
 	mutex     sync.RWMutex

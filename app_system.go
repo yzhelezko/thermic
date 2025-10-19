@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +18,137 @@ import (
 )
 
 // System Statistics and Monitoring Methods
+
+// GetSystemMetadata returns static system information for the active tab's system
+// Returns local system info if no tab is active or for local tabs
+// Returns remote system info for SSH tabs
+func (a *App) GetSystemMetadata() map[string]interface{} {
+	// Get active tab info to determine if we need local or remote metadata
+	activeTab := a.GetActiveTab()
+	if activeTab == nil {
+		// No active tab, return local metadata
+		return a.getLocalSystemMetadata()
+	}
+
+	// Check if this is an SSH connection
+	if activeTab.ConnectionType == "ssh" && activeTab.Status == "connected" {
+		// Get remote metadata
+		return a.getRemoteSystemMetadata(activeTab.SessionID)
+	}
+
+	// Default to local metadata
+	return a.getLocalSystemMetadata()
+}
+
+// getLocalSystemMetadata returns local system metadata
+func (a *App) getLocalSystemMetadata() map[string]interface{} {
+	metadata := map[string]interface{}{
+		"cpu_count":     runtime.NumCPU(),
+		"memory_total":  0.0,
+		"disk_capacity": 0.0,
+	}
+
+	// Get total memory
+	if memInfo, err := mem.VirtualMemory(); err == nil {
+		metadata["memory_total"] = float64(memInfo.Total) / 1024 / 1024 // MB
+	}
+
+	// Get disk capacity
+	if usage, err := disk.Usage("/"); err == nil {
+		metadata["disk_capacity"] = float64(usage.Total) / 1024 / 1024 / 1024 // GB
+	}
+
+	return metadata
+}
+
+// getRemoteSystemMetadata returns remote system metadata via SSH
+func (a *App) getRemoteSystemMetadata(sessionID string) map[string]interface{} {
+	metadata := map[string]interface{}{
+		"cpu_count":     0,
+		"memory_total":  0.0,
+		"disk_capacity": 0.0,
+	}
+
+	fmt.Printf("Getting remote metadata for session: %s\n", sessionID)
+
+	// Check if we have an active SSH session
+	a.ssh.sshSessionsMutex.RLock()
+	sshSession, exists := a.ssh.sshSessions[sessionID]
+	a.ssh.sshSessionsMutex.RUnlock()
+
+	if !exists || sshSession == nil {
+		fmt.Printf("No SSH session found for: %s\n", sessionID)
+		return metadata
+	}
+
+	// Get CPU count - try multiple methods
+	cpuCmd := "nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || grep -c ^processor /proc/cpuinfo 2>/dev/null"
+	if output, err := a.ExecuteMonitoringCommand(sshSession, cpuCmd); err == nil {
+		trimmed := strings.TrimSpace(output)
+		fmt.Printf("Remote CPU count output: '%s'\n", trimmed)
+		if cpuCount, parseErr := strconv.Atoi(trimmed); parseErr == nil && cpuCount > 0 {
+			metadata["cpu_count"] = cpuCount
+			fmt.Printf("Remote CPU count: %d\n", cpuCount)
+		} else {
+			fmt.Printf("Failed to parse CPU count: %v\n", parseErr)
+		}
+	} else {
+		fmt.Printf("Failed to get CPU count: %v\n", err)
+	}
+
+	// Get total memory - try multiple methods
+	// Method 1: /proc/meminfo (Linux) - extract just the number
+	memCmd := "grep MemTotal /proc/meminfo 2>/dev/null | awk '{print $2}' | tr -d ' '"
+	if output, err := a.ExecuteMonitoringCommand(sshSession, memCmd); err == nil {
+		trimmed := strings.TrimSpace(output)
+		fmt.Printf("Remote memory (KB) output: '%s'\n", trimmed)
+		if memKB, parseErr := strconv.ParseFloat(trimmed, 64); parseErr == nil && memKB > 0 {
+			metadata["memory_total"] = memKB / 1024 // Convert KB to MB
+			fmt.Printf("Remote memory total: %.2f MB (%.2f GB)\n", memKB/1024, memKB/1024/1024)
+		} else {
+			fmt.Printf("Failed to parse memory: %v, trying alternative method\n", parseErr)
+			// Alternative: extract number using sed
+			altMemCmd := "cat /proc/meminfo 2>/dev/null | grep MemTotal | sed 's/[^0-9]//g'"
+			if altOutput, altErr := a.ExecuteMonitoringCommand(sshSession, altMemCmd); altErr == nil {
+				altTrimmed := strings.TrimSpace(altOutput)
+				if altMemKB, altParseErr := strconv.ParseFloat(altTrimmed, 64); altParseErr == nil && altMemKB > 0 {
+					metadata["memory_total"] = altMemKB / 1024
+					fmt.Printf("Remote memory total (alt): %.2f MB\n", altMemKB/1024)
+				}
+			}
+		}
+	} else {
+		fmt.Printf("Failed to get memory: %v\n", err)
+	}
+
+	// Get disk capacity - try multiple methods
+	// Method 1: df -k (most universal) - extract just the total size column
+	diskCmd := "df -k / 2>/dev/null | tail -1 | awk '{print $2}' | tr -d ' '"
+	if output, err := a.ExecuteMonitoringCommand(sshSession, diskCmd); err == nil {
+		trimmed := strings.TrimSpace(output)
+		fmt.Printf("Remote disk (KB) output: '%s'\n", trimmed)
+		if diskKB, parseErr := strconv.ParseFloat(trimmed, 64); parseErr == nil && diskKB > 0 {
+			metadata["disk_capacity"] = diskKB / 1024 / 1024 // Convert KB to GB
+			fmt.Printf("Remote disk capacity: %.2f GB (%.0f KB)\n", diskKB/1024/1024, diskKB)
+		} else {
+			fmt.Printf("Failed to parse disk capacity: %v, trying alternative method\n", parseErr)
+			// Alternative: use df --output
+			altDiskCmd := "df -k / 2>/dev/null | grep -v Filesystem | head -1 | awk '{print $2}'"
+			if altOutput, altErr := a.ExecuteMonitoringCommand(sshSession, altDiskCmd); altErr == nil {
+				altTrimmed := strings.TrimSpace(altOutput)
+				if altDiskKB, altParseErr := strconv.ParseFloat(altTrimmed, 64); altParseErr == nil && altDiskKB > 0 {
+					metadata["disk_capacity"] = altDiskKB / 1024 / 1024
+					fmt.Printf("Remote disk capacity (alt): %.2f GB\n", altDiskKB/1024/1024)
+				}
+			}
+		}
+	} else {
+		fmt.Printf("Failed to get disk capacity: %v\n", err)
+	}
+
+	fmt.Printf("Final remote metadata: %+v\n", metadata)
+	return metadata
+}
 
 // GetSystemStats returns current system statistics
 func (a *App) GetSystemStats() map[string]interface{} {

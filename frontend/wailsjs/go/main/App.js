@@ -322,6 +322,10 @@ export function GetShellsForUI() {
   return window['go']['main']['App']['GetShellsForUI']();
 }
 
+export function GetSystemMetadata() {
+  return window['go']['main']['App']['GetSystemMetadata']();
+}
+
 export function GetSystemStats() {
   return window['go']['main']['App']['GetSystemStats']();
 }
