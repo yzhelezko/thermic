@@ -7,40 +7,115 @@
     border: 1px solid var(--border-color);
     border-radius: 6px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    padding: 12px;
-    width: 400px; /* Larger for multi-metric graphs */
-    pointer-events: none; /* Don't block mouse events */
+    padding: 16px;
+    width: 900px;
+    max-height: 90vh;
+    overflow-y: auto;
+    pointer-events: auto; /* Allow mouse events for interaction */
     transition: opacity 0.15s ease;
+}
+
+.graph-modal-extended {
+    width: 900px;
+}
+
+@media (max-width: 950px) {
+    .graph-modal, .graph-modal-extended {
+        width: 700px;
+    }
 }
 
 .graph-modal-header {
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
-    margin-bottom: 8px;
-    padding-bottom: 6px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
     border-bottom: 1px solid var(--border-color);
 }
 
 .graph-modal-title {
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+}
+
+/* Grid layout for multiple graphs */
+.graph-modal-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+/* Make grid responsive for smaller screens */
+@media (max-width: 900px) {
+    .graph-modal-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+/* Individual graph section */
+.graph-section {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 10px;
+}
+
+.graph-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.graph-section-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 
-.graph-modal-current {
-    font-size: 14px;
+.graph-section-value {
+    font-size: 12px;
     font-weight: 600;
     color: var(--accent-color);
     font-family: 'Courier New', 'Consolas', monospace;
 }
 
-.graph-modal-canvas {
+.graph-section-canvas {
     display: block;
     width: 100%;
     height: auto;
+}
+
+/* Uptime section */
+.graph-uptime-section {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+}
+
+.graph-uptime-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.graph-uptime-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent-color);
+    font-family: 'Courier New', 'Consolas', monospace;
 }
 
 /* Arrow pointing to hovered element */

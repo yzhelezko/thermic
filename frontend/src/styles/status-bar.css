@@ -1,58 +1,76 @@
-/* Status Bar Component Styles */
+/* Status Bar Component Styles - VSCode Style */
 
 .status-bar {
-    background-color: var(--accent-color);
-    color: white;
-    padding: 2px 16px;
-    font-size: 11px;
+    background-color: #007ACC;
+    color: #FFFFFF;
+    padding: 0 12px;
+    font-size: 12px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    height: 24px;
+    height: 22px;
     user-select: none;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    white-space: nowrap;
 }
 
 .status-left {
     display: flex;
     align-items: center;
     gap: 16px;
+    height: 100%;
 }
 
 .status-right {
     display: flex;
     align-items: center;
     gap: 16px;
+    height: 100%;
 }
 
 .status-monitoring {
     display: flex;
     align-items: center;
     gap: 8px;
+    height: 100%;
 }
 
 .status-version {
     display: flex;
     align-items: center;
-    gap: 8px;
+    height: 100%;
 }
 
 /* Connection status indicators */
 #status-info {
-    font-weight: 500;
-    transition: color 0.3s ease;
+    font-size: 12px;
+    font-weight: 400;
+    transition: background-color 0.1s ease;
+    padding: 0 6px;
+    cursor: default;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    line-height: 22px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 #status-info.status-connected {
-    color: #90EE90;
+    color: #FFFFFF;
 }
 
 #status-info.status-connecting {
-    color: #FFD700;
+    color: #FFE066;
     animation: pulse 2s ease-in-out infinite;
 }
 
 #status-info.status-disconnected {
-    color: #FFB6C1;
+    color: #FFA0A0;
 }
 
 #status-info.status-failed {
@@ -60,7 +78,7 @@
 }
 
 #status-info.status-hanging {
-    color: #FFA500;
+    color: #FFB84A;
     animation: blink 1.5s ease-in-out infinite;
 }
 
@@ -69,50 +87,84 @@
 }
 
 #status-info.status-unknown {
-    color: #FFA500;
+    color: #FFB84A;
 }
 
 /* System stats styling - VSCode Style */
 .status-monitoring span[data-stat] {
     cursor: pointer;
-    transition: background-color 0.15s ease;
-    padding: 3px 6px;
-    border-radius: 3px;
-    font-family: 'Courier New', 'Consolas', monospace; /* Monospace for better alignment */
+    transition: background-color 0.1s ease;
+    padding: 0 6px;
+    border-radius: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 12px;
+    font-weight: 400;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    line-height: 22px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 .status-monitoring span[data-stat]:hover {
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Loading state styling - system resources remain white */
+.status-monitoring span[data-stat].status-loading {
+    cursor: default;
+}
+
+.status-monitoring span[data-stat].status-loading:hover {
+    background-color: transparent;
 }
 
 /* Network stats specific styling */
 .status-monitoring span[data-stat="network"] {
-    min-width: 90px; /* Ensure consistent width for network display */
-    text-align: center;
-}
-
-/* Load average specific styling */
-.status-monitoring span[data-stat="load"] {
-    min-width: 60px;
-    text-align: center;
+    white-space: nowrap;
 }
 
 /* Platform info styling */
 #platform-info {
-    font-weight: 500;
+    font-size: 12px;
+    font-weight: 400;
     max-width: 200px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    padding: 0 6px;
+    cursor: default;
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    line-height: 22px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 /* Shell/connection info */
 #selected-shell {
-    font-style: italic;
+    font-size: 12px;
+    font-weight: 400;
     max-width: 150px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    padding: 0 6px;
+    cursor: default;
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    line-height: 22px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Separator styling - removed (no longer using bullet separators) */
+.status-monitoring .separator {
+    display: none;
 }
 
 /* Responsive behavior */
@@ -121,19 +173,10 @@
     .status-monitoring span[data-stat="uptime"] {
         display: none !important;
     }
-    
-    .status-monitoring span.separator[data-for="load"],
-    .status-monitoring span.separator[data-for="uptime"] {
-        display: none !important;
-    }
 }
 
 @media (max-width: 1000px) {
     .status-monitoring span[data-stat="network"] {
-        display: none !important;
-    }
-    
-    .status-monitoring span[data-stat="network"] + .status-monitoring span.separator {
         display: none !important;
     }
     
@@ -144,11 +187,11 @@
 
 @media (max-width: 800px) {
     .status-left {
-        gap: 8px;
+        gap: 12px;
     }
     
     .status-right {
-        gap: 8px;
+        gap: 12px;
     }
     
     #selected-shell {
@@ -161,7 +204,6 @@
     
     .status-monitoring span[data-stat] {
         min-width: auto; /* Remove fixed width on small screens */
-        font-size: 10px;
     }
 }
 
@@ -188,23 +230,4 @@
 .status-bar.ssh-active .status-monitoring span[data-stat="load"],
 .status-bar.ssh-active .status-monitoring span[data-stat="uptime"] {
     display: inline !important;
-}
-
-.status-bar.ssh-active .status-monitoring span.separator[data-for="load"],
-.status-bar.ssh-active .status-monitoring span.separator[data-for="uptime"] {
-    display: inline !important;
-}
-
-/* Hide separators for hidden elements */
-.status-monitoring span[data-stat][style*="display: none"] + span.separator,
-.status-monitoring span.separator[data-for="load"] {
-    display: none;
-}
-
-.status-monitoring span.separator[data-for="uptime"] {
-    display: none;
-}
-
-.status-monitoring span.separator[data-for="network"] {
-    display: none;
 } 

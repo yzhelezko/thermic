@@ -102,7 +102,7 @@ export class Notification {
                     pointer-events: auto;
                     opacity: 1;
                     display: flex;
-                    align-items: flex-start;
+                    align-items: center;
                     gap: 12px;
                     max-width: 100%;
                     word-wrap: break-word;
@@ -118,9 +118,9 @@ export class Notification {
 
                 .notification-icon {
                     font-size: 20px;
-                    line-height: 1;
                     flex-shrink: 0;
-                    margin-top: 2px;
+                    display: flex;
+                    align-items: center;
                 }
 
                 .notification-content {

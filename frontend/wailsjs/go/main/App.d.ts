@@ -163,6 +163,8 @@ export function GetRemoteWorkingDirectory(arg1:string):Promise<string>;
 
 export function GetShellsForUI():Promise<Array<Record<string, any>>>;
 
+export function GetSystemMetadata():Promise<Record<string, any>>;
+
 export function GetSystemStats():Promise<Record<string, any>>;
 
 export function GetTabStatus(arg1:string):Promise<Record<string, any>>;

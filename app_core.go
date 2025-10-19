@@ -87,24 +87,44 @@ func (a *App) shutdown(ctx context.Context) {
 		prevHeight := a.config.config.WindowHeight
 		prevMaximized := a.config.config.WindowMaximized
 
-		defer func() {
-			if r := recover(); r != nil {
-				fmt.Printf("Recovered from panic during WindowGetSize or state update in shutdown: %v\n", r)
-			}
+		// Safe window size retrieval with validation and panic recovery
+		var width, height int
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Printf("Recovered from panic during WindowGetSize in shutdown: %v\n", r)
+					// Use previous values on panic
+					width = prevWidth
+					height = prevHeight
+				}
+			}()
+			width, height = wailsRuntime.WindowGetSize(a.ctx)
 		}()
 
-		// Safe window size retrieval with validation
-		width, height := wailsRuntime.WindowGetSize(a.ctx)
 		if width > 0 && height > 0 {
 			a.config.config.WindowWidth = width
 			a.config.config.WindowHeight = height
 			fmt.Printf("Final window size captured: %dx%d\n", width, height)
 		} else {
 			fmt.Printf("Invalid window dimensions during shutdown: %dx%d - keeping previous values (%dx%d)\n", width, height, prevWidth, prevHeight)
+			// Restore previous valid values
+			a.config.config.WindowWidth = prevWidth
+			a.config.config.WindowHeight = prevHeight
 		}
 
-		// Safe maximized state retrieval
-		isMaximized := wailsRuntime.WindowIsMaximised(a.ctx)
+		// Safe maximized state retrieval with panic recovery
+		var isMaximized bool
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Printf("Recovered from panic during WindowIsMaximised in shutdown: %v\n", r)
+					// Use previous value on panic
+					isMaximized = prevMaximized
+				}
+			}()
+			isMaximized = wailsRuntime.WindowIsMaximised(a.ctx)
+		}()
+
 		a.config.config.WindowMaximized = isMaximized
 		fmt.Printf("Final maximized state: %t\n", isMaximized)
 
