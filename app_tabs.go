@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"time"
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -9,8 +10,13 @@ import (
 
 // Tab Management Methods
 
-// CreateTab creates a new terminal tab
+// CreateTab creates a new terminal tab (legacy - supports local and SSH only)
 func (a *App) CreateTab(shell string, sshConfig *SSHConfig) (*Tab, error) {
+	return a.CreateTabEx(shell, sshConfig, nil)
+}
+
+// CreateTabEx creates a new terminal tab with extended support for all connection types
+func (a *App) CreateTabEx(shell string, sshConfig *SSHConfig, rdpConfig *RDPConfig) (*Tab, error) {
 	a.terminal.mutex.Lock()
 	defer a.terminal.mutex.Unlock()
 
@@ -45,6 +51,19 @@ func (a *App) CreateTab(shell string, sshConfig *SSHConfig) (*Tab, error) {
 		}
 	}
 
+	// Handle RDP connections
+	if rdpConfig != nil {
+		// Validate RDP config
+		if err := rdpConfig.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid RDP config: %w", err)
+		}
+		connectionType = ConnectionTypeRDP
+		title = fmt.Sprintf("%s@%s (RDP)", rdpConfig.Username, rdpConfig.Host)
+		if rdpConfig.Port != 3389 {
+			title = fmt.Sprintf("%s@%s:%d (RDP)", rdpConfig.Username, rdpConfig.Host, rdpConfig.Port)
+		}
+	}
+
 	// Create tab
 	tab := &Tab{
 		ID:             tabId,
@@ -54,6 +73,7 @@ func (a *App) CreateTab(shell string, sshConfig *SSHConfig) (*Tab, error) {
 		IsActive:       false,
 		ConnectionType: connectionType,
 		SSHConfig:      sshConfig,
+		RDPConfig:      rdpConfig,
 		Created:        time.Now(),
 		Status:         status,
 		ErrorMessage:   "",
@@ -200,8 +220,24 @@ func (a *App) StartTabShellWithSize(tabId string, cols, rows int) error {
 
 	var err error
 
-	// Handle SSH connections with unified messaging system
-	if tab.ConnectionType == "ssh" && tab.SSHConfig != nil {
+	// Handle RDP connections
+	if tab.ConnectionType == "rdp" && tab.RDPConfig != nil {
+		// Start unified connection flow for RDP
+		target := fmt.Sprintf("%s@%s:%d (RDP)", tab.RDPConfig.Username, tab.RDPConfig.Host, tab.RDPConfig.Port)
+		a.messages.StartConnectionFlow(tab.SessionID, target, []string{"RDP Protocol"})
+
+		fmt.Printf("RDP Connection: Starting RDP session with dimensions %dx%d for %s\n", cols, rows, tab.RDPConfig.Host)
+
+		// Attempt RDP connection with terminal dimensions
+		err = a.startRDPSessionWithSize(tab, cols, rows)
+
+		if err != nil {
+			a.messages.ConnectionFailed(tab.SessionID, err)
+		} else {
+			a.messages.SessionReady(tab.SessionID)
+		}
+	} else if tab.ConnectionType == "ssh" && tab.SSHConfig != nil {
+		// Handle SSH connections with unified messaging system
 		// Start unified connection flow
 		target := fmt.Sprintf("%s@%s:%d", tab.SSHConfig.Username, tab.SSHConfig.Host, tab.SSHConfig.Port)
 		authMethods := []string{} // Will be populated in CreateSSHSession
@@ -324,7 +360,7 @@ func (a *App) GetTabStatus(tabId string) (map[string]interface{}, error) {
 	}, nil
 }
 
-// ForceDisconnectTab forcefully disconnects a hanging SSH tab
+// ForceDisconnectTab forcefully disconnects a hanging SSH or RDP tab
 func (a *App) ForceDisconnectTab(tabId string) error {
 	a.terminal.mutex.RLock()
 	tab, exists := a.terminal.tabs[tabId]
@@ -334,13 +370,18 @@ func (a *App) ForceDisconnectTab(tabId string) error {
 		return fmt.Errorf("tab %s not found", tabId)
 	}
 
-	if tab.ConnectionType != "ssh" {
-		return fmt.Errorf("tab %s is not an SSH connection", tabId)
-	}
-
-	// Force disconnect the SSH session
-	if err := a.ForceDisconnectSSHSession(tab.SessionID); err != nil {
-		return fmt.Errorf("failed to force disconnect SSH session: %w", err)
+	if tab.ConnectionType == "ssh" {
+		// Force disconnect the SSH session
+		if err := a.ForceDisconnectSSHSession(tab.SessionID); err != nil {
+			return fmt.Errorf("failed to force disconnect SSH session: %w", err)
+		}
+	} else if tab.ConnectionType == "rdp" {
+		// Force disconnect the RDP session
+		if err := a.CloseRDPSession(tab.SessionID); err != nil {
+			return fmt.Errorf("failed to force disconnect RDP session: %w", err)
+		}
+	} else {
+		return fmt.Errorf("tab %s is not a remote connection (SSH/RDP)", tabId)
 	}
 
 	// Update tab status
@@ -361,7 +402,7 @@ func (a *App) ForceDisconnectTab(tabId string) error {
 	return nil
 }
 
-// ReconnectTab reconnects a disconnected SSH tab
+// ReconnectTab reconnects a disconnected SSH or RDP tab
 func (a *App) ReconnectTab(tabId string) error {
 	a.terminal.mutex.Lock()
 	tab, exists := a.terminal.tabs[tabId]
@@ -370,22 +411,31 @@ func (a *App) ReconnectTab(tabId string) error {
 		return fmt.Errorf("tab %s not found", tabId)
 	}
 
-	// Only allow reconnection for SSH tabs
-	if tab.ConnectionType != "ssh" || tab.SSHConfig == nil {
-		a.terminal.mutex.Unlock()
-		return fmt.Errorf("tab %s is not an SSH connection", tabId)
+	// Allow reconnection for SSH and RDP tabs
+	if tab.ConnectionType == "ssh" && tab.SSHConfig != nil {
+		return a.reconnectSSHTab(tab)
+	} else if tab.ConnectionType == "rdp" && tab.RDPConfig != nil {
+		return a.reconnectRDPTab(tab)
 	}
+
+	a.terminal.mutex.Unlock()
+	return fmt.Errorf("tab %s is not a remote connection (SSH/RDP)", tabId)
+}
+
+// reconnectSSHTab reconnects a disconnected SSH tab
+func (a *App) reconnectSSHTab(tab *Tab) error {
 
 	// Update status to connecting
 	tab.Status = "connecting"
 	tab.ErrorMessage = ""
 	sessionID := tab.SessionID
+	tabID := tab.ID
 	a.terminal.mutex.Unlock()
 
 	// Emit status update
 	if a.ctx != nil {
 		wailsRuntime.EventsEmit(a.ctx, "tab-status-update", map[string]interface{}{
-			"tabId":  tabId,
+			"tabId":  tabID,
 			"status": "connecting",
 		})
 	}
@@ -446,12 +496,61 @@ func (a *App) ReconnectTab(tabId string) error {
 			// Emit reconnection sizing event to frontend to trigger Phase 2 sizing system
 			wailsRuntime.EventsEmit(a.ctx, "tab-reconnected-sizing", map[string]interface{}{
 				"sessionId": sessionID,
-				"tabId":     tabId,
+				"tabId":     tabID,
 				"immediate": true, // Flag for immediate enhanced sizing
 			})
 		}()
 	}
 
+	return nil
+}
+
+// reconnectRDPTab reconnects a disconnected RDP tab
+func (a *App) reconnectRDPTab(tab *Tab) error {
+	// Update status to connecting
+	tab.Status = "connecting"
+	tab.ErrorMessage = ""
+	sessionID := tab.SessionID
+	tabID := tab.ID
+	a.terminal.mutex.Unlock()
+
+	// Emit status update
+	if a.ctx != nil {
+		wailsRuntime.EventsEmit(a.ctx, "tab-status-update", map[string]interface{}{
+			"tabId":  tabID,
+			"status": "connecting",
+		})
+	}
+
+	// Clean up old failed/disconnected session before reconnecting
+	fmt.Printf("Cleaning up old RDP session before reconnect: %s\n", sessionID)
+
+	// Close and remove old RDP session if it exists
+	a.rdp.rdpSessionsMutex.Lock()
+	if oldSession, exists := a.rdp.rdpSessions[sessionID]; exists {
+		fmt.Printf("Removing old RDP session: %s\n", sessionID)
+		// Close connection
+		if oldSession.conn != nil {
+			if conn, ok := oldSession.conn.(net.Conn); ok {
+				conn.Close()
+			}
+		}
+		// Remove from map
+		delete(a.rdp.rdpSessions, sessionID)
+	}
+	a.rdp.rdpSessionsMutex.Unlock()
+
+	// Get current canvas dimensions from the frontend
+	width, height := 1024, 768 // default fallback
+
+	// Start fresh RDP session with current dimensions
+	err := a.startRDPSessionWithSize(tab, width, height)
+	if err != nil {
+		a.messages.ConnectionFailed(sessionID, err)
+		return err
+	}
+
+	fmt.Printf("RDP session reconnected successfully for %s\n", sessionID)
 	return nil
 }
 
@@ -503,9 +602,11 @@ func (a *App) CreateTabFromProfile(profileID string) (*Tab, error) {
 	var err error
 	switch profile.Type {
 	case "ssh":
-		tab, err = a.CreateTab("", profile.SSHConfig)
+		tab, err = a.CreateTabEx("", profile.SSHConfig, nil)
+	case "rdp":
+		tab, err = a.CreateTabEx("", nil, profile.RDPConfig)
 	default:
-		tab, err = a.CreateTab(profile.Shell, nil)
+		tab, err = a.CreateTabEx(profile.Shell, nil, nil)
 	}
 
 	// Set the profile ID on the created tab
@@ -514,4 +615,26 @@ func (a *App) CreateTabFromProfile(profileID string) (*Tab, error) {
 	}
 
 	return tab, err
+}
+
+// startRDPSessionWithSize starts an RDP session for a tab with specified dimensions
+func (a *App) startRDPSessionWithSize(tab *Tab, cols, rows int) error {
+	// Update RDP config with current dimensions
+	tab.RDPConfig.Width = cols
+	tab.RDPConfig.Height = rows
+
+	// Create RDP session with dimensions
+	rdpSession, err := a.CreateRDPSessionWithSize(tab.SessionID, tab.RDPConfig, cols, rows)
+	if err != nil {
+		return fmt.Errorf("failed to create RDP session: %w", err)
+	}
+
+	// Store RDP session
+	a.rdp.rdpSessionsMutex.Lock()
+	a.rdp.rdpSessions[tab.SessionID] = rdpSession
+	a.rdp.rdpSessionsMutex.Unlock()
+
+	fmt.Printf("RDP session started for %s with dimensions %dx%d\n", tab.SessionID, cols, rows)
+
+	return nil
 }

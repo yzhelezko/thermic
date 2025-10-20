@@ -122,6 +122,32 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class RDPConfig {
+	    host: string;
+	    port: number;
+	    username: string;
+	    password?: string;
+	    domain?: string;
+	    width: number;
+	    height: number;
+	    colorDepth: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new RDPConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.host = source["host"];
+	        this.port = source["port"];
+	        this.username = source["username"];
+	        this.password = source["password"];
+	        this.domain = source["domain"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	        this.colorDepth = source["colorDepth"];
+	    }
+	}
 	export class SSHConfig {
 	    host: string;
 	    port: number;
@@ -153,6 +179,7 @@ export namespace main {
 	    workingDir: string;
 	    environment: Record<string, string>;
 	    sshConfig?: SSHConfig;
+	    rdpConfig?: RDPConfig;
 	    folderId?: string;
 	    sortOrder: number;
 	    // Go type: time
@@ -183,6 +210,7 @@ export namespace main {
 	        this.workingDir = source["workingDir"];
 	        this.environment = source["environment"];
 	        this.sshConfig = this.convertValues(source["sshConfig"], SSHConfig);
+	        this.rdpConfig = this.convertValues(source["rdpConfig"], RDPConfig);
 	        this.folderId = source["folderId"];
 	        this.sortOrder = source["sortOrder"];
 	        this.created = this.convertValues(source["created"], null);
@@ -358,6 +386,19 @@ export namespace main {
 		    return a;
 		}
 	}
+	
+	export class RDPSession {
+	
+	
+	    static createFrom(source: any = {}) {
+	        return new RDPSession(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	
+	    }
+	}
 	export class RemoteFileEntry {
 	    name: string;
 	    path: string;
@@ -424,6 +465,7 @@ export namespace main {
 	    isActive: boolean;
 	    connectionType: string;
 	    sshConfig?: SSHConfig;
+	    rdpConfig?: RDPConfig;
 	    profileId?: string;
 	    // Go type: time
 	    created: any;
@@ -443,6 +485,7 @@ export namespace main {
 	        this.isActive = source["isActive"];
 	        this.connectionType = source["connectionType"];
 	        this.sshConfig = this.convertValues(source["sshConfig"], SSHConfig);
+	        this.rdpConfig = this.convertValues(source["rdpConfig"], RDPConfig);
 	        this.profileId = source["profileId"];
 	        this.created = this.convertValues(source["created"], null);
 	        this.status = source["status"];

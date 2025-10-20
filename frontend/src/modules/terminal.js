@@ -212,6 +212,14 @@ export class TerminalManager {
                         // Route output to the correct terminal session
                         const terminalSession = this.terminals.get(sessionId);
 
+                        // RDP sessions use bitmap updates, not terminal output - skip terminal output for RDP
+                        if (terminalSession && terminalSession.type === 'rdp') {
+                            console.log(
+                                `✅ RDP: Ignoring terminal output for RDP session ${sessionId} (uses bitmap updates instead)`,
+                            );
+                            return;
+                        }
+
                         if (
                             terminalSession &&
                             terminalSession.isConnected &&
@@ -438,7 +446,141 @@ export class TerminalManager {
         this.updateTerminalContainer();
     }
 
-    createTerminalSession(sessionId) {
+    // ============================================================================
+    // RDP Canvas Creation and Rendering
+    // ============================================================================
+
+    createRDPCanvas(sessionId) {
+        console.log(`✅ RDP: Creating canvas for session: ${sessionId}`);
+
+        // Create canvas element
+        const canvas = document.createElement('canvas');
+        canvas.id = `rdp-canvas-${sessionId}`;
+        canvas.className = 'rdp-canvas';
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+        canvas.style.display = 'block';
+        canvas.style.backgroundColor = '#1a1a1a'; // Dark background for debugging
+
+        // Get 2D context for rendering
+        const ctx = canvas.getContext('2d');
+
+        // Create container for the canvas
+        const canvasContainer = document.createElement('div');
+        canvasContainer.className = 'terminal-instance rdp-instance';
+        canvasContainer.dataset.sessionId = sessionId;
+        canvasContainer.style.display = 'none'; // Initially hidden
+        canvasContainer.appendChild(canvas);
+
+        // Add to main terminal container
+        const mainContainer = document.getElementById('terminal');
+        mainContainer.appendChild(canvasContainer);
+
+        // Store in terminals map with RDP type
+        const sessionData = {
+            canvas: canvas,
+            context: ctx,
+            container: canvasContainer,
+            type: 'rdp',
+            isConnected: false,
+            lastActivity: Date.now(),
+        };
+        this.terminals.set(sessionId, sessionData);
+
+        // Set up RDP event listeners
+        this.setupRDPEventListeners();
+
+        console.log(`✅ RDP: Canvas created successfully`, { sessionId, type: 'rdp', canvasId: canvas.id });
+        return canvas;
+    }
+
+    setupRDPEventListeners() {
+        // Only set up once
+        if (this.rdpListenersSetup) {
+            return;
+        }
+
+        console.log('Setting up RDP event listeners');
+
+        // Listen for bitmap updates from backend
+        EventsOn('rdp-bitmap-update', (data) => {
+            const { sessionId, x, y, width, height, imageData } = data;
+            console.log(`RDP bitmap update for ${sessionId}: ${width}x${height} at (${x},${y})`);
+            this.renderRDPBitmap(sessionId, x, y, width, height, imageData);
+        });
+
+        this.rdpListenersSetup = true;
+    }
+
+    renderRDPBitmap(sessionId, x, y, width, height, base64ImageData) {
+        const session = this.terminals.get(sessionId);
+        if (!session || session.type !== 'rdp') {
+            console.warn(`RDP session ${sessionId} not found or not RDP type`);
+            return;
+        }
+
+        // Create image from base64 data
+        const img = new Image();
+        img.onload = () => {
+            // Draw image to canvas at specified coordinates
+            session.context.drawImage(img, x, y, width, height);
+            console.log(`RDP bitmap rendered for ${sessionId}`);
+        };
+        img.onerror = (error) => {
+            console.error(`Failed to load RDP bitmap for ${sessionId}:`, error);
+        };
+        img.src = `data:image/png;base64,${base64ImageData}`;
+    }
+
+    resizeRDPCanvas(sessionId) {
+        const session = this.terminals.get(sessionId);
+        if (!session || session.type !== 'rdp') {
+            return;
+        }
+
+        const container = session.container;
+        const canvas = session.canvas;
+
+        if (!container || !canvas) {
+            console.warn(`Cannot resize RDP canvas - missing container or canvas for ${sessionId}`);
+            return;
+        }
+
+        // Get container dimensions
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+
+        console.log(`Resizing RDP canvas ${sessionId} to ${width}x${height}`);
+
+        // Set canvas dimensions
+        canvas.width = width;
+        canvas.height = height;
+
+        // Notify backend of new dimensions using the ResizeShell function
+        ResizeShell(sessionId, width, height)
+            .then(() => {
+                console.log(`Backend notified of RDP resize for ${sessionId}`);
+            })
+            .catch((error) => {
+                console.error(`Failed to notify backend of RDP resize:`, error);
+            });
+    }
+
+    // TODO: Phase 3 - Add mouse and keyboard event handlers for RDP
+    // setupRDPInputHandlers(sessionId) {
+    //     const session = this.terminals.get(sessionId);
+    //     if (!session || session.type !== 'rdp') return;
+    //     
+    //     session.canvas.addEventListener('mousedown', (e) => { ... });
+    //     session.canvas.addEventListener('mousemove', (e) => { ... });
+    //     session.canvas.addEventListener('mouseup', (e) => { ... });
+    //     session.canvas.addEventListener('keydown', (e) => { ... });
+    //     session.canvas.addEventListener('keyup', (e) => { ... });
+    // }
+
+    createTerminalSession(sessionId, connectionType = 'local') {
+        console.log(`✅ RDP: createTerminalSession called with sessionId=${sessionId}, connectionType=${connectionType}`);
+        
         // Check session limits
         if (this.terminals.size >= this.maxSessions) {
             throw new Error(
@@ -448,6 +590,14 @@ export class TerminalManager {
 
         // Ensure global output listener is set up
         this.setupGlobalOutputListener();
+
+        // Handle RDP connections differently - create canvas instead of terminal
+        if (connectionType === 'rdp') {
+            console.log(`✅ RDP: Detected RDP connection type, creating canvas instead of terminal`);
+            return this.createRDPCanvas(sessionId);
+        }
+        
+        console.log(`✅ RDP: Creating regular xterm.js terminal for ${connectionType} connection`);
 
         // Create terminal instance with current theme and backend config
         const initialTheme = this.isDarkTheme ? THEMES.DARK : THEMES.LIGHT;
@@ -994,55 +1144,70 @@ export class TerminalManager {
             }
         }
 
-        // Show and activate new terminal
+        // Show and activate new terminal or RDP canvas
         const newSession = this.terminals.get(sessionId);
-        if (newSession && newSession.container && newSession.terminal) {
-            console.log(`Showing new session: ${sessionId}`);
+        console.log(`✅ RDP: Attempting to show session ${sessionId}`, newSession);
+        
+        if (newSession && newSession.container && (newSession.terminal || newSession.canvas)) {
+            console.log(`✅ RDP: Showing session ${sessionId} | Type: ${newSession.type || 'terminal'} | Has canvas: ${!!newSession.canvas} | Has terminal: ${!!newSession.terminal}`);
             try {
                 // Update active session first
                 this.activeSessionId = sessionId;
 
-                // Update backward compatibility properties
-                this.terminal = newSession.terminal;
-                this.fitAddon = newSession.fitAddon;
+                // Update backward compatibility properties (for terminal sessions)
+                if (newSession.terminal) {
+                    this.terminal = newSession.terminal;
+                    this.fitAddon = newSession.fitAddon;
+                }
                 this.sessionId = sessionId;
                 this.isConnected = newSession.isConnected;
                 this.eventUnsubscribe = this.globalOutputListener;
 
                 // Show the container
                 newSession.container.style.display = "block";
+                console.log(`✅ RDP: Container display set to block for ${sessionId}`);
 
-                // NEW: Wait for layout to settle after making visible
-                await this.waitForLayoutSettle();
-
-                // NEW: Validate container dimensions before sizing
-                if (!this.validateContainerDimensions(newSession.container)) {
-                    console.warn(
-                        `Container for session ${sessionId} has invalid dimensions after becoming visible`,
-                    );
-                    // Add to pending queue for retry
-                    this.addToPendingSizeQueue(sessionId);
+                // Handle RDP canvas resize
+                if (newSession.type === 'rdp') {
+                    console.log(`✅ RDP: This is an RDP session, resizing canvas for ${sessionId}`);
+                    // Wait a moment for container to be fully visible
+                    await this.waitForLayoutSettle();
+                    this.resizeRDPCanvas(sessionId);
                 } else {
-                    // NEW: Phase 2 - Use enhanced sizing if available, fallback to visibility-aware
-                    try {
-                        await this.performEnhancedSizing(sessionId);
-                    } catch (error) {
-                        console.warn(
-                            `Enhanced sizing failed for ${sessionId}, using fallback:`,
-                            error,
-                        );
-                        await this.performVisibilityAwareSizing(sessionId);
-                    }
-                }
+                    console.log(`✅ RDP: This is a terminal session, not RDP`);
+                    // Handle regular terminal sizing
+                    // NEW: Wait for layout to settle after making visible
+                    await this.waitForLayoutSettle();
 
-                // Focus the terminal
-                try {
-                    newSession.terminal.focus();
-                    console.log(
-                        `Successfully switched to session: ${sessionId}`,
-                    );
-                } catch (error) {
-                    console.warn("Error focusing terminal:", error);
+                    // NEW: Validate container dimensions before sizing
+                    if (!this.validateContainerDimensions(newSession.container)) {
+                        console.warn(
+                            `Container for session ${sessionId} has invalid dimensions after becoming visible`,
+                        );
+                        // Add to pending queue for retry
+                        this.addToPendingSizeQueue(sessionId);
+                    } else {
+                        // NEW: Phase 2 - Use enhanced sizing if available, fallback to visibility-aware
+                        try {
+                            await this.performEnhancedSizing(sessionId);
+                        } catch (error) {
+                            console.warn(
+                                `Enhanced sizing failed for ${sessionId}, using fallback:`,
+                                error,
+                            );
+                            await this.performVisibilityAwareSizing(sessionId);
+                        }
+                    }
+
+                    // Focus the terminal (only for terminal sessions)
+                    try {
+                        newSession.terminal.focus();
+                        console.log(
+                            `Successfully switched to session: ${sessionId}`,
+                        );
+                    } catch (error) {
+                        console.warn("Error focusing terminal:", error);
+                    }
                 }
             } catch (error) {
                 console.error("Error during session switch:", error);

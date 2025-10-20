@@ -1498,6 +1498,7 @@ export function createProfileFormTemplate(mode, type, data = null) {
                             <select class="modern-select" id="profile-type">
                                <option value="local"${data?.type === 'local' || !data?.type ? ' selected' : ''}>Local Shell</option>
                                <option value="ssh"${data?.type === 'ssh' ? ' selected' : ''}>SSH Connection</option>
+                               <option value="rdp"${data?.type === 'rdp' ? ' selected' : ''}>RDP Connection</option>
                                <option value="custom"${data?.type === 'custom' ? ' selected' : ''}>Custom Command</option>
                             </select>
                         </div>
@@ -1518,6 +1519,46 @@ export function createProfileFormTemplate(mode, type, data = null) {
                     <label for="profile-workdir">Working Directory (optional)</label>
                                             <input type="text" id="profile-workdir" class="form-input" value="${data?.workingDir || ''}" placeholder="Enter working directory"
                             autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
+                </div>
+            </div>
+
+            <div class="profile-form-section rdp-group" style="display: ${data?.type === 'rdp' ? 'block' : 'none'}">
+                <div class="profile-form-section-title">
+                    <span class="profile-form-section-icon"><img src="./icons/laptop.svg" class="svg-icon" alt="💻"></span>
+                    RDP Connection Settings
+                </div>
+                <div class="form-group">
+                    <label for="rdp-host">RDP Host</label>
+                    <input type="text" id="rdp-host" class="form-input" value="${data?.rdpConfig?.host || ''}" placeholder="hostname or IP address"
+                        autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
+                </div>
+                <div class="form-group">
+                    <label for="rdp-port">Port</label>
+                    <input type="number" id="rdp-port" class="form-input" value="${data?.rdpConfig?.port || 3389}" placeholder="3389"
+                        min="1" max="65535" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label for="rdp-username">Username</label>
+                    <input type="text" id="rdp-username" class="form-input" value="${data?.rdpConfig?.username || ''}" placeholder="username"
+                        autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
+                </div>
+                <div class="form-group">
+                    <label for="rdp-password">Password</label>
+                    <input type="password" id="rdp-password" class="form-input" value="${data?.rdpConfig?.password || ''}" placeholder="password"
+                        autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label for="rdp-domain">Domain (optional)</label>
+                    <input type="text" id="rdp-domain" class="form-input" value="${data?.rdpConfig?.domain || ''}" placeholder="Windows domain"
+                        autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
+                </div>
+                <div class="form-group">
+                    <label for="rdp-color-depth">Color Depth</label>
+                    <select id="rdp-color-depth" class="form-select">
+                        <option value="16"${data?.rdpConfig?.colorDepth === 16 ? ' selected' : ''}>16-bit</option>
+                        <option value="24"${data?.rdpConfig?.colorDepth === 24 || !data?.rdpConfig?.colorDepth ? ' selected' : ''}>24-bit (recommended)</option>
+                        <option value="32"${data?.rdpConfig?.colorDepth === 32 ? ' selected' : ''}>32-bit</option>
+                    </select>
                 </div>
             </div>
 

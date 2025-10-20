@@ -48,6 +48,7 @@ func (cs ConnectionStatus) String() string {
 const (
 	ProfileTypeLocal  = "local"
 	ProfileTypeSSH    = "ssh"
+	ProfileTypeRDP    = "rdp"
 	ProfileTypeCustom = "custom"
 )
 
@@ -55,6 +56,7 @@ const (
 const (
 	ConnectionTypeLocal = "local"
 	ConnectionTypeSSH   = "ssh"
+	ConnectionTypeRDP   = "rdp"
 )
 
 // Virtual folder type constants
@@ -193,6 +195,42 @@ type SSHManager struct {
 	resourceManager  *ResourceManager
 }
 
+// RDPSession represents an active RDP connection
+type RDPSession struct {
+	sessionID string
+	width     int
+	height    int
+	mu        sync.RWMutex
+	cleaning  bool
+	done      chan bool
+	closed    chan bool
+	// Connection and protocol stack components
+	// Store as interfaces to avoid import cycle
+	conn interface{} // net.Conn
+	pdu  interface{} // *pdu.Client - main PDU layer for sending/receiving
+}
+
+// SetCleaning atomically sets the session as cleaning
+func (r *RDPSession) SetCleaning(cleaning bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.cleaning = cleaning
+}
+
+// IsCleaning atomically checks if the session is cleaning
+func (r *RDPSession) IsCleaning() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.cleaning
+}
+
+// RDPManager handles RDP connections
+type RDPManager struct {
+	rdpSessions      map[string]*RDPSession
+	rdpSessionsMutex sync.RWMutex
+	resourceManager  *ResourceManager
+}
+
 // MonitoringManager handles system metrics history and update rates
 type MonitoringManager struct {
 	sessionHistories map[string]*SessionMetrics // Per-session metric histories
@@ -247,6 +285,7 @@ type App struct {
 	terminal        *TerminalManager
 	profiles        *ProfileManager
 	ssh             *SSHManager
+	rdp             *RDPManager
 	config          *ConfigManager
 	messages        *MessageManager
 	ai              *AIManager
@@ -266,6 +305,9 @@ func (a *App) Close() error {
 	}
 	if a.ssh != nil && a.ssh.resourceManager != nil {
 		a.ssh.resourceManager.Cleanup()
+	}
+	if a.rdp != nil && a.rdp.resourceManager != nil {
+		a.rdp.resourceManager.Cleanup()
 	}
 	if a.config != nil && a.config.resourceManager != nil {
 		a.config.resourceManager.Cleanup()
@@ -334,8 +376,9 @@ type Tab struct {
 	SessionID      string     `json:"sessionId"`
 	Shell          string     `json:"shell"`
 	IsActive       bool       `json:"isActive"`
-	ConnectionType string     `json:"connectionType"` // "local" or "ssh"
+	ConnectionType string     `json:"connectionType"` // "local", "ssh", or "rdp"
 	SSHConfig      *SSHConfig `json:"sshConfig,omitempty"`
+	RDPConfig      *RDPConfig `json:"rdpConfig,omitempty"`
 	ProfileID      string     `json:"profileId,omitempty"` // ID of the profile this tab was created from
 	Created        time.Time  `json:"created"`
 	Status         string     `json:"status"`                 // "connecting", "connected", "failed", "disconnected"
@@ -353,11 +396,14 @@ func (t *Tab) Validate() error {
 	if t.SessionID == "" {
 		return fmt.Errorf("tab session ID cannot be empty")
 	}
-	if t.ConnectionType != ConnectionTypeLocal && t.ConnectionType != ConnectionTypeSSH {
+	if t.ConnectionType != ConnectionTypeLocal && t.ConnectionType != ConnectionTypeSSH && t.ConnectionType != ConnectionTypeRDP {
 		return fmt.Errorf("invalid connection type: %s", t.ConnectionType)
 	}
 	if t.ConnectionType == ConnectionTypeSSH && t.SSHConfig == nil {
 		return fmt.Errorf("SSH config required for SSH connection type")
+	}
+	if t.ConnectionType == ConnectionTypeRDP && t.RDPConfig == nil {
+		return fmt.Errorf("RDP config required for RDP connection type")
 	}
 	return nil
 }
@@ -372,6 +418,18 @@ type SSHConfig struct {
 	AllowKeyAutoDiscovery bool   `json:"allowKeyAutoDiscovery,omitempty"` // Allow automatic SSH key discovery
 }
 
+// RDPConfig represents RDP connection configuration
+type RDPConfig struct {
+	Host       string `json:"host"`
+	Port       int    `json:"port"` // Default 3389
+	Username   string `json:"username"`
+	Password   string `json:"password,omitempty"` // RDP password
+	Domain     string `json:"domain,omitempty"`   // Optional Windows domain
+	Width      int    `json:"width"`              // Screen width
+	Height     int    `json:"height"`             // Screen height
+	ColorDepth int    `json:"colorDepth"`         // Bits per pixel (16, 24, 32)
+}
+
 // Validate implements the Validator interface for SSHConfig
 func (ssh *SSHConfig) Validate() error {
 	if ssh.Host == "" {
@@ -382,6 +440,26 @@ func (ssh *SSHConfig) Validate() error {
 	}
 	if ssh.Username == "" {
 		return fmt.Errorf("SSH username cannot be empty")
+	}
+	return nil
+}
+
+// Validate implements the Validator interface for RDPConfig
+func (rdp *RDPConfig) Validate() error {
+	if rdp.Host == "" {
+		return fmt.Errorf("RDP host cannot be empty")
+	}
+	if rdp.Port <= 0 || rdp.Port > 65535 {
+		return fmt.Errorf("RDP port must be between 1 and 65535, got: %d", rdp.Port)
+	}
+	if rdp.Username == "" {
+		return fmt.Errorf("RDP username cannot be empty")
+	}
+	if rdp.Width <= 0 || rdp.Height <= 0 {
+		return fmt.Errorf("RDP screen dimensions must be positive, got: %dx%d", rdp.Width, rdp.Height)
+	}
+	if rdp.ColorDepth != 16 && rdp.ColorDepth != 24 && rdp.ColorDepth != 32 {
+		return fmt.Errorf("RDP color depth must be 16, 24, or 32, got: %d", rdp.ColorDepth)
 	}
 	return nil
 }
@@ -400,11 +478,12 @@ type Profile struct {
 	ID           string            `yaml:"id" json:"id"`
 	Name         string            `yaml:"name" json:"name"`
 	Icon         string            `yaml:"icon" json:"icon"`
-	Type         string            `yaml:"type" json:"type"` // "local", "ssh", "custom"
+	Type         string            `yaml:"type" json:"type"` // "local", "ssh", "rdp", "custom"
 	Shell        string            `yaml:"shell" json:"shell"`
 	WorkingDir   string            `yaml:"working_dir" json:"workingDir"`
 	Environment  map[string]string `yaml:"environment" json:"environment"`
 	SSHConfig    *SSHConfig        `yaml:"ssh_config,omitempty" json:"sshConfig,omitempty"`
+	RDPConfig    *RDPConfig        `yaml:"rdp_config,omitempty" json:"rdpConfig,omitempty"`
 	FolderID     string            `yaml:"folder_id,omitempty" json:"folderId,omitempty"` // Direct reference to parent folder by ID
 	SortOrder    int               `yaml:"sort_order" json:"sortOrder"`
 	Created      time.Time         `yaml:"created" json:"created"`
@@ -428,12 +507,17 @@ func (p *Profile) Validate() error {
 	if p.Name == "" {
 		return fmt.Errorf("profile name cannot be empty")
 	}
-	if p.Type != ProfileTypeLocal && p.Type != ProfileTypeSSH && p.Type != ProfileTypeCustom {
+	if p.Type != ProfileTypeLocal && p.Type != ProfileTypeSSH && p.Type != ProfileTypeRDP && p.Type != ProfileTypeCustom {
 		return fmt.Errorf("invalid profile type: %s", p.Type)
 	}
 	if p.Type == ProfileTypeSSH && p.SSHConfig != nil {
 		if err := p.SSHConfig.Validate(); err != nil {
 			return fmt.Errorf("invalid SSH config: %w", err)
+		}
+	}
+	if p.Type == ProfileTypeRDP && p.RDPConfig != nil {
+		if err := p.RDPConfig.Validate(); err != nil {
+			return fmt.Errorf("invalid RDP config: %w", err)
 		}
 	}
 	if len(p.Tags) > MaxTagsPerProfile {
@@ -587,6 +671,14 @@ func NewApp() *App {
 	}
 	mainRM.Register(ssh.resourceManager)
 
+	// Create RDP manager with resource management
+	rdpRM := NewResourceManager()
+	rdp := &RDPManager{
+		rdpSessions:     make(map[string]*RDPSession),
+		resourceManager: rdpRM,
+	}
+	mainRM.Register(rdp.resourceManager)
+
 	// Create config manager with resource management
 	configRM := NewResourceManager()
 	config := &ConfigManager{
@@ -610,6 +702,7 @@ func NewApp() *App {
 		terminal:        terminal,
 		profiles:        profiles,
 		ssh:             ssh,
+		rdp:             rdp,
 		config:          config,
 		monitoring:      monitoring,
 		resourceManager: mainRM,

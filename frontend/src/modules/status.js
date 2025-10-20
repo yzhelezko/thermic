@@ -119,6 +119,15 @@ export class StatusManager {
                 
                 // Add status-based coloring
                 statusInfo.className = `status-${tab.status || 'unknown'}`;
+            } else if (tab.connectionType === 'rdp') {
+                // RDP connection
+                const connectionStatus = this.getConnectionStatusText(tab.status);
+                statusInfo.textContent = connectionStatus;
+                
+                selectedShell.textContent = `${tab.title} (RDP)`;
+                
+                // Add status-based coloring
+                statusInfo.className = `status-${tab.status || 'unknown'}`;
             } else {
                 // Local shell
                 statusInfo.textContent = 'Local Shell';
