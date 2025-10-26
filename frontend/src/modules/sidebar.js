@@ -316,14 +316,17 @@ export class SidebarManager {
             let newTab;
             if (profile.type === 'ssh' && profile.sshConfig) {
                 console.log('Creating SSH tab with config:', profile.sshConfig);
-                newTab = await tabsManager.createNewTab(null, profile.sshConfig, profileId);
+                newTab = await tabsManager.createNewTab(null, profile.sshConfig, profileId, null);
+            } else if (profile.type === 'rdp' && profile.rdpConfig) {
+                console.log('Creating RDP tab with config:', profile.rdpConfig);
+                newTab = await tabsManager.createNewTab(null, null, profileId, profile.rdpConfig);
             } else {
                 console.log('Creating local tab with shell:', profile.shell);
-                newTab = await tabsManager.createNewTab(profile.shell || null, null, profileId);
+                newTab = await tabsManager.createNewTab(profile.shell || null, null, profileId, null);
             }
             
-            // Set working directory if specified
-            if (newTab && profile.workingDir) {
+            // Set working directory if specified (only for shell-based connections)
+            if (newTab && profile.workingDir && profile.type !== 'rdp') {
                 try {
                     // Send cd command to change directory
                     const cdCommand = process.platform === 'win32' 
@@ -1118,12 +1121,15 @@ export class SidebarManager {
             const selectedType = e.target.value;
             
             // Hide all type-specific groups and sections
-            document.querySelectorAll('.local-shell-group, .ssh-group, .custom-group').forEach(group => {
+            document.querySelectorAll('.local-shell-group, .ssh-group, .rdp-group, .custom-group').forEach(group => {
                 group.style.display = 'none';
             });
 
-            // Hide SSH section entirely
+            // Hide SSH and RDP sections entirely
             document.querySelectorAll('.profile-form-section.ssh-group').forEach(section => {
+                section.style.display = 'none';
+            });
+            document.querySelectorAll('.profile-form-section.rdp-group').forEach(section => {
                 section.style.display = 'none';
             });
 
@@ -1137,6 +1143,13 @@ export class SidebarManager {
                     group.style.display = 'block';
                 });
                 document.querySelectorAll('.profile-form-section.ssh-group').forEach(section => {
+                    section.style.display = 'block';
+                });
+            } else if (selectedType === 'rdp') {
+                document.querySelectorAll('.rdp-group').forEach(group => {
+                    group.style.display = 'block';
+                });
+                document.querySelectorAll('.profile-form-section.rdp-group').forEach(section => {
                     section.style.display = 'block';
                 });
             } else if (selectedType === 'custom') {
@@ -1363,6 +1376,7 @@ export class SidebarManager {
 
         let shell = '';
         let sshConfig = null;
+        let rdpConfig = null;
 
         if (profileType === 'local') {
             shell = document.getElementById('profile-shell').value;
@@ -1379,6 +1393,20 @@ export class SidebarManager {
 
             const allowKeyAutoDiscovery = document.getElementById('ssh-auto-discover').checked;
             sshConfig = { host, port, username, password, keyPath, allowKeyAutoDiscovery };
+        } else if (profileType === 'rdp') {
+            const host = document.getElementById('rdp-host').value.trim();
+            const port = parseInt(document.getElementById('rdp-port').value) || 3389;
+            const username = document.getElementById('rdp-username').value.trim();
+            const password = document.getElementById('rdp-password').value;
+            const domain = document.getElementById('rdp-domain').value.trim();
+            const colorDepth = parseInt(document.getElementById('rdp-color-depth').value) || 24;
+
+            if (!host || !username) {
+                throw new Error('RDP host and username are required');
+            }
+
+            // Screen dimensions will be set dynamically based on tab size
+            rdpConfig = { host, port, username, password, domain, colorDepth, width: 1024, height: 768 };
         } else if (profileType === 'custom') {
             shell = document.getElementById('custom-command').value.trim();
             if (!shell) {
@@ -1394,6 +1422,7 @@ export class SidebarManager {
             existingData.shell = shell;
             existingData.workingDir = workingDir;
             existingData.sshConfig = sshConfig;
+            existingData.rdpConfig = rdpConfig;
             await window.go.main.App.UpdateProfile(existingData);
         } else {
             // Create new profile using ID-based reference instead of path-based
@@ -1402,6 +1431,11 @@ export class SidebarManager {
             
             if (sshConfig) {
                 profile.sshConfig = sshConfig;
+                await window.go.main.App.UpdateProfile(profile);
+            }
+            
+            if (rdpConfig) {
+                profile.rdpConfig = rdpConfig;
                 await window.go.main.App.UpdateProfile(profile);
             }
             

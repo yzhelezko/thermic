@@ -34,6 +34,10 @@ export function CloseMonitoringSession(arg1) {
   return window['go']['main']['App']['CloseMonitoringSession'](arg1);
 }
 
+export function CloseRDPSession(arg1) {
+  return window['go']['main']['App']['CloseRDPSession'](arg1);
+}
+
 export function CloseSSHSession(arg1) {
   return window['go']['main']['App']['CloseSSHSession'](arg1);
 }
@@ -98,6 +102,14 @@ export function CreateProfileWithFolderIDAPI(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['CreateProfileWithFolderIDAPI'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function CreateRDPSession(arg1, arg2) {
+  return window['go']['main']['App']['CreateRDPSession'](arg1, arg2);
+}
+
+export function CreateRDPSessionWithSize(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['CreateRDPSessionWithSize'](arg1, arg2, arg3, arg4);
+}
+
 export function CreateRemoteDirectory(arg1, arg2) {
   return window['go']['main']['App']['CreateRemoteDirectory'](arg1, arg2);
 }
@@ -112,6 +124,10 @@ export function CreateSSHSessionWithSize(arg1, arg2, arg3, arg4) {
 
 export function CreateTab(arg1, arg2) {
   return window['go']['main']['App']['CreateTab'](arg1, arg2);
+}
+
+export function CreateTabEx(arg1, arg2, arg3) {
+  return window['go']['main']['App']['CreateTabEx'](arg1, arg2, arg3);
 }
 
 export function CreateTabFromProfile(arg1) {
@@ -172,6 +188,10 @@ export function DuplicateProfile(arg1) {
 
 export function EnableAI(arg1) {
   return window['go']['main']['App']['EnableAI'](arg1);
+}
+
+export function EnableRDPAudio(arg1, arg2) {
+  return window['go']['main']['App']['EnableRDPAudio'](arg1, arg2);
 }
 
 export function ExecuteMonitoringCommand(arg1, arg2) {
@@ -300,6 +320,10 @@ export function GetProfilesByType(arg1) {
 
 export function GetProfilesDirectory() {
   return window['go']['main']['App']['GetProfilesDirectory']();
+}
+
+export function GetRDPSessionInfo(arg1) {
+  return window['go']['main']['App']['GetRDPSessionInfo'](arg1);
 }
 
 export function GetRecentProfiles(arg1, arg2) {
@@ -482,6 +506,10 @@ export function ResetMetrics() {
   return window['go']['main']['App']['ResetMetrics']();
 }
 
+export function ResizeRDPSession(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ResizeRDPSession'](arg1, arg2, arg3);
+}
+
 export function ResizeSSHSession(arg1, arg2, arg3) {
   return window['go']['main']['App']['ResizeSSHSession'](arg1, arg2, arg3);
 }
@@ -538,6 +566,14 @@ export function SendAIRequest(arg1) {
   return window['go']['main']['App']['SendAIRequest'](arg1);
 }
 
+export function SendRDPKeyEvent(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SendRDPKeyEvent'](arg1, arg2, arg3);
+}
+
+export function SendRDPMouseEvent(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['SendRDPMouseEvent'](arg1, arg2, arg3, arg4, arg5);
+}
+
 export function SetAIConfig(arg1) {
   return window['go']['main']['App']['SetAIConfig'](arg1);
 }
@@ -586,12 +622,20 @@ export function StopProfileWatcher() {
   return window['go']['main']['App']['StopProfileWatcher']();
 }
 
+export function SyncRDPClipboard(arg1, arg2) {
+  return window['go']['main']['App']['SyncRDPClipboard'](arg1, arg2);
+}
+
 export function TestAIConnection() {
   return window['go']['main']['App']['TestAIConnection']();
 }
 
 export function ToggleFavoriteAPI(arg1) {
   return window['go']['main']['App']['ToggleFavoriteAPI'](arg1);
+}
+
+export function TransferRDPFile(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['TransferRDPFile'](arg1, arg2, arg3, arg4);
 }
 
 export function UpdateHostKey(arg1, arg2, arg3) {

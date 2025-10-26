@@ -1,5 +1,5 @@
 // Tabs management module
-import { CreateTab, GetTabs, SetActiveTab, CloseTab, StartTabShell, GetAvailableShellsFormatted, StartTabShellWithSize, ResizeShell, ForceDisconnectTab, ReconnectTab } from '../../wailsjs/go/main/App';
+import { CreateTab, CreateTabEx, GetTabs, SetActiveTab, CloseTab, StartTabShell, GetAvailableShellsFormatted, StartTabShellWithSize, ResizeShell, ForceDisconnectTab, ReconnectTab } from '../../wailsjs/go/main/App';
 import { generateSessionId, formatShellName, updateStatus } from './utils.js';
 
 export class TabsManager {
@@ -366,7 +366,7 @@ export class TabsManager {
         }
     }
 
-    async createNewTab(shell = null, sshConfig = null, profileId = null) {
+    async createNewTab(shell = null, sshConfig = null, profileId = null, rdpConfig = null) {
         try {
             updateStatus('Creating new tab...');
 
@@ -376,7 +376,7 @@ export class TabsManager {
             }
 
             // Use default shell if none specified
-            if (!shell && !sshConfig) {
+            if (!shell && !sshConfig && !rdpConfig) {
                 try {
                     shell = await this.terminalManager.getDefaultShell();
                 } catch (error) {
@@ -386,7 +386,10 @@ export class TabsManager {
             }
 
             // Create tab on backend (backend generates its own session ID)
-            const tab = await CreateTab(shell || '', sshConfig);
+            // Use CreateTabEx if rdpConfig is provided, otherwise use CreateTab for backward compatibility
+            const tab = rdpConfig 
+                ? await CreateTabEx(shell || '', sshConfig, rdpConfig)
+                : await CreateTab(shell || '', sshConfig);
             
             // Set profileId if provided (for tabs created from profiles)
             if (profileId) {
@@ -394,8 +397,8 @@ export class TabsManager {
                 console.log('🔗 Tab created with profile ID:', profileId);
             }
             
-            // Enhance tab title with formatted shell name
-            if (!sshConfig && shell) {
+            // Enhance tab title with formatted shell name (only for local shells)
+            if (!sshConfig && !rdpConfig && shell) {
                 const formattedShellName = this.getFormattedShellName(shell);
                 tab.formattedShellName = formattedShellName;
                 // Update title to include formatted shell name
@@ -405,8 +408,8 @@ export class TabsManager {
             // Add to local tabs (use backend's session ID)
             this.tabs.set(tab.id, tab);
 
-            // Create terminal session using backend's session ID
-            this.terminalManager.createTerminalSession(tab.sessionId);
+            // Create terminal session using backend's session ID and connection type
+            this.terminalManager.createTerminalSession(tab.sessionId, tab.connectionType);
 
             // Switch to the new tab immediately so user can see connection progress
             await this.switchToTab(tab.id);
@@ -1127,8 +1130,8 @@ export class TabsManager {
                 // The backend has already created the tabs and assigned session IDs
                 for (const [tabId, tab] of this.tabs) {
                     try {
-                        // Create terminal session using the backend's session ID
-                        this.terminalManager.createTerminalSession(tab.sessionId);
+                        // Create terminal session using the backend's session ID and connection type
+                        this.terminalManager.createTerminalSession(tab.sessionId, tab.connectionType);
                         
                         // Start shell process (backend will use the existing session ID)
                         await this.startTabShell(tabId);
