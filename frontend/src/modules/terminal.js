@@ -453,7 +453,7 @@ export class TerminalManager {
     createRDPCanvas(sessionId) {
         console.log(`✅ RDP: Creating canvas for session: ${sessionId}`);
 
-        // Create canvas element
+        // Create canvas element with initial size
         const canvas = document.createElement('canvas');
         canvas.id = `rdp-canvas-${sessionId}`;
         canvas.className = 'rdp-canvas';
@@ -461,15 +461,24 @@ export class TerminalManager {
         canvas.style.height = '100%';
         canvas.style.display = 'block';
         canvas.style.backgroundColor = '#1a1a1a'; // Dark background for debugging
+        
+        // Set initial canvas resolution (will be adjusted on resize)
+        canvas.width = 1024;
+        canvas.height = 768;
 
-        // Get 2D context for rendering
-        const ctx = canvas.getContext('2d');
+        // Get 2D context for rendering with image smoothing enabled
+        const ctx = canvas.getContext('2d', { alpha: false });
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
 
         // Create container for the canvas
         const canvasContainer = document.createElement('div');
         canvasContainer.className = 'terminal-instance rdp-instance';
         canvasContainer.dataset.sessionId = sessionId;
         canvasContainer.style.display = 'none'; // Initially hidden
+        canvasContainer.style.width = '100%';
+        canvasContainer.style.height = '100%';
+        canvasContainer.style.overflow = 'hidden';
         canvasContainer.appendChild(canvas);
 
         // Add to main terminal container
@@ -490,7 +499,13 @@ export class TerminalManager {
         // Set up RDP event listeners
         this.setupRDPEventListeners();
 
-        console.log(`✅ RDP: Canvas created successfully`, { sessionId, type: 'rdp', canvasId: canvas.id });
+        console.log(`✅ RDP: Canvas created successfully`, { 
+            sessionId, 
+            type: 'rdp', 
+            canvasId: canvas.id,
+            canvasSize: `${canvas.width}x${canvas.height}`
+        });
+        
         return canvas;
     }
 
@@ -505,8 +520,34 @@ export class TerminalManager {
         // Listen for bitmap updates from backend
         EventsOn('rdp-bitmap-update', (data) => {
             const { sessionId, x, y, width, height, imageData } = data;
-            console.log(`RDP bitmap update for ${sessionId}: ${width}x${height} at (${x},${y})`);
+            console.log(`📥 RDP bitmap update for ${sessionId}: ${width}x${height} at (${x},${y}), data length: ${imageData?.length || 0}`);
             this.renderRDPBitmap(sessionId, x, y, width, height, imageData);
+        });
+
+        // Listen for RDP ready event
+        EventsOn('rdp-ready', (data) => {
+            const { sessionId } = data;
+            console.log(`✅ RDP session ready: ${sessionId}`);
+            const session = this.terminals.get(sessionId);
+            if (session && session.type === 'rdp') {
+                session.isConnected = true;
+            }
+        });
+
+        // Listen for RDP errors
+        EventsOn('rdp-error', (data) => {
+            const { sessionId, error } = data;
+            console.error(`❌ RDP error for ${sessionId}:`, error);
+        });
+
+        // Listen for RDP closed event
+        EventsOn('rdp-closed', (data) => {
+            const { sessionId } = data;
+            console.log(`🔌 RDP connection closed: ${sessionId}`);
+            const session = this.terminals.get(sessionId);
+            if (session && session.type === 'rdp') {
+                session.isConnected = false;
+            }
         });
 
         this.rdpListenersSetup = true;
@@ -515,21 +556,39 @@ export class TerminalManager {
     renderRDPBitmap(sessionId, x, y, width, height, base64ImageData) {
         const session = this.terminals.get(sessionId);
         if (!session || session.type !== 'rdp') {
-            console.warn(`RDP session ${sessionId} not found or not RDP type`);
+            console.warn(`⚠️ RDP session ${sessionId} not found or not RDP type`);
+            return;
+        }
+
+        if (!base64ImageData) {
+            console.error(`❌ No image data provided for RDP bitmap for ${sessionId}`);
             return;
         }
 
         // Create image from base64 data
         const img = new Image();
         img.onload = () => {
-            // Draw image to canvas at specified coordinates
-            session.context.drawImage(img, x, y, width, height);
-            console.log(`RDP bitmap rendered for ${sessionId}`);
+            try {
+                // Draw image to canvas at specified coordinates
+                session.context.drawImage(img, x, y, width, height);
+                console.log(`✅ RDP bitmap rendered for ${sessionId} at (${x},${y}) size ${width}x${height}`);
+                
+                // Mark session as having received data
+                session.lastActivity = Date.now();
+            } catch (error) {
+                console.error(`❌ Error drawing RDP bitmap for ${sessionId}:`, error);
+            }
         };
         img.onerror = (error) => {
-            console.error(`Failed to load RDP bitmap for ${sessionId}:`, error);
+            console.error(`❌ Failed to load RDP bitmap image for ${sessionId}:`, error);
+            console.error(`Base64 data preview:`, base64ImageData?.substring(0, 100));
         };
-        img.src = `data:image/png;base64,${base64ImageData}`;
+        
+        try {
+            img.src = `data:image/png;base64,${base64ImageData}`;
+        } catch (error) {
+            console.error(`❌ Error setting image src for ${sessionId}:`, error);
+        }
     }
 
     resizeRDPCanvas(sessionId) {
@@ -546,23 +605,42 @@ export class TerminalManager {
             return;
         }
 
+        // Force a layout reflow to get accurate dimensions
+        container.offsetWidth;
+        container.offsetHeight;
+
         // Get container dimensions
         const width = container.clientWidth;
         const height = container.clientHeight;
 
-        console.log(`Resizing RDP canvas ${sessionId} to ${width}x${height}`);
+        // Skip if dimensions are invalid or too small
+        if (width <= 100 || height <= 100) {
+            console.warn(`Invalid RDP canvas dimensions for ${sessionId}: ${width}x${height}, will retry...`);
+            // Retry after a delay
+            setTimeout(() => this.resizeRDPCanvas(sessionId), 200);
+            return;
+        }
 
-        // Set canvas dimensions
+        console.log(`✅ Resizing RDP canvas ${sessionId} to ${width}x${height}`);
+
+        // Set canvas actual dimensions (backing buffer)
         canvas.width = width;
         canvas.height = height;
 
         // Notify backend of new dimensions using the ResizeShell function
+        // Backend now handles the case where session is still being established
         ResizeShell(sessionId, width, height)
             .then(() => {
-                console.log(`Backend notified of RDP resize for ${sessionId}`);
+                console.log(`✅ Backend notified of RDP resize for ${sessionId}: ${width}x${height}`);
             })
             .catch((error) => {
-                console.error(`Failed to notify backend of RDP resize:`, error);
+                // Don't log as error if it's just that the session is still connecting
+                const errorStr = String(error);
+                if (errorStr.includes('not found')) {
+                    console.log(`⏳ RDP session ${sessionId} still connecting, resize will apply when ready`);
+                } else {
+                    console.error(`❌ Failed to notify backend of RDP resize for ${sessionId}:`, error);
+                }
             });
     }
 
@@ -1170,8 +1248,13 @@ export class TerminalManager {
                 // Handle RDP canvas resize
                 if (newSession.type === 'rdp') {
                     console.log(`✅ RDP: This is an RDP session, resizing canvas for ${sessionId}`);
-                    // Wait a moment for container to be fully visible
+                    // Wait for container to be fully visible and sized
                     await this.waitForLayoutSettle();
+                    
+                    // Give extra time for canvas container to stabilize
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                    // Perform RDP canvas resize
                     this.resizeRDPCanvas(sessionId);
                 } else {
                     console.log(`✅ RDP: This is a terminal session, not RDP`);

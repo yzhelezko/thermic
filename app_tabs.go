@@ -228,14 +228,18 @@ func (a *App) StartTabShellWithSize(tabId string, cols, rows int) error {
 
 		fmt.Printf("RDP Connection: Starting RDP session with dimensions %dx%d for %s\n", cols, rows, tab.RDPConfig.Host)
 
-		// Attempt RDP connection with terminal dimensions
-		err = a.startRDPSessionWithSize(tab, cols, rows)
+		// Start RDP connection asynchronously to avoid blocking the UI
+		go func(t *Tab, c, r int) {
+			// Attempt RDP connection with terminal dimensions
+			err := a.startRDPSessionWithSize(t, c, r)
+			if err != nil {
+				fmt.Printf("RDP connection error for %s: %v\n", t.SessionID, err)
+				// Error handling is done inside startRDPSessionWithSize
+			}
+		}(tab, cols, rows)
 
-		if err != nil {
-			a.messages.ConnectionFailed(tab.SessionID, err)
-		} else {
-			a.messages.SessionReady(tab.SessionID)
-		}
+		// Return immediately - connection will complete asynchronously
+		return nil
 	} else if tab.ConnectionType == "ssh" && tab.SSHConfig != nil {
 		// Handle SSH connections with unified messaging system
 		// Start unified connection flow
@@ -623,13 +627,36 @@ func (a *App) startRDPSessionWithSize(tab *Tab, cols, rows int) error {
 	tab.RDPConfig.Width = cols
 	tab.RDPConfig.Height = rows
 
-	// Create RDP session with dimensions
+	// Pre-register a placeholder RDP session to avoid race condition with ResizeShell
+	// This prevents "session not found" errors when frontend tries to resize immediately
+	placeholderSession := &RDPSession{
+		sessionID: tab.SessionID,
+		width:     cols,
+		height:    rows,
+		cleaning:  false,
+		done:      make(chan bool),
+		closed:    make(chan bool),
+		conn:      nil, // Will be set after connection
+		pdu:       nil, // Will be set after connection
+	}
+
+	a.rdp.rdpSessionsMutex.Lock()
+	a.rdp.rdpSessions[tab.SessionID] = placeholderSession
+	a.rdp.rdpSessionsMutex.Unlock()
+
+	fmt.Printf("RDP: Pre-registered session %s with dimensions %dx%d\n", tab.SessionID, cols, rows)
+
+	// Create RDP session with dimensions (this may take time)
 	rdpSession, err := a.CreateRDPSessionWithSize(tab.SessionID, tab.RDPConfig, cols, rows)
 	if err != nil {
+		// Remove placeholder on error
+		a.rdp.rdpSessionsMutex.Lock()
+		delete(a.rdp.rdpSessions, tab.SessionID)
+		a.rdp.rdpSessionsMutex.Unlock()
 		return fmt.Errorf("failed to create RDP session: %w", err)
 	}
 
-	// Store RDP session
+	// Replace placeholder with actual session
 	a.rdp.rdpSessionsMutex.Lock()
 	a.rdp.rdpSessions[tab.SessionID] = rdpSession
 	a.rdp.rdpSessionsMutex.Unlock()

@@ -7,7 +7,9 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"log"
 	"net"
+	"os"
 	"sync"
 	"time"
 
@@ -21,6 +23,20 @@ import (
 	"github.com/tomatome/grdp/protocol/x224"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+// Global RDP logger initialization
+var rdpLoggerOnce sync.Once
+
+func initRDPLogger() {
+	rdpLoggerOnce.Do(func() {
+		// Create a custom logger that writes to a null writer to suppress output
+		// This prevents the "logger not inited" panic while keeping output clean
+		logger := log.New(os.Stdout, "[RDP] ", log.LstdFlags)
+		glog.SetLogger(logger)
+		glog.SetLevel(glog.NONE) // Disable all log levels
+		fmt.Println("RDP logger initialized")
+	})
+}
 
 // CreateRDPSession creates a new RDP connection and session
 func (a *App) CreateRDPSession(sessionID string, config *RDPConfig) (*RDPSession, error) {
@@ -45,8 +61,8 @@ func (a *App) CreateRDPSessionWithSize(sessionID string, config *RDPConfig, widt
 		width, height = 1024, 768 // fallback to default
 	}
 
-	// Set grdp logging level
-	glog.SetLevel(glog.INFO)
+	// Initialize grdp logger (only once globally) to prevent panic
+	initRDPLogger()
 
 	// Start connection flow with status messages
 	displayTarget := fmt.Sprintf("%s@%s:%d (RDP)", config.Username, config.Host, config.Port)
@@ -166,18 +182,38 @@ func (a *App) CreateRDPSessionWithSize(sessionID string, config *RDPConfig, widt
 		}
 	})
 
-	// Connect to RDP server
+	// Connect to RDP server asynchronously to avoid blocking
 	fmt.Printf("RDP: Initiating X224 connection for session %s\n", sessionID)
-	if err := x224Layer.Connect(); err != nil {
-		conn.Close()
-		a.messages.ConnectionFailed(sessionID, err)
-		return nil, fmt.Errorf("RDP connection failed: %w", err)
-	}
 
-	// Connection successful - update status
-	a.messages.SessionReady(sessionID)
-	fmt.Printf("RDP session created successfully for %s\n", sessionID)
-	return rdpSession, nil
+	// Channel for connection result
+	connectDone := make(chan error, 1)
+
+	// Run connection in goroutine with timeout
+	go func() {
+		err := x224Layer.Connect()
+		connectDone <- err
+	}()
+
+	// Wait for connection with timeout
+	select {
+	case err := <-connectDone:
+		if err != nil {
+			conn.Close()
+			a.messages.ConnectionFailed(sessionID, err)
+			return nil, fmt.Errorf("RDP connection failed: %w", err)
+		}
+		// Connection successful - update status
+		a.messages.SessionReady(sessionID)
+		fmt.Printf("RDP session created successfully for %s\n", sessionID)
+		return rdpSession, nil
+
+	case <-time.After(30 * time.Second):
+		// Connection timeout
+		conn.Close()
+		err := fmt.Errorf("RDP connection timeout after 30 seconds")
+		a.messages.ConnectionFailed(sessionID, err)
+		return nil, err
+	}
 }
 
 // handleRDPBitmap processes bitmap updates from RDP server and sends to frontend
@@ -308,11 +344,20 @@ func (a *App) ResizeRDPSession(sessionID string, width, height int) error {
 	session.mu.Lock()
 	session.width = width
 	session.height = height
+
+	// Check if PDU client is available (might not be if this is a placeholder session)
+	isPduAvailable := session.pdu != nil
 	session.mu.Unlock()
 
-	// TODO: Phase 2 - Send resize command to RDP server
-	// This would involve sending RDP protocol messages to change the desktop size
-	fmt.Printf("RDP session %s resized to %dx%d (placeholder)\n", sessionID, width, height)
+	// Only attempt to send resize if PDU is available and connection is established
+	if isPduAvailable {
+		// TODO: Phase 2 - Send resize command to RDP server
+		// This would involve sending RDP protocol messages to change the desktop size
+		fmt.Printf("RDP session %s resized to %dx%d (PDU resize not yet implemented)\n", sessionID, width, height)
+	} else {
+		// Session is still connecting or placeholder - dimensions stored for when connection completes
+		fmt.Printf("RDP session %s dimensions updated to %dx%d (connection still establishing)\n", sessionID, width, height)
+	}
 
 	return nil
 }
