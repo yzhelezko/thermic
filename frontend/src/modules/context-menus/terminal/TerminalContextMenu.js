@@ -98,8 +98,14 @@ export class TerminalContextMenu extends ContextMenuBase {
             
             // Small delay to ensure selection is complete
             setTimeout(async () => {
-                if (this.terminalManager.terminal && this.terminalManager.terminal.hasSelection()) {
-                    const selectedText = this.terminalManager.terminal.getSelection();
+                // Get the active terminal session
+                const activeSession = this.terminalManager.activeSessionId 
+                    ? this.terminalManager.terminals.get(this.terminalManager.activeSessionId)
+                    : null;
+                
+                // Check if active session has terminal and selection
+                if (activeSession && activeSession.terminal && activeSession.terminal.hasSelection()) {
+                    const selectedText = activeSession.terminal.getSelection();
                     if (selectedText && selectedText.trim().length > 0) {
                         try {
                             await navigator.clipboard.writeText(selectedText);
@@ -114,8 +120,13 @@ export class TerminalContextMenu extends ContextMenuBase {
 
         this.terminalContextMenuHandler = async (e) => {
             e.preventDefault();
-            // Right-click to paste - only if connected and has session
-            if (this.terminalManager.isConnected && this.terminalManager.sessionId) {
+            // Right-click to paste - get active session
+            const activeSession = this.terminalManager.activeSessionId 
+                ? this.terminalManager.terminals.get(this.terminalManager.activeSessionId)
+                : null;
+            
+            // Only paste if we have an active connected session
+            if (activeSession && activeSession.isConnected) {
                 try {
                     const text = await navigator.clipboard.readText();
                     if (text && text.trim()) {

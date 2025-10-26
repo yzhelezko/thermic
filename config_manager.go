@@ -435,6 +435,8 @@ func (c *SettingConfig) Update(a *App, value SettingValue) error {
 		a.config.config.Theme = value.(string)
 	case "ScrollbackLines":
 		a.config.config.ScrollbackLines = value.(int)
+	case "OpenLinksInExternalBrowser":
+		a.config.config.OpenLinksInExternalBrowser = value.(bool)
 
 	// AI Configuration Fields
 	case "AI.Enabled":
@@ -591,6 +593,13 @@ var settingConfigs = map[string]*SettingConfig{
 		ConfigField:   "ScrollbackLines",
 		RequiresMutex: true,
 	},
+	"OpenLinksInExternalBrowser": {
+		Name:          "OpenLinksInExternalBrowser",
+		Type:          SettingTypeBool,
+		RequiresEvent: true,
+		EventName:     "config:open-links-external-changed",
+		ConfigField:   "OpenLinksInExternalBrowser",
+	},
 	// AI Configuration Settings
 	"AIEnabled": {
 		Name:         "AIEnabled",
@@ -696,6 +705,8 @@ func (a *App) ConfigGet(settingName string) (SettingValue, error) {
 		a.config.mutex.RLock()
 		defer a.config.mutex.RUnlock()
 		return a.config.config.ScrollbackLines, nil
+	case "OpenLinksInExternalBrowser":
+		return a.config.config.OpenLinksInExternalBrowser, nil
 
 	// AI Configuration Settings
 	case "AIEnabled":
