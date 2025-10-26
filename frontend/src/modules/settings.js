@@ -321,6 +321,11 @@ export class SettingsManager {
             console.error('Error setting up terminal settings:', error);
         });
 
+        // --- URL Opening Settings Logic ---
+        this.setupURLSettings().catch(error => {
+            console.error('Error setting up URL settings:', error);
+        });
+
         // --- Profiles Path Settings Logic ---
         this.setupProfilesPathSettings().catch(error => {
             console.error('Error setting up profiles path settings:', error);
@@ -417,6 +422,41 @@ export class SettingsManager {
 
         } catch (error) {
             console.error('Error in setupTerminalSettings:', error);
+        }
+    }
+
+    async setupURLSettings() {
+        try {
+            // Get URL settings elements
+            const openLinksExternalToggle = document.getElementById('open-links-external-toggle');
+
+            if (!openLinksExternalToggle) {
+                console.warn('URL settings elements not found in DOM');
+                return;
+            }
+
+            // Load current setting from backend
+            const openLinksExternal = await window.go.main.App.ConfigGet("OpenLinksInExternalBrowser");
+
+            // Set initial toggle state
+            openLinksExternalToggle.checked = openLinksExternal;
+
+            // Add event listener for toggle
+            openLinksExternalToggle.addEventListener('change', async (event) => {
+                try {
+                    const enabled = event.target.checked;
+                    await window.go.main.App.ConfigSet("OpenLinksInExternalBrowser", enabled);
+                    showNotification(`URLs will ${enabled ? 'open in external browser' : 'open in-app'}`, 'info');
+                } catch (error) {
+                    console.error('Error updating URL opening setting:', error);
+                    showNotification(`Failed to update URL setting: ${error.message}`, 'error');
+                    // Revert the toggle on error
+                    event.target.checked = !event.target.checked;
+                }
+            });
+
+        } catch (error) {
+            console.error('Error in setupURLSettings:', error);
         }
     }
 

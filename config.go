@@ -69,7 +69,8 @@ type AppConfig struct {
 	// Theme settings
 	Theme string `yaml:"theme"` // Theme preference: "dark", "light", or "system"
 	// Terminal settings
-	ScrollbackLines int `yaml:"scrollback_lines"` // Number of lines to keep in scrollback buffer
+	ScrollbackLines           int  `yaml:"scrollback_lines"`             // Number of lines to keep in scrollback buffer
+	OpenLinksInExternalBrowser bool `yaml:"open_links_in_external_browser"` // Open URLs in external browser instead of in-app
 	// AI settings
 	AI AIConfig `yaml:"ai"` // AI configuration
 }
@@ -97,7 +98,8 @@ func DefaultConfig() *AppConfig {
 		// Default theme settings
 		Theme: DefaultTheme,
 		// Default terminal settings
-		ScrollbackLines: DefaultScrollbackLines,
+		ScrollbackLines:            DefaultScrollbackLines,
+		OpenLinksInExternalBrowser: true, // Default to opening links in external browser
 		// Default AI settings
 		AI: AIConfig{
 			Enabled:  false,

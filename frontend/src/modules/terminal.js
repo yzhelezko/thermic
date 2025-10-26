@@ -14,7 +14,7 @@ import {
     ConfigSet,
     ApproveHostKeyUpdate,
 } from "../../wailsjs/go/main/App";
-import { EventsOn, EventsEmit } from "../../wailsjs/runtime/runtime";
+import { EventsOn, EventsEmit, BrowserOpenURL } from "../../wailsjs/runtime/runtime";
 import {
     THEMES,
     DEFAULT_TERMINAL_OPTIONS,
@@ -69,6 +69,7 @@ export class TerminalManager {
         // Terminal configuration
         this.scrollbackLines = 10000; // Will be loaded from backend
         this.maxBufferLines = this.scrollbackLines; // Updated when scrollbackLines changes
+        this.openLinksInExternalBrowser = true; // Will be loaded from backend
 
         // Load terminal config from backend
         this.loadTerminalConfig();
@@ -465,7 +466,14 @@ export class TerminalManager {
         // Add addons
         const fitAddon = new FitAddon();
         terminal.loadAddon(fitAddon);
-        terminal.loadAddon(new WebLinksAddon());
+        // Configure WebLinksAddon to open URLs in external browser if enabled
+        terminal.loadAddon(new WebLinksAddon((event, uri) => {
+            if (this.openLinksInExternalBrowser) {
+                event.preventDefault();
+                BrowserOpenURL(uri);
+            }
+            // If setting is disabled, default browser behavior will occur (open in same window)
+        }));
 
         // Create terminal container div with wrapper for proper padding
         const terminalContainer = document.createElement("div");
@@ -1970,12 +1978,14 @@ export class TerminalManager {
     async loadTerminalConfig() {
         try {
             const scrollbackLines = await ConfigGet("ScrollbackLines");
+            const openLinksExternal = await ConfigGet("OpenLinksInExternalBrowser");
 
             this.scrollbackLines = scrollbackLines;
             this.maxBufferLines = scrollbackLines;
+            this.openLinksInExternalBrowser = openLinksExternal;
 
             console.log(
-                `Loaded terminal config: scrollback=${scrollbackLines}`,
+                `Loaded terminal config: scrollback=${scrollbackLines}, openLinksExternal=${openLinksExternal}`,
             );
 
             // Update existing terminals with new config
@@ -1985,6 +1995,7 @@ export class TerminalManager {
             // Use defaults if backend fails
             this.scrollbackLines = 10000;
             this.maxBufferLines = 10000;
+            this.openLinksInExternalBrowser = true;
         }
     }
 
@@ -1996,6 +2007,14 @@ export class TerminalManager {
             this.scrollbackLines = scrollbackLines;
             this.maxBufferLines = scrollbackLines;
             this.applyConfigToAllTerminals();
+        });
+
+        // Listen for URL opening preference changes
+        EventsOn("config:open-links-external-changed", (data) => {
+            const openLinksExternal = data.OpenLinksInExternalBrowser;
+            console.log(`Open links in external browser changed to: ${openLinksExternal}`);
+            this.openLinksInExternalBrowser = openLinksExternal;
+            // No need to apply to terminals - the handler checks the property at runtime
         });
     }
 

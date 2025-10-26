@@ -328,26 +328,12 @@ export function createTerminalSettingsContent() {
                 <div class="setting-item">
                     <div class="setting-item-content">
                         <div class="setting-item-info">
-                            <div class="setting-item-title">Detect URLs</div>
-                            <div class="setting-item-description">Automatically detect and highlight URLs</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <label class="modern-toggle">
-                                <input type="checkbox" checked disabled>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
                             <div class="setting-item-title">Click to Open URLs</div>
                             <div class="setting-item-description">Open URLs in default browser when clicked</div>
                         </div>
                         <div class="setting-item-control">
                             <label class="modern-toggle">
-                                <input type="checkbox" checked disabled>
+                                <input type="checkbox" id="open-links-external-toggle" checked>
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
