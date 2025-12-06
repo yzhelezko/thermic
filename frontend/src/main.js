@@ -171,6 +171,9 @@ class ThermicTerminal {
             // Expose status manager globally for event handling
             window.statusManager = this.statusManager;
             
+            // Expose terminal manager globally for event handling
+            window.terminalManager = this.terminalManager;
+            
             // Expose context menu manager globally for tab context menu integration
             window.contextMenuManager = this.contextMenuManager;
             

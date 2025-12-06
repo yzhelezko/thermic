@@ -347,6 +347,40 @@ export class TerminalManager {
                     },
                 );
 
+                // Set up SFTP upload progress listener
+                this.globalSftpUploadProgressListener = EventsOn(
+                    "sftp-upload-progress",
+                    (data) => {
+                        if (
+                            window.remoteExplorerManager &&
+                            typeof window.remoteExplorerManager
+                                .handleTransferProgressEvent === "function"
+                        ) {
+                            window.remoteExplorerManager.handleTransferProgressEvent(
+                                data,
+                                "upload",
+                            );
+                        }
+                    },
+                );
+
+                // Set up SFTP download progress listener
+                this.globalSftpDownloadProgressListener = EventsOn(
+                    "sftp-download-progress",
+                    (data) => {
+                        if (
+                            window.remoteExplorerManager &&
+                            typeof window.remoteExplorerManager
+                                .handleTransferProgressEvent === "function"
+                        ) {
+                            window.remoteExplorerManager.handleTransferProgressEvent(
+                                data,
+                                "download",
+                            );
+                        }
+                    },
+                );
+
                 // Set up tab switch listener for status bar updates
                 this.globalTabSwitchListener = EventsOn(
                     "tab-switched",

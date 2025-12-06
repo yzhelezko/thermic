@@ -10,6 +10,10 @@ export function CacheMonitoringResult(arg1, arg2, arg3) {
   return window['go']['main']['App']['CacheMonitoringResult'](arg1, arg2, arg3);
 }
 
+export function CancelSFTPTransfer(arg1) {
+  return window['go']['main']['App']['CancelSFTPTransfer'](arg1);
+}
+
 export function CheckForUpdates() {
   return window['go']['main']['App']['CheckForUpdates']();
 }
@@ -164,6 +168,10 @@ export function DownloadRemoteDirectory(arg1, arg2, arg3) {
 
 export function DownloadRemoteFile(arg1, arg2, arg3) {
   return window['go']['main']['App']['DownloadRemoteFile'](arg1, arg2, arg3);
+}
+
+export function DownloadRemoteFileWithProgress(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['DownloadRemoteFileWithProgress'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function DuplicateProfile(arg1) {

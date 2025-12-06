@@ -178,6 +178,172 @@ We welcome contributions! Here's how to get started:
 - Update documentation as needed
 - Test on multiple platforms when possible
 
+## ⚙️ Configuration Manager
+
+Thermic uses a **type-safe universal configuration system** that makes it easy to add, validate, and persist application settings.
+
+### **Architecture Overview**
+
+```
+Frontend (JS)                    Backend (Go)
+     │                                │
+     │  ConfigGet("SettingName")      │
+     ├───────────────────────────────►│ → settingConfigs lookup
+     │                                │ → ConfigGet switch case
+     │◄───────────────────────────────┤ → Returns value
+     │                                │
+     │  ConfigSet("SettingName", val) │
+     ├───────────────────────────────►│ → settingConfigs lookup
+     │                                │ → Validate(value)
+     │                                │ → Update(value) or CustomUpdate
+     │                                │ → markConfigDirty() → auto-save
+     │◄───────────────────────────────┤ → Optional: EventsEmit
+```
+
+### **Setting Types**
+
+| Type | Go Type | Description |
+|------|---------|-------------|
+| `SettingTypeBool` | `bool` | Boolean toggles |
+| `SettingTypeInt` | `int` | Integer values with optional min/max |
+| `SettingTypeString` | `string` | Text with optional allowed values |
+| `SettingTypePath` | `string` | File/directory paths (empty = default) |
+| `SettingTypeMap` | `map[string]interface{}` | Complex nested settings (e.g., SFTP config) |
+
+### **How to Add a New Setting**
+
+#### **Step 1: Add to AppConfig struct** (`config.go`)
+
+```go
+type AppConfig struct {
+    // ... existing fields ...
+    MyNewSetting string `yaml:"my_new_setting"`
+}
+```
+
+#### **Step 2: Set default value** (`config.go`)
+
+```go
+func DefaultConfig() *AppConfig {
+    return &AppConfig{
+        // ... existing defaults ...
+        MyNewSetting: "default_value",
+    }
+}
+```
+
+#### **Step 3: Register in settingConfigs** (`config_manager.go`)
+
+```go
+var settingConfigs = map[string]*SettingConfig{
+    // ... existing settings ...
+    
+    // Simple string setting
+    "MyNewSetting": {
+        Name:        "MyNewSetting",
+        Type:        SettingTypeString,
+        MaxLength:   intPtr(256),        // Optional: max length
+        ConfigField: "MyNewSetting",     // Maps to AppConfig.MyNewSetting
+    },
+    
+    // Integer with range validation
+    "MyIntSetting": {
+        Name:        "MyIntSetting",
+        Type:        SettingTypeInt,
+        Min:         intPtr(1),
+        Max:         intPtr(100),
+        ConfigField: "MyIntSetting",
+    },
+    
+    // Boolean with event emission
+    "MyToggle": {
+        Name:          "MyToggle",
+        Type:          SettingTypeBool,
+        ConfigField:   "MyToggle",
+        RequiresEvent: true,
+        EventName:     "config:my-toggle-changed",
+    },
+    
+    // Setting with custom update logic
+    "MyCustomSetting": {
+        Name:         "MyCustomSetting",
+        Type:         SettingTypeString,
+        CustomUpdate: updateMyCustomSetting,  // Custom function
+    },
+}
+```
+
+#### **Step 4: Add to ConfigGet switch** (`config_manager.go`)
+
+```go
+func (a *App) ConfigGet(settingName string) (SettingValue, error) {
+    // ... existing code ...
+    
+    switch settingName {
+    // ... existing cases ...
+    
+    case "MyNewSetting":
+        return a.config.config.MyNewSetting, nil
+    
+    // For nested fields:
+    case "MyNestedSetting":
+        return a.config.config.Parent.ChildField, nil
+    }
+}
+```
+
+#### **Step 5: (Optional) Custom Update Function**
+
+For settings that need special handling:
+
+```go
+func updateMyCustomSetting(a *App, value SettingValue) error {
+    strVal := value.(string)
+    a.config.config.MyCustomSetting = strVal
+    
+    // Do additional work (update managers, validate, etc.)
+    if a.someManager != nil {
+        a.someManager.UpdateSetting(strVal)
+    }
+    
+    return nil
+}
+```
+
+#### **Step 6: Use from Frontend** (`settings.js`)
+
+```javascript
+// Get setting
+const value = await window.go.main.App.ConfigGet("MyNewSetting");
+
+// Set setting (auto-validates and auto-saves)
+await window.go.main.App.ConfigSet("MyNewSetting", "new_value");
+```
+
+### **SettingConfig Options Reference**
+
+```go
+type SettingConfig struct {
+    Name          string                           // Setting identifier
+    Type          SettingType                      // Data type
+    Min           *int                             // Minimum value (int only)
+    Max           *int                             // Maximum value (int only)
+    MaxLength     *int                             // Max string length
+    AllowedValues []string                         // Allowed values (string only)
+    ConfigField   string                           // Auto-map to AppConfig field
+    CustomUpdate  func(*App, SettingValue) error   // Custom update logic
+    RequiresEvent bool                             // Emit event after change
+    EventName     string                           // Event name to emit
+    RequiresMutex bool                             // Use mutex for thread safety
+}
+```
+
+### **Auto-Save Behavior**
+
+- Changes are marked "dirty" and saved automatically after a short delay
+- Multiple rapid changes are batched into a single save
+- Config file location: `~/.thermic/config.yaml`
+
 ## 📋 Roadmap
 
 ### **✅ Completed**

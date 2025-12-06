@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bufio"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/sftp"
@@ -39,9 +43,51 @@ func (w *SFTPClientWrapper) Close() error {
 	return nil
 }
 
+// TransferProgress tracks progress of file transfers
+type TransferProgress struct {
+	SessionID    string  `json:"sessionId"`
+	Phase        string  `json:"phase"`     // "start", "progress", "complete", "error"
+	Direction    string  `json:"direction"` // "upload" or "download"
+	FileName     string  `json:"fileName"`
+	FileIndex    int     `json:"fileIndex"`
+	TotalFiles   int     `json:"totalFiles"`
+	Transferred  int64   `json:"transferred"`
+	Total        int64   `json:"total"`
+	Percent      float64 `json:"percent"`
+	BytesPerSec  int64   `json:"bytesPerSec,omitempty"` // Transfer speed
+	ErrorMessage string  `json:"errorMessage,omitempty"`
+}
+
+// TransferJob represents a single file transfer job for the worker pool
+type TransferJob struct {
+	LocalPath  string
+	RemotePath string
+	FileName   string
+	FileIndex  int
+	TotalFiles int
+	IsUpload   bool
+	FileSize   int64
+}
+
+// TransferResult represents the result of a file transfer
+type TransferResult struct {
+	Job   TransferJob
+	Error error
+}
+
+// TransferState tracks active transfers for cancellation
+type TransferState struct {
+	cancelled bool
+	mu        sync.RWMutex
+}
+
+// activeTransfers tracks ongoing transfers per session for cancellation
+var activeTransfers = make(map[string]*TransferState)
+var activeTransfersMu sync.RWMutex
+
 // SFTP File Explorer Methods
 
-// progressReader wraps an io.Reader and periodically emits upload progress events
+// progressReader wraps an io.Reader and periodically emits transfer progress events
 type progressReader struct {
 	reader      io.Reader
 	app         *App
@@ -52,28 +98,66 @@ type progressReader struct {
 	totalBytes  int64
 	readBytes   int64
 	lastEmitted time.Time
+	startTime   time.Time
+	direction   string // "upload" or "download"
+	eventName   string // event name to emit
 }
 
+func newProgressReader(reader io.Reader, app *App, sessionID, fileName string, fileIndex, totalFiles int, totalBytes int64, direction string) *progressReader {
+	eventName := "sftp-upload-progress"
+	if direction == "download" {
+		eventName = "sftp-download-progress"
+	}
+	return &progressReader{
+		reader:     reader,
+		app:        app,
+		sessionID:  sessionID,
+		fileName:   fileName,
+		fileIndex:  fileIndex,
+		totalFiles: totalFiles,
+		totalBytes: totalBytes,
+		direction:  direction,
+		eventName:  eventName,
+		startTime:  time.Now(),
+	}
+}
+
+// ErrTransferCancelled is returned when a transfer is cancelled by the user
+var ErrTransferCancelled = fmt.Errorf("transfer cancelled by user")
+
 func (pr *progressReader) Read(p []byte) (int, error) {
+	// Check for cancellation before reading
+	if pr.app != nil && pr.app.isTransferCancelled(pr.sessionID) {
+		return 0, ErrTransferCancelled
+	}
+
 	n, err := pr.reader.Read(p)
 	if n > 0 {
 		pr.readBytes += int64(n)
 		now := time.Now()
-		if pr.readBytes == pr.totalBytes || now.Sub(pr.lastEmitted) >= 200*time.Millisecond {
+		if pr.readBytes == pr.totalBytes || now.Sub(pr.lastEmitted) >= 150*time.Millisecond {
 			percent := float64(0)
 			if pr.totalBytes > 0 {
 				percent = float64(pr.readBytes) * 100.0 / float64(pr.totalBytes)
 			}
+			// Calculate transfer speed
+			elapsed := now.Sub(pr.startTime).Seconds()
+			var bytesPerSec int64
+			if elapsed > 0 {
+				bytesPerSec = int64(float64(pr.readBytes) / elapsed)
+			}
 			if pr.app != nil && pr.app.ctx != nil {
-				wailsRuntime.EventsEmit(pr.app.ctx, "sftp-upload-progress", map[string]interface{}{
+				wailsRuntime.EventsEmit(pr.app.ctx, pr.eventName, map[string]interface{}{
 					"sessionId":   pr.sessionID,
 					"phase":       "progress",
+					"direction":   pr.direction,
 					"fileName":    pr.fileName,
 					"fileIndex":   pr.fileIndex,
 					"totalFiles":  pr.totalFiles,
 					"transferred": pr.readBytes,
 					"total":       pr.totalBytes,
 					"percent":     percent,
+					"bytesPerSec": bytesPerSec,
 				})
 			}
 			pr.lastEmitted = now
@@ -82,21 +166,228 @@ func (pr *progressReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// progressWriter wraps an io.Writer and periodically emits transfer progress events
+type progressWriter struct {
+	writer       io.Writer
+	app          *App
+	sessionID    string
+	fileName     string
+	fileIndex    int
+	totalFiles   int
+	totalBytes   int64
+	writtenBytes int64
+	lastEmitted  time.Time
+	startTime    time.Time
+	direction    string
+	eventName    string
+}
+
+func newProgressWriter(writer io.Writer, app *App, sessionID, fileName string, fileIndex, totalFiles int, totalBytes int64, direction string) *progressWriter {
+	eventName := "sftp-upload-progress"
+	if direction == "download" {
+		eventName = "sftp-download-progress"
+	}
+	return &progressWriter{
+		writer:     writer,
+		app:        app,
+		sessionID:  sessionID,
+		fileName:   fileName,
+		fileIndex:  fileIndex,
+		totalFiles: totalFiles,
+		totalBytes: totalBytes,
+		direction:  direction,
+		eventName:  eventName,
+		startTime:  time.Now(),
+	}
+}
+
+func (pw *progressWriter) Write(p []byte) (int, error) {
+	// Check for cancellation before writing
+	if pw.app != nil && pw.app.isTransferCancelled(pw.sessionID) {
+		return 0, ErrTransferCancelled
+	}
+
+	n, err := pw.writer.Write(p)
+	if n > 0 {
+		pw.writtenBytes += int64(n)
+		now := time.Now()
+		if pw.writtenBytes == pw.totalBytes || now.Sub(pw.lastEmitted) >= 150*time.Millisecond {
+			percent := float64(0)
+			if pw.totalBytes > 0 {
+				percent = float64(pw.writtenBytes) * 100.0 / float64(pw.totalBytes)
+			}
+			// Calculate transfer speed
+			elapsed := now.Sub(pw.startTime).Seconds()
+			var bytesPerSec int64
+			if elapsed > 0 {
+				bytesPerSec = int64(float64(pw.writtenBytes) / elapsed)
+			}
+			if pw.app != nil && pw.app.ctx != nil {
+				wailsRuntime.EventsEmit(pw.app.ctx, pw.eventName, map[string]interface{}{
+					"sessionId":   pw.sessionID,
+					"phase":       "progress",
+					"direction":   pw.direction,
+					"fileName":    pw.fileName,
+					"fileIndex":   pw.fileIndex,
+					"totalFiles":  pw.totalFiles,
+					"transferred": pw.writtenBytes,
+					"total":       pw.totalBytes,
+					"percent":     percent,
+					"bytesPerSec": bytesPerSec,
+				})
+			}
+			pw.lastEmitted = now
+		}
+	}
+	return n, err
+}
+
 func (a *App) emitUploadEvent(sessionID string, phase string, payload map[string]interface{}) {
+	a.emitTransferEvent(sessionID, phase, "upload", payload)
+}
+
+func (a *App) emitDownloadEvent(sessionID string, phase string, payload map[string]interface{}) {
+	a.emitTransferEvent(sessionID, phase, "download", payload)
+}
+
+func (a *App) emitTransferEvent(sessionID string, phase string, direction string, payload map[string]interface{}) {
 	if a == nil || a.ctx == nil {
 		return
 	}
 	data := map[string]interface{}{
 		"sessionId": sessionID,
 		"phase":     phase,
+		"direction": direction,
 	}
 	for k, v := range payload {
 		data[k] = v
 	}
-	wailsRuntime.EventsEmit(a.ctx, "sftp-upload-progress", data)
+	eventName := "sftp-upload-progress"
+	if direction == "download" {
+		eventName = "sftp-download-progress"
+	}
+	wailsRuntime.EventsEmit(a.ctx, eventName, data)
+}
+
+// getSFTPConfig returns the current SFTP configuration with defaults
+func (a *App) getSFTPConfig() SFTPConfig {
+	if a.config != nil && a.config.config != nil {
+		cfg := a.config.config.SFTP
+		// Apply defaults if values are zero
+		if cfg.MaxPacketSize == 0 {
+			cfg.MaxPacketSize = DefaultSFTPMaxPacketSize
+		}
+		if cfg.BufferSize == 0 {
+			cfg.BufferSize = DefaultSFTPBufferSize
+		}
+		if cfg.ConcurrentRequests == 0 {
+			cfg.ConcurrentRequests = DefaultSFTPConcurrentRequests
+		}
+		if cfg.ParallelTransfers == 0 {
+			cfg.ParallelTransfers = DefaultSFTPParallelTransfers
+		}
+		return cfg
+	}
+	return SFTPConfig{
+		MaxPacketSize:      DefaultSFTPMaxPacketSize,
+		BufferSize:         DefaultSFTPBufferSize,
+		ConcurrentRequests: DefaultSFTPConcurrentRequests,
+		ParallelTransfers:  DefaultSFTPParallelTransfers,
+		UseConcurrentIO:    true,
+	}
+}
+
+// startTransfer marks the beginning of a transfer for cancellation tracking
+func (a *App) startTransfer(sessionID string) *TransferState {
+	activeTransfersMu.Lock()
+	defer activeTransfersMu.Unlock()
+
+	state := &TransferState{cancelled: false}
+	activeTransfers[sessionID] = state
+	return state
+}
+
+// endTransfer cleans up transfer state
+func (a *App) endTransfer(sessionID string) {
+	activeTransfersMu.Lock()
+	defer activeTransfersMu.Unlock()
+	delete(activeTransfers, sessionID)
+}
+
+// isTransferCancelled checks if a transfer has been cancelled
+func (a *App) isTransferCancelled(sessionID string) bool {
+	activeTransfersMu.RLock()
+	state, exists := activeTransfers[sessionID]
+	activeTransfersMu.RUnlock()
+
+	if !exists {
+		return false
+	}
+
+	state.mu.RLock()
+	defer state.mu.RUnlock()
+	return state.cancelled
+}
+
+// CancelSFTPTransfer cancels an ongoing SFTP transfer
+func (a *App) CancelSFTPTransfer(sessionID string) error {
+	activeTransfersMu.RLock()
+	state, exists := activeTransfers[sessionID]
+	activeTransfersMu.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("no active transfer for session %s", sessionID)
+	}
+
+	state.mu.Lock()
+	state.cancelled = true
+	state.mu.Unlock()
+
+	fmt.Printf("SFTP transfer cancelled for session %s\n", sessionID)
+	return nil
+}
+
+// getOrReconnectSFTPClient gets the SFTP client, reconnecting if connection was lost
+func (a *App) getOrReconnectSFTPClient(sessionID string) (*sftp.Client, error) {
+	a.ssh.sftpClientsMutex.RLock()
+	sftpClient, exists := a.ssh.sftpClients[sessionID]
+	a.ssh.sftpClientsMutex.RUnlock()
+
+	if !exists {
+		return nil, fmt.Errorf("SFTP client not initialized for session %s", sessionID)
+	}
+
+	// Test if connection is still alive by trying a simple operation
+	_, err := sftpClient.Getwd()
+	if err != nil {
+		fmt.Printf("SFTP connection lost for session %s, attempting reconnect...\n", sessionID)
+
+		// Close the old client
+		a.ssh.sftpClientsMutex.Lock()
+		if oldClient, exists := a.ssh.sftpClients[sessionID]; exists {
+			oldClient.Close()
+			delete(a.ssh.sftpClients, sessionID)
+		}
+		a.ssh.sftpClientsMutex.Unlock()
+
+		// Reinitialize the SFTP client
+		if err := a.InitializeFileExplorerSession(sessionID); err != nil {
+			return nil, fmt.Errorf("failed to reconnect SFTP: %w", err)
+		}
+
+		// Get the new client
+		a.ssh.sftpClientsMutex.RLock()
+		sftpClient = a.ssh.sftpClients[sessionID]
+		a.ssh.sftpClientsMutex.RUnlock()
+
+		fmt.Printf("SFTP reconnected successfully for session %s\n", sessionID)
+	}
+
+	return sftpClient, nil
 }
 
 // InitializeFileExplorerSession initializes an SFTP client for the given SSH session
+// Uses optimized settings for improved transfer performance
 func (a *App) InitializeFileExplorerSession(sessionID string) error {
 	a.ssh.sftpClientsMutex.Lock()
 	defer a.ssh.sftpClientsMutex.Unlock()
@@ -124,8 +415,27 @@ func (a *App) InitializeFileExplorerSession(sessionID string) error {
 		return fmt.Errorf("SSH session %s is not connected", sessionID)
 	}
 
-	// Create SFTP client
-	sftpClient, err := sftp.NewClient(sshSession.client)
+	// Get optimized SFTP configuration
+	cfg := a.getSFTPConfig()
+
+	// Build SFTP client options for optimized performance
+	var opts []sftp.ClientOption
+
+	// Increase max packet size (default is 32KB, we use 256KB for better throughput)
+	// Use MaxPacketUnchecked to bypass the 32KB safety check - modern SFTP servers support larger packets
+	opts = append(opts, sftp.MaxPacketUnchecked(cfg.MaxPacketSize))
+
+	// Set concurrent requests per file for parallel I/O within a single file transfer
+	opts = append(opts, sftp.MaxConcurrentRequestsPerFile(cfg.ConcurrentRequests))
+
+	// Enable concurrent reads and writes for better performance on high-latency connections
+	if cfg.UseConcurrentIO {
+		opts = append(opts, sftp.UseConcurrentReads(true))
+		opts = append(opts, sftp.UseConcurrentWrites(true))
+	}
+
+	// Create optimized SFTP client
+	sftpClient, err := sftp.NewClient(sshSession.client, opts...)
 	if err != nil {
 		return fmt.Errorf("failed to create SFTP client: %w", err)
 	}
@@ -142,7 +452,8 @@ func (a *App) InitializeFileExplorerSession(sessionID string) error {
 	// Register for resource cleanup
 	a.ssh.resourceManager.Register(wrapper)
 
-	fmt.Printf("SFTP client initialized for session %s\n", sessionID)
+	fmt.Printf("SFTP client initialized for session %s (MaxPacket=%dKB, ConcurrentReqs=%d, ConcurrentIO=%v)\n",
+		sessionID, cfg.MaxPacketSize/1024, cfg.ConcurrentRequests, cfg.UseConcurrentIO)
 
 	return nil
 }
@@ -197,13 +508,11 @@ func (a *App) CloseFileExplorerSession(sessionID string) error {
 
 // ListRemoteFiles lists files and directories in the specified remote path
 func (a *App) ListRemoteFiles(sessionID string, remotePath string) ([]RemoteFileEntry, error) {
-	a.ssh.sftpClientsMutex.RLock()
-	sftpClient, exists := a.ssh.sftpClients[sessionID]
-	a.ssh.sftpClientsMutex.RUnlock()
-
-	if !exists {
-		return nil, fmt.Errorf("SFTP client not initialized for session %s", sessionID)
+	sftpClient, err := a.getOrReconnectSFTPClient(sessionID)
+	if err != nil {
+		return nil, err
 	}
+	_ = sftpClient // used below
 
 	// Normalize path - use "." as fallback for empty path
 	if remotePath == "" {
@@ -286,8 +595,13 @@ func (a *App) ListRemoteFiles(sessionID string, remotePath string) ([]RemoteFile
 	return entries, nil
 }
 
-// DownloadRemoteFile downloads a file from the remote server to local path
+// DownloadRemoteFile downloads a file from the remote server to local path with progress reporting
 func (a *App) DownloadRemoteFile(sessionID string, remotePath string, localPath string) error {
+	return a.DownloadRemoteFileWithProgress(sessionID, remotePath, localPath, 1, 1)
+}
+
+// DownloadRemoteFileWithProgress downloads a file with progress reporting for batch operations
+func (a *App) DownloadRemoteFileWithProgress(sessionID string, remotePath string, localPath string, fileIndex, totalFiles int) error {
 	a.ssh.sftpClientsMutex.RLock()
 	sftpClient, exists := a.ssh.sftpClients[sessionID]
 	a.ssh.sftpClientsMutex.RUnlock()
@@ -303,23 +617,82 @@ func (a *App) DownloadRemoteFile(sessionID string, remotePath string, localPath 
 	}
 	defer remoteFile.Close()
 
+	// Get file info for progress tracking
+	fileInfo, err := remoteFile.Stat()
+	if err != nil {
+		return fmt.Errorf("failed to stat remote file %s: %w", remotePath, err)
+	}
+
+	fileName := filepath.Base(remotePath)
+	totalBytes := fileInfo.Size()
+
+	// Emit download start event
+	a.emitDownloadEvent(sessionID, "start", map[string]interface{}{
+		"fileName":   fileName,
+		"fileIndex":  fileIndex,
+		"totalFiles": totalFiles,
+		"total":      totalBytes,
+	})
+
 	// Create local file
 	localFile, err := os.Create(localPath)
 	if err != nil {
+		a.emitDownloadEvent(sessionID, "error", map[string]interface{}{
+			"fileName": fileName,
+			"error":    err.Error(),
+		})
 		return fmt.Errorf("failed to create local file %s: %w", localPath, err)
 	}
 	defer localFile.Close()
 
-	// Copy data
-	_, err = io.Copy(localFile, remoteFile)
+	// Use buffered writer for better performance
+	cfg := a.getSFTPConfig()
+	bufferedWriter := bufio.NewWriterSize(localFile, cfg.BufferSize)
+	defer bufferedWriter.Flush()
+
+	// Wrap with progress writer for progress tracking
+	progressWriter := newProgressWriter(bufferedWriter, a, sessionID, fileName, fileIndex, totalFiles, totalBytes, "download")
+
+	// Use optimized buffer for copying
+	buffer := make([]byte, cfg.BufferSize)
+	_, err = io.CopyBuffer(progressWriter, remoteFile, buffer)
 	if err != nil {
+		// Close file before attempting delete
+		localFile.Close()
+
+		// If cancelled, delete the partial file
+		if errors.Is(err, ErrTransferCancelled) {
+			os.Remove(localPath)
+			return fmt.Errorf("download cancelled")
+		}
+
+		a.emitDownloadEvent(sessionID, "error", map[string]interface{}{
+			"fileName": fileName,
+			"error":    err.Error(),
+		})
 		return fmt.Errorf("failed to copy file data: %w", err)
 	}
+
+	// Flush the buffered writer
+	if err := bufferedWriter.Flush(); err != nil {
+		return fmt.Errorf("failed to flush file data: %w", err)
+	}
+
+	// Emit download complete event
+	a.emitDownloadEvent(sessionID, "complete", map[string]interface{}{
+		"fileName":    fileName,
+		"fileIndex":   fileIndex,
+		"totalFiles":  totalFiles,
+		"total":       totalBytes,
+		"transferred": totalBytes,
+		"percent":     100.0,
+	})
 
 	return nil
 }
 
 // DownloadRemoteDirectory downloads a directory recursively from the remote server to local path
+// Uses parallel file downloads for improved performance
 func (a *App) DownloadRemoteDirectory(sessionID string, remotePath string, localPath string) error {
 	a.ssh.sftpClientsMutex.RLock()
 	sftpClient, exists := a.ssh.sftpClients[sessionID]
@@ -340,68 +713,227 @@ func (a *App) DownloadRemoteDirectory(sessionID string, remotePath string, local
 		return a.DownloadRemoteFile(sessionID, remotePath, localPath)
 	}
 
+	// Start transfer tracking for cancellation
+	a.startTransfer(sessionID)
+	defer a.endTransfer(sessionID)
+
 	// Create local directory
 	err = os.MkdirAll(localPath, 0755)
 	if err != nil {
 		return fmt.Errorf("failed to create local directory %s: %w", localPath, err)
 	}
 
-	// Download directory contents recursively
-	return a.downloadRemoteDirectoryRecursive(sftpClient, remotePath, localPath)
+	// First, collect all files to download for progress tracking
+	var downloadJobs []TransferJob
+	if err := a.collectDownloadJobs(sftpClient, remotePath, localPath, &downloadJobs); err != nil {
+		return err
+	}
+
+	if len(downloadJobs) == 0 {
+		return nil // Empty directory
+	}
+
+	// Update job indices
+	for i := range downloadJobs {
+		downloadJobs[i].FileIndex = i + 1
+		downloadJobs[i].TotalFiles = len(downloadJobs)
+	}
+
+	// Emit batch start
+	dirName := filepath.Base(remotePath)
+	a.emitDownloadEvent(sessionID, "batch-start", map[string]interface{}{
+		"totalFiles": len(downloadJobs),
+		"sourcePath": remotePath,
+		"targetPath": localPath,
+		"dirName":    dirName,
+	})
+
+	// Use parallel download worker pool
+	cfg := a.getSFTPConfig()
+	if err := a.executeParallelDownloads(sessionID, sftpClient, downloadJobs, cfg.ParallelTransfers); err != nil {
+		return err
+	}
+
+	// Emit batch complete
+	a.emitDownloadEvent(sessionID, "batch-complete", map[string]interface{}{
+		"totalFiles": len(downloadJobs),
+		"sourcePath": remotePath,
+		"targetPath": localPath,
+	})
+
+	return nil
 }
 
-// Helper function to recursively download a directory
-func (a *App) downloadRemoteDirectoryRecursive(sftpClient *sftp.Client, remotePath string, localPath string) error {
-	// List directory contents
+// collectDownloadJobs recursively collects all files to download, creating directories as needed
+func (a *App) collectDownloadJobs(sftpClient *sftp.Client, remotePath string, localPath string, jobs *[]TransferJob) error {
 	fileInfos, err := sftpClient.ReadDir(remotePath)
 	if err != nil {
 		return fmt.Errorf("failed to read directory %s: %w", remotePath, err)
 	}
 
-	// Download each item recursively
 	for _, fileInfo := range fileInfos {
-		// Use proper path joining for both remote and local paths
 		remoteItemPath := joinRemotePath(remotePath, fileInfo.Name())
 		localItemPath := filepath.Join(localPath, fileInfo.Name())
 
 		if fileInfo.IsDir() {
 			// Create local subdirectory
-			err := os.MkdirAll(localItemPath, 0755)
-			if err != nil {
+			if err := os.MkdirAll(localItemPath, 0755); err != nil {
 				return fmt.Errorf("failed to create local directory %s: %w", localItemPath, err)
 			}
-
-			// Recursively download subdirectory
-			if err := a.downloadRemoteDirectoryRecursive(sftpClient, remoteItemPath, localItemPath); err != nil {
+			// Recursively collect from subdirectory
+			if err := a.collectDownloadJobs(sftpClient, remoteItemPath, localItemPath, jobs); err != nil {
 				return err
 			}
 		} else {
-			// Download file
-			remoteFile, err := sftpClient.Open(remoteItemPath)
-			if err != nil {
-				return fmt.Errorf("failed to open remote file %s: %w", remoteItemPath, err)
-			}
-
-			localFile, err := os.Create(localItemPath)
-			if err != nil {
-				remoteFile.Close()
-				return fmt.Errorf("failed to create local file %s: %w", localItemPath, err)
-			}
-
-			_, err = io.Copy(localFile, remoteFile)
-			remoteFile.Close()
-			localFile.Close()
-
-			if err != nil {
-				return fmt.Errorf("failed to copy file %s: %w", remoteItemPath, err)
-			}
+			// Add file to download jobs
+			*jobs = append(*jobs, TransferJob{
+				LocalPath:  localItemPath,
+				RemotePath: remoteItemPath,
+				FileName:   fileInfo.Name(),
+				FileSize:   fileInfo.Size(),
+				IsUpload:   false,
+			})
 		}
 	}
+	return nil
+}
+
+// executeParallelDownloads runs download jobs using a worker pool
+func (a *App) executeParallelDownloads(sessionID string, sftpClient *sftp.Client, jobs []TransferJob, workers int) error {
+	if len(jobs) == 0 {
+		return nil
+	}
+
+	// Limit workers to job count
+	if workers > len(jobs) {
+		workers = len(jobs)
+	}
+
+	jobChan := make(chan TransferJob, len(jobs))
+	resultChan := make(chan TransferResult, len(jobs))
+	var wg sync.WaitGroup
+
+	// Start worker goroutines
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			cfg := a.getSFTPConfig()
+			buffer := make([]byte, cfg.BufferSize)
+
+			for job := range jobChan {
+				err := a.downloadSingleFile(sessionID, sftpClient, job, buffer)
+				resultChan <- TransferResult{Job: job, Error: err}
+			}
+		}()
+	}
+
+	// Send jobs to workers
+	for _, job := range jobs {
+		jobChan <- job
+	}
+	close(jobChan)
+
+	// Wait for all workers to complete
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	// Collect results
+	var firstError error
+	for result := range resultChan {
+		if result.Error != nil && firstError == nil {
+			firstError = result.Error
+		}
+	}
+
+	return firstError
+}
+
+// downloadSingleFile downloads a single file with progress reporting
+func (a *App) downloadSingleFile(sessionID string, sftpClient *sftp.Client, job TransferJob, buffer []byte) error {
+	// Check for cancellation before starting
+	if a.isTransferCancelled(sessionID) {
+		return fmt.Errorf("transfer cancelled")
+	}
+
+	// Emit start event
+	a.emitDownloadEvent(sessionID, "start", map[string]interface{}{
+		"fileName":   job.FileName,
+		"fileIndex":  job.FileIndex,
+		"totalFiles": job.TotalFiles,
+		"total":      job.FileSize,
+	})
+
+	// Open remote file
+	remoteFile, err := sftpClient.Open(job.RemotePath)
+	if err != nil {
+		a.emitDownloadEvent(sessionID, "error", map[string]interface{}{
+			"fileName": job.FileName,
+			"error":    err.Error(),
+		})
+		return fmt.Errorf("failed to open remote file %s: %w", job.RemotePath, err)
+	}
+	defer remoteFile.Close()
+
+	// Create local file
+	localFile, err := os.Create(job.LocalPath)
+	if err != nil {
+		a.emitDownloadEvent(sessionID, "error", map[string]interface{}{
+			"fileName": job.FileName,
+			"error":    err.Error(),
+		})
+		return fmt.Errorf("failed to create local file %s: %w", job.LocalPath, err)
+	}
+	defer localFile.Close()
+
+	// Use buffered writer
+	cfg := a.getSFTPConfig()
+	bufferedWriter := bufio.NewWriterSize(localFile, cfg.BufferSize)
+	defer bufferedWriter.Flush()
+
+	// Wrap with progress writer
+	progressWriter := newProgressWriter(bufferedWriter, a, sessionID, job.FileName, job.FileIndex, job.TotalFiles, job.FileSize, "download")
+
+	// Copy with buffer
+	_, err = io.CopyBuffer(progressWriter, remoteFile, buffer)
+	if err != nil {
+		// Close file before attempting delete
+		localFile.Close()
+
+		// If cancelled, delete the partial file
+		if errors.Is(err, ErrTransferCancelled) {
+			os.Remove(job.LocalPath)
+			return fmt.Errorf("download cancelled")
+		}
+
+		a.emitDownloadEvent(sessionID, "error", map[string]interface{}{
+			"fileName": job.FileName,
+			"error":    err.Error(),
+		})
+		return fmt.Errorf("failed to copy file data: %w", err)
+	}
+
+	// Flush
+	if err := bufferedWriter.Flush(); err != nil {
+		return fmt.Errorf("failed to flush file data: %w", err)
+	}
+
+	// Emit complete event
+	a.emitDownloadEvent(sessionID, "complete", map[string]interface{}{
+		"fileName":    job.FileName,
+		"fileIndex":   job.FileIndex,
+		"totalFiles":  job.TotalFiles,
+		"total":       job.FileSize,
+		"transferred": job.FileSize,
+		"percent":     100.0,
+	})
 
 	return nil
 }
 
-// UploadRemoteFiles uploads local files to the remote directory
+// UploadRemoteFiles uploads local files to the remote directory using parallel transfers
 func (a *App) UploadRemoteFiles(sessionID string, localFilePaths []string, remotePath string) error {
 	a.ssh.sftpClientsMutex.RLock()
 	sftpClient, exists := a.ssh.sftpClients[sessionID]
@@ -412,80 +944,192 @@ func (a *App) UploadRemoteFiles(sessionID string, localFilePaths []string, remot
 	}
 
 	totalFiles := len(localFilePaths)
+	if totalFiles == 0 {
+		return nil
+	}
+
+	// Start transfer tracking for cancellation
+	a.startTransfer(sessionID)
+	defer a.endTransfer(sessionID)
+
+	// Build upload jobs
+	var uploadJobs []TransferJob
+	for i, localFilePath := range localFilePaths {
+		fileName := filepath.Base(localFilePath)
+		remoteFilePath := joinRemotePath(remotePath, fileName)
+
+		// Get file size
+		var fileSize int64
+		if info, err := os.Stat(localFilePath); err == nil {
+			fileSize = info.Size()
+		}
+
+		uploadJobs = append(uploadJobs, TransferJob{
+			LocalPath:  localFilePath,
+			RemotePath: remoteFilePath,
+			FileName:   fileName,
+			FileIndex:  i + 1,
+			TotalFiles: totalFiles,
+			IsUpload:   true,
+			FileSize:   fileSize,
+		})
+	}
+
 	// Emit batch start
 	a.emitUploadEvent(sessionID, "batch-start", map[string]interface{}{
 		"totalFiles": totalFiles,
 		"targetPath": remotePath,
 	})
 
-	for idx, localFilePath := range localFilePaths {
-		// Open local file
-		localFile, err := os.Open(localFilePath)
-		if err != nil {
-			return fmt.Errorf("failed to open local file %s: %w", localFilePath, err)
-		}
-
-		// Get file name from path
-		fileName := filepath.Base(localFilePath)
-		// Use proper remote path joining
-		remoteFilePath := joinRemotePath(remotePath, fileName)
-
-		// Stat to get size
-		var totalBytes int64
-		if info, err := localFile.Stat(); err == nil {
-			totalBytes = info.Size()
-		}
-
-		// Emit file start
-		a.emitUploadEvent(sessionID, "start", map[string]interface{}{
-			"fileName":   fileName,
-			"fileIndex":  idx + 1,
-			"totalFiles": totalFiles,
-			"total":      totalBytes,
-		})
-
-		// Create remote file
-		remoteFile, err := sftpClient.Create(remoteFilePath)
-		if err != nil {
-			localFile.Close()
-			return fmt.Errorf("failed to create remote file %s: %w", remoteFilePath, err)
-		}
-
-		// Copy data with progress
-		pr := &progressReader{
-			reader:     localFile,
-			app:        a,
-			sessionID:  sessionID,
-			fileName:   fileName,
-			fileIndex:  idx + 1,
-			totalFiles: totalFiles,
-			totalBytes: totalBytes,
-		}
-		_, err = io.Copy(remoteFile, pr)
-
-		// Close files
-		localFile.Close()
-		remoteFile.Close()
-
-		if err != nil {
-			return fmt.Errorf("failed to copy file %s: %w", localFilePath, err)
-		}
-
-		// Emit file complete
-		a.emitUploadEvent(sessionID, "complete", map[string]interface{}{
-			"fileName":    fileName,
-			"fileIndex":   idx + 1,
-			"totalFiles":  totalFiles,
-			"total":       totalBytes,
-			"transferred": totalBytes,
-			"percent":     100.0,
-		})
+	// Use parallel upload worker pool
+	cfg := a.getSFTPConfig()
+	if err := a.executeParallelUploads(sessionID, sftpClient, uploadJobs, cfg.ParallelTransfers); err != nil {
+		return err
 	}
 
 	// Emit batch complete
 	a.emitUploadEvent(sessionID, "batch-complete", map[string]interface{}{
-		"totalFiles": len(localFilePaths),
+		"totalFiles": totalFiles,
 		"targetPath": remotePath,
+	})
+
+	return nil
+}
+
+// executeParallelUploads runs upload jobs using a worker pool
+func (a *App) executeParallelUploads(sessionID string, sftpClient *sftp.Client, jobs []TransferJob, workers int) error {
+	if len(jobs) == 0 {
+		return nil
+	}
+
+	// For small batches, use sequential processing to maintain order
+	if len(jobs) <= 2 || workers == 1 {
+		for _, job := range jobs {
+			if err := a.uploadSingleFile(sessionID, sftpClient, job); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Limit workers to job count
+	if workers > len(jobs) {
+		workers = len(jobs)
+	}
+
+	jobChan := make(chan TransferJob, len(jobs))
+	resultChan := make(chan TransferResult, len(jobs))
+	var wg sync.WaitGroup
+
+	// Start worker goroutines
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for job := range jobChan {
+				err := a.uploadSingleFile(sessionID, sftpClient, job)
+				resultChan <- TransferResult{Job: job, Error: err}
+			}
+		}()
+	}
+
+	// Send jobs to workers
+	for _, job := range jobs {
+		jobChan <- job
+	}
+	close(jobChan)
+
+	// Wait for all workers to complete
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	// Collect results
+	var firstError error
+	var completedCount int32
+	for result := range resultChan {
+		atomic.AddInt32(&completedCount, 1)
+		if result.Error != nil && firstError == nil {
+			firstError = result.Error
+		}
+	}
+
+	return firstError
+}
+
+// uploadSingleFile uploads a single file with progress reporting
+func (a *App) uploadSingleFile(sessionID string, sftpClient *sftp.Client, job TransferJob) error {
+	// Check for cancellation before starting
+	if a.isTransferCancelled(sessionID) {
+		return fmt.Errorf("transfer cancelled")
+	}
+
+	// Emit start event
+	a.emitUploadEvent(sessionID, "start", map[string]interface{}{
+		"fileName":   job.FileName,
+		"fileIndex":  job.FileIndex,
+		"totalFiles": job.TotalFiles,
+		"total":      job.FileSize,
+	})
+
+	// Open local file
+	localFile, err := os.Open(job.LocalPath)
+	if err != nil {
+		a.emitUploadEvent(sessionID, "error", map[string]interface{}{
+			"fileName": job.FileName,
+			"error":    err.Error(),
+		})
+		return fmt.Errorf("failed to open local file %s: %w", job.LocalPath, err)
+	}
+	defer localFile.Close()
+
+	// Create remote file
+	remoteFile, err := sftpClient.Create(job.RemotePath)
+	if err != nil {
+		a.emitUploadEvent(sessionID, "error", map[string]interface{}{
+			"fileName": job.FileName,
+			"error":    err.Error(),
+		})
+		return fmt.Errorf("failed to create remote file %s: %w", job.RemotePath, err)
+	}
+	defer remoteFile.Close()
+
+	// Use buffered reader for better performance
+	cfg := a.getSFTPConfig()
+	bufferedReader := bufio.NewReaderSize(localFile, cfg.BufferSize)
+
+	// Wrap with progress reader
+	progressReader := newProgressReader(bufferedReader, a, sessionID, job.FileName, job.FileIndex, job.TotalFiles, job.FileSize, "upload")
+
+	// Copy with optimized buffer
+	buffer := make([]byte, cfg.BufferSize)
+	_, err = io.CopyBuffer(remoteFile, progressReader, buffer)
+	if err != nil {
+		// Close remote file before attempting delete
+		remoteFile.Close()
+
+		// If cancelled, delete the partial remote file
+		if errors.Is(err, ErrTransferCancelled) {
+			sftpClient.Remove(job.RemotePath)
+			return fmt.Errorf("upload cancelled")
+		}
+
+		a.emitUploadEvent(sessionID, "error", map[string]interface{}{
+			"fileName": job.FileName,
+			"error":    err.Error(),
+		})
+		return fmt.Errorf("failed to copy file %s: %w", job.LocalPath, err)
+	}
+
+	// Emit complete event
+	a.emitUploadEvent(sessionID, "complete", map[string]interface{}{
+		"fileName":    job.FileName,
+		"fileIndex":   job.FileIndex,
+		"totalFiles":  job.TotalFiles,
+		"total":       job.FileSize,
+		"transferred": job.FileSize,
+		"percent":     100.0,
 	})
 
 	return nil
@@ -717,11 +1361,20 @@ func (a *App) UploadFileContent(sessionID string, remotePath string, base64Conte
 		"total":      totalBytes,
 	})
 
-	// Write content in chunks to emit progress
-	const chunkSize = 64 * 1024
+	// Get optimized chunk size from config
+	cfg := a.getSFTPConfig()
+	chunkSize := cfg.BufferSize
+	if chunkSize > len(content) {
+		chunkSize = len(content)
+	}
+	if chunkSize == 0 {
+		chunkSize = 64 * 1024 // Fallback to 64KB
+	}
+
+	startTime := time.Now()
 	var written int64
 	for written < totalBytes {
-		end := written + chunkSize
+		end := written + int64(chunkSize)
 		if end > totalBytes {
 			end = totalBytes
 		}
@@ -732,6 +1385,12 @@ func (a *App) UploadFileContent(sessionID string, remotePath string, base64Conte
 			if totalBytes > 0 {
 				percent = float64(written) * 100.0 / float64(totalBytes)
 			}
+			// Calculate transfer speed
+			elapsed := time.Since(startTime).Seconds()
+			var bytesPerSec int64
+			if elapsed > 0 {
+				bytesPerSec = int64(float64(written) / elapsed)
+			}
 			a.emitUploadEvent(sessionID, "progress", map[string]interface{}{
 				"fileName":    fileName,
 				"fileIndex":   1,
@@ -739,6 +1398,7 @@ func (a *App) UploadFileContent(sessionID string, remotePath string, base64Conte
 				"transferred": written,
 				"total":       totalBytes,
 				"percent":     percent,
+				"bytesPerSec": bytesPerSec,
 			})
 		}
 		if err != nil {

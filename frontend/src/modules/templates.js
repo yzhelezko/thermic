@@ -357,6 +357,62 @@ export function createTerminalSettingsContent() {
                 </div>
             </div>
         </div>
+
+        <div class="settings-section">
+            <div class="settings-section-title">
+                <span class="settings-section-icon"><img src="./icons/files.svg" class="svg-icon" alt="📁"></span>
+                SFTP Transfer Performance
+            </div>
+            <div class="settings-list">
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Parallel Transfers</div>
+                            <div class="setting-item-description">Number of simultaneous file transfers (1-16)</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <input type="number" id="sftp-parallel-transfers-input" class="modern-input" value="2" min="1" max="16">
+                        </div>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Max Packet Size (KB)</div>
+                            <div class="setting-item-description">Larger packets improve speed over fast connections (32-512)</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <input type="number" id="sftp-max-packet-input" class="modern-input" value="64" min="32" max="512">
+                        </div>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Buffer Size (KB)</div>
+                            <div class="setting-item-description">Transfer buffer size - larger buffers improve throughput (64-16384)</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <input type="number" id="sftp-buffer-size-input" class="modern-input" value="256" min="64" max="16384">
+                        </div>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Concurrent I/O</div>
+                            <div class="setting-item-description">Enable concurrent reads/writes per file for high-latency connections</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <label class="modern-toggle">
+                                <input type="checkbox" id="sftp-concurrent-io-toggle" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     `;
 }
 
