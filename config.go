@@ -51,6 +51,31 @@ type AIConfig struct {
 	SystemMessage string `yaml:"system_message"`    // System message for AI context
 }
 
+// SFTPConfig holds SFTP transfer optimization settings
+type SFTPConfig struct {
+	MaxPacketSize      int  `yaml:"max_packet_size"`     // Maximum SFTP packet size in bytes (default: 256KB)
+	BufferSize         int  `yaml:"buffer_size"`         // Transfer buffer size in bytes (default: 1MB)
+	ConcurrentRequests int  `yaml:"concurrent_requests"` // Concurrent requests per file (default: 64)
+	ParallelTransfers  int  `yaml:"parallel_transfers"`  // Number of parallel file transfers (default: 4)
+	UseConcurrentIO    bool `yaml:"use_concurrent_io"`   // Enable concurrent reads/writes (default: true)
+}
+
+// SFTP configuration constants
+const (
+	DefaultSFTPMaxPacketSize      = 64 * 1024        // 64KB - safer default that works with most servers
+	DefaultSFTPBufferSize         = 256 * 1024       // 256KB buffer - balanced for performance and compatibility
+	DefaultSFTPConcurrentRequests = 16               // Concurrent requests per file - conservative default
+	DefaultSFTPParallelTransfers  = 2                // Parallel file transfers - safe for low-powered servers
+	MinSFTPMaxPacketSize          = 32 * 1024        // 32KB minimum (SFTP default)
+	MaxSFTPMaxPacketSize          = 512 * 1024       // 512KB maximum
+	MinSFTPBufferSize             = 64 * 1024        // 64KB minimum
+	MaxSFTPBufferSize             = 16 * 1024 * 1024 // 16MB maximum
+	MinSFTPConcurrentRequests     = 1
+	MaxSFTPConcurrentRequests     = 128
+	MinSFTPParallelTransfers      = 1
+	MaxSFTPParallelTransfers      = 16
+)
+
 // AppConfig holds the application configuration
 type AppConfig struct {
 	WindowWidth     int            `yaml:"window_width"`
@@ -69,10 +94,12 @@ type AppConfig struct {
 	// Theme settings
 	Theme string `yaml:"theme"` // Theme preference: "dark", "light", or "system"
 	// Terminal settings
-	ScrollbackLines           int  `yaml:"scrollback_lines"`             // Number of lines to keep in scrollback buffer
+	ScrollbackLines            int  `yaml:"scrollback_lines"`               // Number of lines to keep in scrollback buffer
 	OpenLinksInExternalBrowser bool `yaml:"open_links_in_external_browser"` // Open URLs in external browser instead of in-app
 	// AI settings
 	AI AIConfig `yaml:"ai"` // AI configuration
+	// SFTP settings
+	SFTP SFTPConfig `yaml:"sftp"` // SFTP transfer optimization settings
 }
 
 // DefaultConfig returns a new AppConfig with default values
@@ -142,6 +169,14 @@ ncdu
 
 Always respond with raw commands only. No explanations. No formatting. Just commands.`,
 		},
+		// Default SFTP settings for optimized transfers
+		SFTP: SFTPConfig{
+			MaxPacketSize:      DefaultSFTPMaxPacketSize,
+			BufferSize:         DefaultSFTPBufferSize,
+			ConcurrentRequests: DefaultSFTPConcurrentRequests,
+			ParallelTransfers:  DefaultSFTPParallelTransfers,
+			UseConcurrentIO:    true,
+		},
 	}
 }
 
@@ -194,6 +229,20 @@ func (c *AppConfig) Validate() error {
 			return fmt.Errorf("AI hotkey cannot be empty when AI is enabled")
 		}
 		// API key validation is optional as some providers might not require it
+	}
+
+	// SFTP configuration validation
+	if c.SFTP.MaxPacketSize < MinSFTPMaxPacketSize || c.SFTP.MaxPacketSize > MaxSFTPMaxPacketSize {
+		return fmt.Errorf("SFTP max packet size %d is out of range (%d-%d)", c.SFTP.MaxPacketSize, MinSFTPMaxPacketSize, MaxSFTPMaxPacketSize)
+	}
+	if c.SFTP.BufferSize < MinSFTPBufferSize || c.SFTP.BufferSize > MaxSFTPBufferSize {
+		return fmt.Errorf("SFTP buffer size %d is out of range (%d-%d)", c.SFTP.BufferSize, MinSFTPBufferSize, MaxSFTPBufferSize)
+	}
+	if c.SFTP.ConcurrentRequests < MinSFTPConcurrentRequests || c.SFTP.ConcurrentRequests > MaxSFTPConcurrentRequests {
+		return fmt.Errorf("SFTP concurrent requests %d is out of range (%d-%d)", c.SFTP.ConcurrentRequests, MinSFTPConcurrentRequests, MaxSFTPConcurrentRequests)
+	}
+	if c.SFTP.ParallelTransfers < MinSFTPParallelTransfers || c.SFTP.ParallelTransfers > MaxSFTPParallelTransfers {
+		return fmt.Errorf("SFTP parallel transfers %d is out of range (%d-%d)", c.SFTP.ParallelTransfers, MinSFTPParallelTransfers, MaxSFTPParallelTransfers)
 	}
 
 	return nil

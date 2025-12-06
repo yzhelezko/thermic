@@ -292,6 +292,7 @@ const (
 	SettingTypeInt    SettingType = "int"
 	SettingTypeString SettingType = "string"
 	SettingTypePath   SettingType = "path"
+	SettingTypeMap    SettingType = "map" // For complex nested settings like SFTP config
 )
 
 // SettingConfig contains all configuration options for a setting
@@ -369,6 +370,12 @@ func (c *SettingConfig) Validate(value SettingValue) error {
 				}
 			}
 			return fmt.Errorf("invalid %s '%s', allowed values: %v", c.Name, strVal, c.AllowedValues)
+		}
+
+	case SettingTypeMap:
+		// Map types are validated by the CustomUpdate function
+		if _, ok := value.(map[string]interface{}); !ok {
+			return fmt.Errorf("invalid type for %s: expected map, got %T", c.Name, value)
 		}
 
 	default:
@@ -527,6 +534,59 @@ func updateAIAPIKeySetting(a *App, value SettingValue) error {
 	return nil
 }
 
+// Custom update function for SFTP settings
+func updateSFTPSetting(a *App, value SettingValue) error {
+	// The value comes as a map[string]interface{} from JavaScript
+	sftpMap, ok := value.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid SFTP config type: expected map, got %T", value)
+	}
+
+	// Update each field if present
+	if v, exists := sftpMap["max_packet_size"]; exists {
+		if intVal, ok := toInt(v); ok {
+			a.config.config.SFTP.MaxPacketSize = intVal
+		}
+	}
+	if v, exists := sftpMap["buffer_size"]; exists {
+		if intVal, ok := toInt(v); ok {
+			a.config.config.SFTP.BufferSize = intVal
+		}
+	}
+	if v, exists := sftpMap["concurrent_requests"]; exists {
+		if intVal, ok := toInt(v); ok {
+			a.config.config.SFTP.ConcurrentRequests = intVal
+		}
+	}
+	if v, exists := sftpMap["parallel_transfers"]; exists {
+		if intVal, ok := toInt(v); ok {
+			a.config.config.SFTP.ParallelTransfers = intVal
+		}
+	}
+	if v, exists := sftpMap["use_concurrent_io"]; exists {
+		if boolVal, ok := v.(bool); ok {
+			a.config.config.SFTP.UseConcurrentIO = boolVal
+		}
+	}
+
+	fmt.Printf("SFTP settings updated: %+v\n", a.config.config.SFTP)
+	return nil
+}
+
+// Helper to convert interface{} to int (handles float64 from JSON)
+func toInt(v interface{}) (int, bool) {
+	switch val := v.(type) {
+	case int:
+		return val, true
+	case int64:
+		return int(val), true
+	case float64:
+		return int(val), true
+	default:
+		return 0, false
+	}
+}
+
 // Helper function to create pointer to int
 func intPtr(i int) *int {
 	return &i
@@ -636,6 +696,12 @@ var settingConfigs = map[string]*SettingConfig{
 		MaxLength:   intPtr(32),
 		ConfigField: "AI.Hotkey",
 	},
+	// SFTP Configuration
+	"SFTP": {
+		Name:         "SFTP",
+		Type:         SettingTypeMap,
+		CustomUpdate: updateSFTPSetting,
+	},
 }
 
 // ConfigSet is a universal method for updating any configuration setting
@@ -721,6 +787,16 @@ func (a *App) ConfigGet(settingName string) (SettingValue, error) {
 		return a.config.config.AI.ModelID, nil
 	case "AIHotkey":
 		return a.config.config.AI.Hotkey, nil
+
+	// SFTP Configuration
+	case "SFTP":
+		return map[string]interface{}{
+			"max_packet_size":      a.config.config.SFTP.MaxPacketSize,
+			"buffer_size":          a.config.config.SFTP.BufferSize,
+			"concurrent_requests":  a.config.config.SFTP.ConcurrentRequests,
+			"parallel_transfers":   a.config.config.SFTP.ParallelTransfers,
+			"use_concurrent_io":    a.config.config.SFTP.UseConcurrentIO,
+		}, nil
 
 	default:
 		return nil, &ConfigError{Op: "get_setting", Err: fmt.Errorf("unhandled setting: %s", settingName)}

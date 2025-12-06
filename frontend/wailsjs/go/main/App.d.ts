@@ -7,6 +7,8 @@ export function ApproveHostKeyUpdate(arg1:string,arg2:boolean):Promise<void>;
 
 export function CacheMonitoringResult(arg1:main.SSHSession,arg2:string,arg3:string):Promise<void>;
 
+export function CancelSFTPTransfer(arg1:string):Promise<void>;
+
 export function CheckForUpdates():Promise<main.UpdateInfo>;
 
 export function CheckWSLAvailable():Promise<boolean>;
@@ -84,6 +86,8 @@ export function DownloadAndInstallUpdate(arg1:string):Promise<void>;
 export function DownloadRemoteDirectory(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function DownloadRemoteFile(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function DownloadRemoteFileWithProgress(arg1:string,arg2:string,arg3:string,arg4:number,arg5:number):Promise<void>;
 
 export function DuplicateProfile(arg1:string):Promise<main.Profile>;
 

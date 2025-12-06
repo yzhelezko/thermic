@@ -326,6 +326,11 @@ export class SettingsManager {
             console.error('Error setting up URL settings:', error);
         });
 
+        // --- SFTP Transfer Settings Logic ---
+        this.setupSFTPSettings().catch(error => {
+            console.error('Error setting up SFTP settings:', error);
+        });
+
         // --- Profiles Path Settings Logic ---
         this.setupProfilesPathSettings().catch(error => {
             console.error('Error setting up profiles path settings:', error);
@@ -457,6 +462,98 @@ export class SettingsManager {
 
         } catch (error) {
             console.error('Error in setupURLSettings:', error);
+        }
+    }
+
+    async setupSFTPSettings() {
+        try {
+            // Get SFTP settings elements
+            const parallelTransfersInput = document.getElementById('sftp-parallel-transfers-input');
+            const maxPacketInput = document.getElementById('sftp-max-packet-input');
+            const bufferSizeInput = document.getElementById('sftp-buffer-size-input');
+            const concurrentIOToggle = document.getElementById('sftp-concurrent-io-toggle');
+
+            if (!parallelTransfersInput || !maxPacketInput || !bufferSizeInput || !concurrentIOToggle) {
+                console.warn('SFTP settings elements not found in DOM');
+                return;
+            }
+
+            // Load current SFTP settings from backend
+            const sftpConfig = await window.go.main.App.ConfigGet("SFTP");
+            
+            if (sftpConfig) {
+                parallelTransfersInput.value = sftpConfig.parallel_transfers || 4;
+                maxPacketInput.value = (sftpConfig.max_packet_size || 262144) / 1024; // Convert bytes to KB
+                bufferSizeInput.value = (sftpConfig.buffer_size || 1048576) / 1024; // Convert bytes to KB
+                concurrentIOToggle.checked = sftpConfig.use_concurrent_io !== false; // Default to true
+            }
+
+            // Debounced handlers for numeric inputs
+            let debounceTimeout;
+            const saveWithDebounce = async (field, value) => {
+                clearTimeout(debounceTimeout);
+                debounceTimeout = setTimeout(async () => {
+                    try {
+                        const currentConfig = await window.go.main.App.ConfigGet("SFTP") || {};
+                        currentConfig[field] = value;
+                        await window.go.main.App.ConfigSet("SFTP", currentConfig);
+                        showNotification('SFTP settings updated (apply on next connection)', 'info');
+                    } catch (error) {
+                        console.error('Error updating SFTP setting:', error);
+                        showNotification(`Failed to update SFTP setting: ${error.message}`, 'error');
+                    }
+                }, 1000);
+            };
+
+            // Parallel transfers handler
+            parallelTransfersInput.addEventListener('input', async (event) => {
+                const value = parseInt(event.target.value, 10);
+                if (isNaN(value) || value < 1 || value > 16) {
+                    showNotification('Parallel transfers must be between 1 and 16', 'error');
+                    event.target.value = 4;
+                    return;
+                }
+                saveWithDebounce('parallel_transfers', value);
+            });
+
+            // Max packet size handler (input in KB, store in bytes)
+            maxPacketInput.addEventListener('input', async (event) => {
+                const valueKB = parseInt(event.target.value, 10);
+                if (isNaN(valueKB) || valueKB < 32 || valueKB > 512) {
+                    showNotification('Max packet size must be between 32 and 512 KB', 'error');
+                    event.target.value = 256;
+                    return;
+                }
+                saveWithDebounce('max_packet_size', valueKB * 1024);
+            });
+
+            // Buffer size handler (input in KB, store in bytes)
+            bufferSizeInput.addEventListener('input', async (event) => {
+                const valueKB = parseInt(event.target.value, 10);
+                if (isNaN(valueKB) || valueKB < 64 || valueKB > 16384) {
+                    showNotification('Buffer size must be between 64 and 16384 KB', 'error');
+                    event.target.value = 1024;
+                    return;
+                }
+                saveWithDebounce('buffer_size', valueKB * 1024);
+            });
+
+            // Concurrent I/O toggle handler
+            concurrentIOToggle.addEventListener('change', async (event) => {
+                try {
+                    const currentConfig = await window.go.main.App.ConfigGet("SFTP") || {};
+                    currentConfig.use_concurrent_io = event.target.checked;
+                    await window.go.main.App.ConfigSet("SFTP", currentConfig);
+                    showNotification(`Concurrent I/O ${event.target.checked ? 'enabled' : 'disabled'} (apply on next connection)`, 'info');
+                } catch (error) {
+                    console.error('Error updating concurrent I/O setting:', error);
+                    showNotification(`Failed to update setting: ${error.message}`, 'error');
+                    event.target.checked = !event.target.checked;
+                }
+            });
+
+        } catch (error) {
+            console.error('Error in setupSFTPSettings:', error);
         }
     }
 

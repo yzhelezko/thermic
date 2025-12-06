@@ -1,6 +1,6 @@
 // Remote File Explorer module for SFTP file browsing
 import { updateStatus, showNotification } from "./utils.js";
-import { EventsOn, OnFileDrop } from "../../wailsjs/runtime/runtime";
+import { OnFileDrop } from "../../wailsjs/runtime/runtime";
 import { modal } from "../components/Modal.js";
 import { LiveSearch } from "../components/LiveSearch.js";
 
@@ -28,10 +28,20 @@ export class RemoteExplorerManager {
 
         // Bind methods to preserve 'this' context
         this.handleActiveTabChanged = this.handleActiveTabChanged.bind(this);
-        this.sftpProgressUnsub = null;
 
         // Multi-select state
         this.lastSelectedIndex = null;
+
+        // Batch transfer progress tracking
+        this.batchProgress = {
+            active: false,
+            isDownload: false,
+            totalFiles: 0,
+            completedFiles: 0,
+            fileProgress: new Map(), // Map<fileIndex, {percent, bytesPerSec}>
+            startTime: null,
+            cancelled: false,
+        };
     }
 
     init() {
@@ -39,33 +49,9 @@ export class RemoteExplorerManager {
 
         console.log("🔵 Initializing Remote Explorer Manager...");
         this.setupEventListeners();
-        // Subscribe once to backend upload progress events
-        try {
-            if (!this.sftpProgressUnsub && typeof EventsOn === "function") {
-                this.sftpProgressUnsub = EventsOn(
-                    "sftp-upload-progress",
-                    (data) => {
-                        this.handleUploadProgressEvent(data);
-                    },
-                );
-            } else if (
-                !this.sftpProgressUnsub &&
-                window.runtime &&
-                typeof window.runtime.EventsOn === "function"
-            ) {
-                this.sftpProgressUnsub = window.runtime.EventsOn(
-                    "sftp-upload-progress",
-                    (data) => {
-                        this.handleUploadProgressEvent(data);
-                    },
-                );
-            }
-        } catch (e) {
-            console.warn("Failed to subscribe to sftp-upload-progress:", e);
-        }
 
-        // Note: sftp-reconnected event is handled by global listener in terminal.js
-        // and forwarded to this.handleSftpReconnected()
+        // Note: SFTP events (sftp-reconnected, sftp-upload-progress, sftp-download-progress)
+        // are handled by global listeners in terminal.js and forwarded to this manager
 
         // Register OS-level file drop (drag & drop) support
         try {
@@ -464,6 +450,16 @@ export class RemoteExplorerManager {
                 await this.uploadToDirectory(this.currentRemotePath);
             };
             uploadBtn.addEventListener("click", this.handleUploadClick);
+        }
+
+        // Add event listener for cancel transfer button
+        const cancelBtn = document.getElementById("upload-cancel-btn");
+        if (cancelBtn) {
+            cancelBtn.removeEventListener("click", this.handleCancelClick);
+            this.handleCancelClick = async () => {
+                await this.cancelTransfer();
+            };
+            cancelBtn.addEventListener("click", this.handleCancelClick);
         }
 
         // Add event listener for new folder button
@@ -1228,50 +1224,204 @@ export class RemoteExplorerManager {
         this.liveSearch.enable();
     }
 
-    // Handle progress events from backend
-    handleUploadProgressEvent(data) {
+    // Handle progress events from backend (unified for upload/download)
+    handleTransferProgressEvent(data, direction = "upload") {
         if (!data || data.sessionId !== this.currentSessionID) return;
         const phase = data.phase || "";
+        const isDownload = direction === "download";
 
         if (phase === "batch-start") {
-            this.showUploadProgress({
-                fileIndex: 0,
+            // Initialize batch tracking
+            this.batchProgress = {
+                active: true,
+                isDownload,
                 totalFiles: data.totalFiles || 0,
-                percent: 0,
-                fileName: "",
-            });
+                completedFiles: 0,
+                fileProgress: new Map(),
+                startTime: Date.now(),
+                cancelled: false,
+            };
+            this.showBatchProgress();
             return;
         }
 
         if (phase === "start" || phase === "progress") {
+            const fileIndex = data.fileIndex || 1;
+            const totalFiles = data.totalFiles || 1;
             const percent = typeof data.percent === "number" ? data.percent : 0;
-            this.showUploadProgress({
-                fileIndex: data.fileIndex || 1,
-                totalFiles: data.totalFiles || 1,
+            const bytesPerSec = data.bytesPerSec || 0;
+
+            // Initialize batchProgress if not set (for single file transfers without batch-start)
+            if (!this.batchProgress || !this.batchProgress.active) {
+                this.batchProgress = {
+                    active: true,
+                    isDownload,
+                    totalFiles: totalFiles,
+                    completedFiles: 0,
+                    fileProgress: new Map(),
+                    startTime: Date.now(),
+                    cancelled: false,
+                };
+            }
+
+            // Update individual file progress in batch
+            this.batchProgress.fileProgress.set(fileIndex, {
                 percent,
+                bytesPerSec,
                 fileName: data.fileName || "",
             });
+
+            this.showBatchProgress();
             return;
         }
 
         if (phase === "complete") {
-            this.showUploadProgress({
-                fileIndex: data.fileIndex || 1,
-                totalFiles: data.totalFiles || 1,
+            const fileIndex = data.fileIndex || 1;
+            const totalFiles = data.totalFiles || 1;
+            
+            // Initialize batchProgress if not set (for single file transfers)
+            if (!this.batchProgress || !this.batchProgress.active) {
+                this.batchProgress = {
+                    active: true,
+                    isDownload,
+                    totalFiles: totalFiles,
+                    completedFiles: 0,
+                    fileProgress: new Map(),
+                    startTime: Date.now(),
+                    cancelled: false,
+                };
+            }
+            
+            // Mark file as complete
+            this.batchProgress.fileProgress.set(fileIndex, {
                 percent: 100,
+                bytesPerSec: 0,
                 fileName: data.fileName || "",
+                completed: true,
             });
+            this.batchProgress.completedFiles++;
+
+            this.showBatchProgress();
+            
+            // For single file transfers, hide progress when done
+            if (this.batchProgress.completedFiles >= this.batchProgress.totalFiles) {
+                setTimeout(() => {
+                    this.resetBatchProgress();
+                    this.hideTransferProgress();
+                }, 500);
+            }
+            return;
+        }
+
+        if (phase === "error") {
+            this.resetBatchProgress();
+            this.hideTransferProgress();
+            showNotification(
+                `${isDownload ? "Download" : "Upload"} error: ${data.error || "Unknown error"}`,
+                "error",
+            );
             return;
         }
 
         if (phase === "batch-complete") {
-            this.hideUploadProgress();
-            // Refresh directory after uploads
-            if (this.currentRemotePath) {
+            this.resetBatchProgress();
+            this.hideTransferProgress();
+            // Refresh directory after uploads (not needed for downloads)
+            if (!isDownload && this.currentRemotePath) {
                 this.refreshCurrentDirectory();
             }
             return;
         }
+    }
+
+    // Calculate aggregate batch progress
+    calculateBatchProgress() {
+        if (!this.batchProgress.active || this.batchProgress.totalFiles === 0) {
+            return { overallPercent: 0, avgSpeed: 0, activeFiles: 0 };
+        }
+
+        let totalPercent = 0;
+        let totalSpeed = 0;
+        let activeCount = 0;
+
+        for (const [, fileInfo] of this.batchProgress.fileProgress) {
+            totalPercent += fileInfo.percent || 0;
+            if (!fileInfo.completed && fileInfo.bytesPerSec > 0) {
+                totalSpeed += fileInfo.bytesPerSec;
+                activeCount++;
+            }
+        }
+
+        // Calculate overall progress: completed files + partial progress of active files
+        const completedPercent = this.batchProgress.completedFiles * 100;
+        const activePercent = totalPercent - (this.batchProgress.completedFiles * 100);
+        const overallPercent = (completedPercent + activePercent) / this.batchProgress.totalFiles;
+
+        return {
+            overallPercent: Math.min(100, Math.max(0, overallPercent)),
+            avgSpeed: totalSpeed,
+            activeFiles: activeCount,
+        };
+    }
+
+    // Show batch progress with aggregated info
+    showBatchProgress() {
+        const container = document.getElementById("upload-progress");
+        const text = document.getElementById("upload-progress-text");
+        const fill = document.getElementById("upload-progress-fill");
+        if (!container || !text || !fill) return;
+
+        container.style.display = "";
+
+        const { overallPercent, avgSpeed, activeFiles } = this.calculateBatchProgress();
+        
+        fill.style.width = `${overallPercent}%`;
+        
+        // Build progress text
+        const direction = this.batchProgress.isDownload ? "⬇" : "⬆";
+        const completed = this.batchProgress.completedFiles;
+        const total = this.batchProgress.totalFiles;
+        const speedPart = avgSpeed > 0 ? ` • ${this.formatTransferSpeed(avgSpeed)}` : "";
+        const activePart = activeFiles > 1 ? ` (${activeFiles} active)` : "";
+        
+        text.textContent = `${direction} ${completed}/${total} files • ${overallPercent.toFixed(0)}%${speedPart}${activePart}`;
+    }
+
+    // Reset batch progress state
+    resetBatchProgress() {
+        this.batchProgress = {
+            active: false,
+            isDownload: false,
+            totalFiles: 0,
+            completedFiles: 0,
+            fileProgress: new Map(),
+            startTime: null,
+            cancelled: false,
+        };
+    }
+
+    // Cancel ongoing transfer
+    async cancelTransfer() {
+        if (!this.batchProgress.active) return;
+        
+        this.batchProgress.cancelled = true;
+        
+        try {
+            if (window.go?.main?.App?.CancelSFTPTransfer) {
+                await window.go.main.App.CancelSFTPTransfer(this.currentSessionID);
+                showNotification("Transfer cancelled", "info");
+            }
+        } catch (error) {
+            console.error("Failed to cancel transfer:", error);
+        }
+        
+        this.resetBatchProgress();
+        this.hideTransferProgress();
+    }
+
+    // Legacy handler for backwards compatibility
+    handleUploadProgressEvent(data) {
+        this.handleTransferProgressEvent(data, "upload");
     }
 
     handleTabStatusUpdate(data) {
@@ -1421,12 +1571,28 @@ export class RemoteExplorerManager {
         }
     }
 
-    showUploadProgress({
+    // Format bytes per second to human readable format
+    formatTransferSpeed(bytesPerSec) {
+        if (!bytesPerSec || bytesPerSec <= 0) return "";
+        if (bytesPerSec < 1024) return `${bytesPerSec} B/s`;
+        if (bytesPerSec < 1024 * 1024) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`;
+        return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
+    }
+
+    showTransferProgress({
         fileIndex = 0,
         totalFiles = 1,
         percent = 0,
         fileName = "",
+        bytesPerSec = 0,
+        isDownload = false,
     } = {}) {
+        // If batch progress is active, use that instead
+        if (this.batchProgress.active) {
+            this.showBatchProgress();
+            return;
+        }
+
         const container = document.getElementById("upload-progress");
         const text = document.getElementById("upload-progress-text");
         const fill = document.getElementById("upload-progress-fill");
@@ -1435,15 +1601,42 @@ export class RemoteExplorerManager {
         container.style.display = "";
         const safePercent = Math.max(0, Math.min(100, percent));
         fill.style.width = `${safePercent}%`;
+        
+        // Build progress text with direction indicator and speed
+        const direction = isDownload ? "⬇" : "⬆";
         const namePart = fileName ? ` - ${fileName}` : "";
-        text.textContent = `File ${fileIndex}/${totalFiles}${namePart} • ${safePercent.toFixed(0)}%`;
+        const speedPart = bytesPerSec > 0 ? ` • ${this.formatTransferSpeed(bytesPerSec)}` : "";
+        text.textContent = `${direction} File ${fileIndex}/${totalFiles}${namePart} • ${safePercent.toFixed(0)}%${speedPart}`;
     }
 
-    hideUploadProgress() {
+    // Legacy method for backwards compatibility
+    showUploadProgress({
+        fileIndex = 0,
+        totalFiles = 1,
+        percent = 0,
+        fileName = "",
+    } = {}) {
+        this.showTransferProgress({
+            fileIndex,
+            totalFiles,
+            percent,
+            fileName,
+            isDownload: false,
+        });
+    }
+
+    hideTransferProgress() {
         const container = document.getElementById("upload-progress");
         if (container) {
             container.style.display = "none";
         }
+        // Also reset batch progress
+        this.resetBatchProgress();
+    }
+
+    // Legacy method for backwards compatibility
+    hideUploadProgress() {
+        this.hideTransferProgress();
     }
 
     performFileSearch(query) {
@@ -1868,9 +2061,11 @@ export class RemoteExplorerManager {
                     <!-- Breadcrumbs will be rendered here -->
                 </div>
                 <div class="upload-progress" id="upload-progress" style="display:none;">
-                    <div class="upload-progress-summary">
-                        <span class="upload-progress-title">Uploading…</span>
-                        <span class="upload-progress-text" id="upload-progress-text"></span>
+                    <div class="upload-progress-header">
+                        <div class="upload-progress-summary">
+                            <span class="upload-progress-text" id="upload-progress-text"></span>
+                        </div>
+                        <button class="upload-cancel-btn" id="upload-cancel-btn" title="Cancel transfer">✕</button>
                     </div>
                     <div class="upload-progress-bar">
                         <div class="upload-progress-fill" id="upload-progress-fill" style="width:0%"></div>
@@ -2521,12 +2716,18 @@ export class RemoteExplorerManager {
                 }
 
                 const itemType = isDir ? "folder" : "file";
-                showNotification(
-                    `Downloading ${itemType} "${fileName}"...`,
-                    "info",
-                );
+                
+                // Show initial progress indicator
+                this.showTransferProgress({
+                    fileIndex: isDir ? 0 : 1,
+                    totalFiles: 1,
+                    percent: 0,
+                    fileName: fileName,
+                    isDownload: true,
+                });
 
                 // Call appropriate backend download method based on type
+                // Progress events will be received via sftp-download-progress
                 if (isDir) {
                     // Use the new directory download method for folders
                     await window.go.main.App.DownloadRemoteDirectory(
@@ -2543,6 +2744,9 @@ export class RemoteExplorerManager {
                     );
                 }
 
+                // Hide progress (may already be hidden by event handler)
+                this.hideTransferProgress();
+
                 showNotification(
                     `${itemType} "${fileName}" downloaded successfully`,
                     "success",
@@ -2552,6 +2756,7 @@ export class RemoteExplorerManager {
             }
         } catch (error) {
             console.error("Failed to download file:", error);
+            this.hideTransferProgress();
             showNotification(`Failed to download: ${error.message}`, "error");
         }
     }
