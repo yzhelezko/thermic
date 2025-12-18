@@ -47,7 +47,7 @@ export class RemoteExplorerManager {
     init() {
         if (this.isInitialized) return;
 
-        console.log("🔵 Initializing Remote Explorer Manager...");
+        console.log("Initializing Remote Explorer Manager...");
         this.setupEventListeners();
 
         // Note: SFTP events (sftp-reconnected, sftp-upload-progress, sftp-download-progress)
@@ -87,11 +87,40 @@ export class RemoteExplorerManager {
                             percent: 0,
                             fileName: "",
                         });
-                        await window.go.main.App.UploadRemoteFiles(
-                            this.currentSessionID,
-                            paths,
-                            this.currentRemotePath,
-                        );
+                        
+                        try {
+                            await window.go.main.App.UploadRemoteFiles(
+                                this.currentSessionID,
+                                paths,
+                                this.currentRemotePath,
+                            );
+                        } catch (uploadErr) {
+                            const errorMsg = uploadErr.message || uploadErr.toString();
+                            const isPermissionError = this.isPermissionError(errorMsg);
+
+                            if (isPermissionError) {
+                                this.hideUploadProgress();
+                                const useSudo = await this.confirmSudoOperation("upload files", `${paths.length} file(s)`);
+                                if (useSudo) {
+                                    this.showUploadProgress({
+                                        fileIndex: 0,
+                                        totalFiles: paths.length,
+                                        percent: 0,
+                                        fileName: "",
+                                    });
+                                    await window.go.main.App.UploadRemoteFilesWithSudo(
+                                        this.currentSessionID,
+                                        paths,
+                                        this.currentRemotePath,
+                                    );
+                                } else {
+                                    throw new Error("Upload cancelled - requires elevated permissions");
+                                }
+                            } else {
+                                throw uploadErr;
+                            }
+                        }
+                        
                         this.hideUploadProgress();
                         showNotification(
                             `${paths.length} file(s) uploaded successfully`,
@@ -130,21 +159,21 @@ export class RemoteExplorerManager {
         // Make globally accessible for onclick handlers
         window.remoteExplorerManager = this;
 
-        console.log("✅ Remote Explorer Manager initialized");
+        console.log("Remote Explorer Manager initialized");
     }
 
     setupEventListeners() {
         // Listen for active tab changes from the tabs manager
         document.addEventListener("active-tab-changed", (e) => {
-            console.log("🔄 Active tab changed event received");
-            console.log("🔄 isActivePanel:", this.isActivePanel);
-            console.log("🔄 Event detail:", e.detail);
+            console.log("Active tab changed event received");
+            console.log("isActivePanel:", this.isActivePanel);
+            console.log("Event detail:", e.detail);
 
             if (this.isActivePanel) {
-                console.log("🔄 Processing tab change (panel is active)");
+                console.log("Processing tab change (panel is active)");
                 this.handleActiveTabChanged(e.detail);
             } else {
-                console.log("🔄 Ignoring tab change (panel is not active)");
+                console.log("Ignoring tab change (panel is not active)");
             }
         });
 
@@ -270,7 +299,7 @@ export class RemoteExplorerManager {
                     filePreviewOpen.classList.contains("active")
                 ) {
                     console.log(
-                        "📄 F3 pressed with file preview open - this will be handled by preview modal",
+                        "F3 pressed with file preview open - this will be handled by preview modal",
                     );
                     return; // Let the file preview modal handle F3 (close)
                 }
@@ -299,7 +328,7 @@ export class RemoteExplorerManager {
                     filePreviewOpen.classList.contains("active")
                 ) {
                     console.log(
-                        "📄 File preview is active, ignoring Enter key",
+                        "File preview is active, ignoring Enter key",
                     );
                     return; // Let the editor handle Enter key
                 }
@@ -325,7 +354,7 @@ export class RemoteExplorerManager {
                     filePreviewOpen.classList.contains("active")
                 ) {
                     console.log(
-                        "📄 File preview is active, ignoring Delete key",
+                        "File preview is active, ignoring Delete key",
                     );
                     return; // Let the editor handle Delete key
                 }
@@ -351,7 +380,7 @@ export class RemoteExplorerManager {
                             .show({
                                 title: "Delete items",
                                 message: confirmMsg,
-                                icon: "🗑️",
+                                icon: '<img src="./icons/trash.svg" class="svg-icon" alt="">',
                                 buttons: [
                                     {
                                         text: "Cancel",
@@ -387,7 +416,7 @@ export class RemoteExplorerManager {
                     filePreviewOpen &&
                     filePreviewOpen.classList.contains("active")
                 ) {
-                    console.log("📄 File preview is active, ignoring F2 key");
+                    console.log("File preview is active, ignoring F2 key");
                     return; // Let the editor handle F2 key
                 }
 
@@ -414,7 +443,7 @@ export class RemoteExplorerManager {
                     filePreviewOpen &&
                     filePreviewOpen.classList.contains("active")
                 ) {
-                    console.log("📄 File preview is active, ignoring F5 key");
+                    console.log("File preview is active, ignoring F5 key");
                     return; // Let the editor handle F5 key (if needed)
                 }
 
@@ -549,21 +578,21 @@ export class RemoteExplorerManager {
 
     // Called when the Files sidebar panel becomes active
     async handlePanelBecameActive() {
-        console.log("🔵 Remote Explorer: Panel became active");
-        console.log("🔵 Current session ID:", this.currentSessionID);
-        console.log("🔵 Background session ID:", this.backgroundSessionID);
-        console.log("🔵 Background path:", this.backgroundRemotePath);
-        console.log("🔵 isActivePanel before:", this.isActivePanel);
+        console.log("Remote Explorer: Panel became active");
+        console.log("Current session ID:", this.currentSessionID);
+        console.log("Background session ID:", this.backgroundSessionID);
+        console.log("Background path:", this.backgroundRemotePath);
+        console.log("isActivePanel before:", this.isActivePanel);
 
         this.isActivePanel = true;
-        console.log("🔵 isActivePanel set to:", this.isActivePanel);
+        console.log("isActivePanel set to:", this.isActivePanel);
 
         // Enable live search for files
         this.initializeLiveSearch();
 
         // Get current active tab
         const activeTab = this.tabsManager.getActiveTab();
-        console.log("🔵 Active tab:", activeTab);
+        console.log("Active tab:", activeTab);
 
         // Check if we have a valid SSH tab
         if (
@@ -572,44 +601,44 @@ export class RemoteExplorerManager {
             activeTab.status !== "connected"
         ) {
             console.log(
-                "🔴 No SSH tab or not connected - showing select SSH message",
+                "No SSH tab or not connected - showing select SSH message",
             );
             this.showSelectSSHMessage();
             return;
         }
 
-        console.log("🔵 SSH tab is valid, processing...");
+        console.log("SSH tab is valid, processing...");
 
         // Check if we have a background session for this same tab
         if (this.backgroundSessionID === activeTab.sessionId) {
             console.log(
-                "🟢 Restoring background SFTP session:",
+                "Restoring background SFTP session:",
                 this.backgroundSessionID,
             );
-            console.log("🟢 Restoring path:", this.backgroundRemotePath);
+            console.log("Restoring path:", this.backgroundRemotePath);
 
             // Restore from background
             this.currentSessionID = this.backgroundSessionID;
             this.currentRemotePath = this.backgroundRemotePath || ".";
 
-            console.log("🟢 Restored current path:", this.currentRemotePath);
+            console.log("Restored current path:", this.currentRemotePath);
 
             // Always render the UI first to ensure proper structure
-            console.log("🟢 Rendering file explorer UI");
+            console.log("Rendering file explorer UI");
             this.renderFileExplorerUI();
 
             // Check if we have cached content for this path
             const cacheKey = `${this.currentSessionID}:${this.currentRemotePath}`;
-            console.log("🟢 Checking cache key:", cacheKey);
-            console.log("🟢 Cache has key:", this.fileCache.has(cacheKey));
+            console.log("Checking cache key:", cacheKey);
+            console.log("Cache has key:", this.fileCache.has(cacheKey));
 
             if (this.fileCache.has(cacheKey)) {
                 console.log(
-                    "🟢 Using cached content for path:",
+                    "Using cached content for path:",
                     this.currentRemotePath,
                 );
                 const cachedFiles = this.fileCache.get(cacheKey);
-                console.log("🟢 Cached files count:", cachedFiles.length);
+                console.log("Cached files count:", cachedFiles.length);
 
                 // Add parent directory if needed
                 const processedFiles = [...cachedFiles];
@@ -618,7 +647,7 @@ export class RemoteExplorerManager {
                         this.currentRemotePath,
                     );
                     console.log(
-                        "🟢 Adding parent directory with path:",
+                        "Adding parent directory with path:",
                         parentPath,
                     );
                     processedFiles.unshift({
@@ -643,21 +672,21 @@ export class RemoteExplorerManager {
                 });
 
                 console.log(
-                    "🟢 About to render cached files - count:",
+                    "About to render cached files - count:",
                     processedFiles.length,
                 );
 
                 this.updateBreadcrumbs(this.currentRemotePath); // Rebuild breadcrumbs from path
                 console.log(
-                    "🟢 Breadcrumbs updated for path:",
+                    "Breadcrumbs updated for path:",
                     this.currentRemotePath,
                 );
 
                 this.renderFileList(processedFiles);
-                console.log("🟢 File list rendered from cache");
+                console.log("File list rendered from cache");
             } else {
                 console.log(
-                    "🟠 No cache, reloading directory:",
+                    "No cache, reloading directory:",
                     this.currentRemotePath,
                 );
                 // No cache, reload the directory
@@ -674,7 +703,7 @@ export class RemoteExplorerManager {
             updateStatus(`File Explorer restored for ${activeTab.title}`);
         } else {
             console.log(
-                "🔴 Different tab or no background session - initializing new",
+                "Different tab or no background session - initializing new",
             );
             // Different tab or no background session - initialize new
             try {
@@ -684,7 +713,7 @@ export class RemoteExplorerManager {
                 await this.updateHistoryButtonCount();
             } catch (error) {
                 console.error(
-                    "🔄 Failed to initialize for new SSH session:",
+                    "Failed to initialize for new SSH session:",
                     error,
                 );
                 this.showErrorState(`Failed to initialize: ${error.message}`);
@@ -694,12 +723,12 @@ export class RemoteExplorerManager {
 
     // Called when the Files sidebar panel becomes hidden (switching to Profiles, etc.)
     async handlePanelBecameHidden() {
-        console.log("🔵 Remote Explorer: Panel became hidden");
+        console.log("Remote Explorer: Panel became hidden");
         console.log(
-            "🔵 Current session ID before hiding:",
+            "Current session ID before hiding:",
             this.currentSessionID,
         );
-        console.log("🔵 Current path before hiding:", this.currentRemotePath);
+        console.log("Current path before hiding:", this.currentRemotePath);
 
         this.isActivePanel = false;
 
@@ -711,26 +740,26 @@ export class RemoteExplorerManager {
         // Move current session to background instead of disconnecting
         if (this.currentSessionID) {
             console.log(
-                "🟡 Moving SFTP session to background:",
+                "Moving SFTP session to background:",
                 this.currentSessionID,
             );
-            console.log("🟡 Saving current path:", this.currentRemotePath);
+            console.log("Saving current path:", this.currentRemotePath);
 
             this.backgroundSessionID = this.currentSessionID;
             this.backgroundRemotePath = this.currentRemotePath;
             // Note: We don't need to save breadcrumbs since we rebuild them from path
 
             console.log(
-                "🟡 Background session saved:",
+                "Background session saved:",
                 this.backgroundSessionID,
             );
-            console.log("🟡 Background path saved:", this.backgroundRemotePath);
+            console.log("Background path saved:", this.backgroundRemotePath);
 
             // Clear active session but keep background
             this.currentSessionID = null;
             this.currentRemotePath = null;
 
-            console.log("🟡 Active session cleared");
+            console.log("Active session cleared");
         }
 
         // Clear any search state
@@ -742,31 +771,31 @@ export class RemoteExplorerManager {
         const sidebarContent = document.getElementById("sidebar-content");
         if (sidebarContent) {
             sidebarContent.className = "";
-            console.log("🟡 Cleared sidebar content classes");
+            console.log("Cleared sidebar content classes");
         }
 
         // DON'T clear the view - keep the UI intact for faster restoration
-        console.log("🟡 NOT calling clearView() - keeping UI intact");
+        console.log("NOT calling clearView() - keeping UI intact");
         // this.clearView();
-        console.log("🟡 handlePanelBecameHidden completed");
+        console.log("handlePanelBecameHidden completed");
     }
 
     // Handle active tab changes when panel is visible
     async handleActiveTabChanged(tabDetails) {
         const { tab } = tabDetails;
 
-        console.log("🔄 handleActiveTabChanged called with tab:", tab);
+        console.log("handleActiveTabChanged called with tab:", tab);
 
         // Only process if the panel is currently active
         if (!this.isActivePanel) {
-            console.log("🔄 Panel not active, skipping tab change processing");
+            console.log("Panel not active, skipping tab change processing");
             return;
         }
 
-        console.log("🔄 Processing tab change for active panel");
-        console.log("🔄 New tab:", tab);
-        console.log("🔄 Tab type:", tab?.connectionType);
-        console.log("🔄 Tab status:", tab?.status);
+        console.log("Processing tab change for active panel");
+        console.log("New tab:", tab);
+        console.log("Tab type:", tab?.connectionType);
+        console.log("Tab status:", tab?.status);
 
         // Check if we have a valid SSH tab
         if (
@@ -774,7 +803,7 @@ export class RemoteExplorerManager {
             tab.connectionType !== "ssh" ||
             tab.status !== "connected"
         ) {
-            console.log("🔄 No SSH tab or not connected");
+            console.log("No SSH tab or not connected");
 
             // Clean up current session but keep background intact
             this.currentSessionID = null;
@@ -789,11 +818,11 @@ export class RemoteExplorerManager {
             this.currentSessionID === tab.sessionId ||
             this.backgroundSessionID === tab.sessionId
         ) {
-            console.log("🔄 Same session, no reinitialization needed");
+            console.log("Same session, no reinitialization needed");
 
             // If we have a background session for this tab, restore it
             if (this.backgroundSessionID === tab.sessionId) {
-                console.log("🔄 Restoring from background session");
+                console.log("Restoring from background session");
                 this.currentSessionID = this.backgroundSessionID;
                 this.currentRemotePath = this.backgroundRemotePath || ".";
 
@@ -807,11 +836,11 @@ export class RemoteExplorerManager {
             return;
         }
 
-        console.log("🔄 Different session, initializing new connection");
+        console.log("Different session, initializing new connection");
 
         // Move current session to background if it exists and is different
         if (this.currentSessionID && this.currentSessionID !== tab.sessionId) {
-            console.log("🔄 Moving current session to background");
+            console.log("Moving current session to background");
             this.backgroundSessionID = this.currentSessionID;
             this.backgroundRemotePath = this.currentRemotePath;
         }
@@ -824,7 +853,7 @@ export class RemoteExplorerManager {
             await this.updateHistoryButtonCount();
         } catch (error) {
             console.error(
-                "🔄 Failed to initialize for new SSH session:",
+                "Failed to initialize for new SSH session:",
                 error,
             );
             this.showErrorState(`Failed to initialize: ${error.message}`);
@@ -887,11 +916,11 @@ export class RemoteExplorerManager {
     }
 
     async loadDirectoryContent(remotePath) {
-        console.log("📂 loadDirectoryContent called with path:", remotePath);
-        console.log("📂 Current session ID:", this.currentSessionID);
+        console.log("loadDirectoryContent called with path:", remotePath);
+        console.log("Current session ID:", this.currentSessionID);
 
         if (!this.currentSessionID) {
-            console.error("📂 No current session ID");
+            console.error("No current session ID");
             this.showErrorState("No active SSH session");
             return;
         }
@@ -902,8 +931,8 @@ export class RemoteExplorerManager {
             remotePath === "undefined" ||
             remotePath === "null"
         ) {
-            console.error("📂 Invalid remote path provided:", remotePath);
-            console.log("📂 Falling back to current working directory");
+            console.error("Invalid remote path provided:", remotePath);
+            console.log("Falling back to current working directory");
             remotePath = ".";
         }
 
@@ -911,7 +940,7 @@ export class RemoteExplorerManager {
         remotePath = String(remotePath).trim();
 
         if (!remotePath) {
-            console.error("📂 Empty remote path after trimming");
+            console.error("Empty remote path after trimming");
             remotePath = ".";
         }
 
@@ -920,14 +949,14 @@ export class RemoteExplorerManager {
 
             // Check cache first
             const cacheKey = `${this.currentSessionID}:${remotePath}`;
-            console.log("📂 Checking cache for key:", cacheKey);
+            console.log("Checking cache for key:", cacheKey);
 
             if (this.fileCache.has(cacheKey)) {
-                console.log("📦 Using cached content for path:", remotePath);
+                console.log("Using cached content for path:", remotePath);
                 const cachedFiles = this.fileCache.get(cacheKey);
 
                 if (!cachedFiles || !Array.isArray(cachedFiles)) {
-                    console.error("📦 Invalid cached data:", cachedFiles);
+                    console.error("Invalid cached data:", cachedFiles);
                     this.fileCache.delete(cacheKey);
                     // Fall through to fresh load
                 } else {
@@ -960,31 +989,41 @@ export class RemoteExplorerManager {
                     this.currentRemotePath = remotePath;
                     this.updateBreadcrumbs(remotePath);
                     this.renderFileList(processedFiles);
-                    console.log("📦 Cached content rendered successfully");
+                    console.log("Cached content rendered successfully");
                     return;
                 }
             }
 
-            console.log("🌐 Loading fresh content for path:", remotePath);
+            console.log("Loading fresh content for path:", remotePath);
 
             // Add more detailed error handling for the API call
             let files;
+            let usedSudo = false;
             try {
                 files = await window.go.main.App.ListRemoteFiles(
                     this.currentSessionID,
                     remotePath,
                 );
-                console.log("🌐 API call successful, received files:", files);
+                console.log("API call successful, received files:", files);
             } catch (apiError) {
-                console.error("🌐 API call failed:", apiError);
+                console.error("API call failed:", apiError);
+                const errorMsg = apiError.message || apiError.toString();
 
-                // Check if the error is due to invalid path and try fallback
-                if (
-                    apiError.message &&
-                    apiError.message.includes("failed to read directory")
+                // Check if this is a permission error
+                const isPermissionError = this.isPermissionError(errorMsg);
+
+                if (isPermissionError) {
+                    console.log("Permission error detected, showing sudo retry option");
+                    this.showErrorState(
+                        "Access denied - directory requires elevated permissions",
+                        { showSudoRetry: true, path: remotePath }
+                    );
+                    return;
+                } else if (
+                    errorMsg.includes("failed to read directory")
                 ) {
                     console.log(
-                        "🌐 Directory read failed, trying to fallback to working directory",
+                        "Directory read failed, trying to fallback to working directory",
                     );
                     if (remotePath !== ".") {
                         // Try fallback to current working directory
@@ -994,10 +1033,10 @@ export class RemoteExplorerManager {
                                 ".",
                             );
                             remotePath = "."; // Update path to reflect the fallback
-                            console.log("🌐 Fallback successful");
+                            console.log("Fallback successful");
                         } catch (fallbackError) {
                             console.error(
-                                "🌐 Fallback also failed:",
+                                "Fallback also failed:",
                                 fallbackError,
                             );
                             throw apiError; // Throw original error
@@ -1014,21 +1053,21 @@ export class RemoteExplorerManager {
             let fileList = files;
             if (!files) {
                 console.log(
-                    "🌐 Empty directory (null response), treating as empty array",
+                    "Empty directory (null response), treating as empty array",
                 );
                 fileList = [];
             } else if (!Array.isArray(files)) {
                 console.error(
-                    "🌐 Invalid files response (not an array):",
+                    "Invalid files response (not an array):",
                     files,
                 );
                 this.showErrorState("Invalid response from server");
                 return;
             }
 
-            console.log("🌐 Received files:", fileList.length);
+            console.log("Received files:", fileList.length);
             console.log(
-                "🌐 Sample file data:",
+                "Sample file data:",
                 fileList.length > 0 ? fileList[0] : "none",
             );
 
@@ -1037,7 +1076,7 @@ export class RemoteExplorerManager {
             if (remotePath !== "/") {
                 const parentPath = this.getParentPath(remotePath);
                 console.log(
-                    "🌐 Adding parent directory with path:",
+                    "Adding parent directory with path:",
                     parentPath,
                 );
                 processedFiles.unshift({
@@ -1067,7 +1106,7 @@ export class RemoteExplorerManager {
             this.currentRemotePath = remotePath;
             this.updateBreadcrumbs(remotePath);
             this.renderFileList(processedFiles);
-            console.log("🌐 Fresh content rendered successfully");
+            console.log("Fresh content rendered successfully");
         } catch (error) {
             console.error("Failed to load directory:", error);
             console.error("Error details:", {
@@ -1378,7 +1417,7 @@ export class RemoteExplorerManager {
         fill.style.width = `${overallPercent}%`;
         
         // Build progress text
-        const direction = this.batchProgress.isDownload ? "⬇" : "⬆";
+        const direction = this.batchProgress.isDownload ? "" : "";
         const completed = this.batchProgress.completedFiles;
         const total = this.batchProgress.totalFiles;
         const speedPart = avgSpeed > 0 ? ` • ${this.formatTransferSpeed(avgSpeed)}` : "";
@@ -1486,7 +1525,7 @@ export class RemoteExplorerManager {
             if (this.currentRemotePath && this.currentRemotePath !== ".") {
                 try {
                     console.log(
-                        "🔄 Refreshing current path:",
+                        "Refreshing current path:",
                         this.currentRemotePath,
                     );
                     await this.loadDirectory(this.currentRemotePath);
@@ -1495,7 +1534,7 @@ export class RemoteExplorerManager {
                     console.error("Failed to refresh after reconnection:", err);
                     // Fall back to working directory
                     try {
-                        console.log("🔄 Falling back to working directory");
+                        console.log("Falling back to working directory");
                         let startPath = ".";
                         try {
                             const workingDir =
@@ -1507,7 +1546,7 @@ export class RemoteExplorerManager {
                             }
                         } catch (error) {
                             console.warn(
-                                "🔄 Failed to get working directory:",
+                                "Failed to get working directory:",
                                 error,
                             );
                         }
@@ -1529,7 +1568,7 @@ export class RemoteExplorerManager {
             } else {
                 // No path set yet, initialize from home/working directory
                 try {
-                    console.log("🔄 Initializing from working directory");
+                    console.log("Initializing from working directory");
                     // Try to get the current working directory
                     let startPath = ".";
                     try {
@@ -1540,12 +1579,12 @@ export class RemoteExplorerManager {
                         if (workingDir && workingDir.trim()) {
                             startPath = workingDir.trim();
                             console.log(
-                                `🔄 Resolved working directory to: ${startPath}`,
+                                `Resolved working directory to: ${startPath}`,
                             );
                         }
                     } catch (error) {
                         console.warn(
-                            "🔄 Failed to get working directory, using '.':",
+                            "Failed to get working directory, using '.':",
                             error,
                         );
                     }
@@ -1566,7 +1605,7 @@ export class RemoteExplorerManager {
             }
         } else {
             console.log(
-                "🔄 Reconnected session is different from current, ignoring",
+                "Reconnected session is different from current, ignoring",
             );
         }
     }
@@ -1603,7 +1642,7 @@ export class RemoteExplorerManager {
         fill.style.width = `${safePercent}%`;
         
         // Build progress text with direction indicator and speed
-        const direction = isDownload ? "⬇" : "⬆";
+        const direction = isDownload ? "" : "";
         const namePart = fileName ? ` - ${fileName}` : "";
         const speedPart = bytesPerSec > 0 ? ` • ${this.formatTransferSpeed(bytesPerSec)}` : "";
         text.textContent = `${direction} File ${fileIndex}/${totalFiles}${namePart} • ${safePercent.toFixed(0)}%${speedPart}`;
@@ -1694,7 +1733,7 @@ export class RemoteExplorerManager {
         if (files.length === 0) {
             container.innerHTML = `
                 <div class="empty-directory">
-                    <div class="empty-directory-icon">📁</div>
+                    <div class="empty-directory-icon"></div>
                     <div>This directory is empty</div>
                 </div>
             `;
@@ -1737,60 +1776,62 @@ export class RemoteExplorerManager {
     }
 
     getFileIcon(file) {
+        const svgIcon = (name) => `<img src="./icons/${name}.svg" class="svg-icon file-icon" alt="">`;
+        
         if (file.isParent) {
             return `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="color: var(--text-secondary);">
                 <path d="M20,11V13H8L13.5,18.5L12.08,19.92L4.16,12L12.08,4.08L13.5,5.5L8,11H20Z"/>
             </svg>`;
         } else if (file.isDir) {
-            return "📁";
+            return svgIcon("folder");
         } else if (file.isSymlink) {
-            return "🔗";
+            return svgIcon("link");
         } else {
             const ext = file.name.split(".").pop().toLowerCase();
             const iconMap = {
-                txt: "📄",
-                md: "📄",
-                log: "📄",
-                readme: "📄",
-                js: "📜",
-                ts: "📜",
-                py: "📜",
-                sh: "📜",
-                bash: "📜",
-                html: "🌐",
-                htm: "🌐",
-                css: "🎨",
-                json: "📋",
-                xml: "📋",
-                jpg: "🖼️",
-                jpeg: "🖼️",
-                png: "🖼️",
-                gif: "🖼️",
-                svg: "🖼️",
-                pdf: "📕",
-                doc: "📘",
-                docx: "📘",
-                xls: "📗",
-                xlsx: "📗",
-                zip: "📦",
-                tar: "📦",
-                gz: "📦",
-                rar: "📦",
-                "7z": "📦",
-                exe: "⚙️",
-                bin: "⚙️",
-                app: "⚙️",
-                deb: "⚙️",
-                rpm: "⚙️",
-                conf: "🔧",
-                config: "🔧",
-                cfg: "🔧",
-                ini: "🔧",
-                sql: "🗃️",
-                db: "🗃️",
-                sqlite: "🗃️",
+                txt: "document",
+                md: "document",
+                log: "document",
+                readme: "document",
+                js: "text",
+                ts: "text",
+                py: "text",
+                sh: "terminal",
+                bash: "terminal",
+                html: "globe",
+                htm: "globe",
+                css: "palette",
+                json: "clipboard",
+                xml: "clipboard",
+                jpg: "eye",
+                jpeg: "eye",
+                png: "eye",
+                gif: "eye",
+                svg: "eye",
+                pdf: "page",
+                doc: "page",
+                docx: "page",
+                xls: "page",
+                xlsx: "page",
+                zip: "files",
+                tar: "files",
+                gz: "files",
+                rar: "files",
+                "7z": "files",
+                exe: "settings",
+                bin: "settings",
+                app: "settings",
+                deb: "settings",
+                rpm: "settings",
+                conf: "wrench",
+                config: "wrench",
+                cfg: "wrench",
+                ini: "wrench",
+                sql: "clipboard",
+                db: "clipboard",
+                sqlite: "clipboard",
             };
-            return iconMap[ext] || "📄";
+            return iconMap[ext] ? svgIcon(iconMap[ext]) : svgIcon("document");
         }
     }
 
@@ -1866,14 +1907,14 @@ export class RemoteExplorerManager {
     }
 
     handleFileItemDoubleClick(fileItem) {
-        console.log("🖱️ Double-click detected on file item");
+        console.log("Double-click detected on file item");
 
         const isDir = fileItem.dataset.isDir === "true";
         const path = fileItem.dataset.path;
         const isParent = fileItem.dataset.isParent === "true";
         const fileName = fileItem.dataset.name;
 
-        console.log("🖱️ File item data:", {
+        console.log("File item data:", {
             isDir,
             path,
             isParent,
@@ -1882,15 +1923,15 @@ export class RemoteExplorerManager {
 
         // Validate path before proceeding
         if (!path || path === "undefined" || path === "null") {
-            console.error("🖱️ Invalid path detected in file item:", path);
-            console.error("🖱️ File item element:", fileItem);
+            console.error("Invalid path detected in file item:", path);
+            console.error("File item element:", fileItem);
             updateStatus("Error: Invalid file path");
             return;
         }
 
         if (isDir) {
             // Navigate to directory (works for both regular directories and parent directory)
-            console.log("🖱️ Navigating to directory:", path);
+            console.log("Navigating to directory:", path);
             this.navigateToPath(path);
 
             if (isParent) {
@@ -1907,20 +1948,20 @@ export class RemoteExplorerManager {
             }
         } else {
             // For files, show file preview on double-click
-            console.log("📄 Double-click on file, showing preview:", fileName);
-            console.log("📄 File path:", path);
+            console.log("Double-click on file, showing preview:", fileName);
+            console.log("File path:", path);
             this.showFilePreview(path, fileName);
         }
     }
 
     async navigateToPath(path) {
-        console.log("🧭 navigateToPath called with:", path);
-        console.log("🧭 Current path:", this.currentRemotePath);
+        console.log("navigateToPath called with:", path);
+        console.log("Current path:", this.currentRemotePath);
 
         // Validate the path parameter
         if (!path || path === "undefined" || path === "null") {
-            console.error("🧭 Invalid path provided to navigateToPath:", path);
-            console.log("🧭 Staying at current path:", this.currentRemotePath);
+            console.error("Invalid path provided to navigateToPath:", path);
+            console.log("Staying at current path:", this.currentRemotePath);
             return;
         }
 
@@ -1928,11 +1969,11 @@ export class RemoteExplorerManager {
         path = String(path).trim();
 
         if (!path) {
-            console.error("🧭 Empty path after trimming");
+            console.error("Empty path after trimming");
             return;
         }
 
-        console.log("🧭 Normalized path:", path);
+        console.log("Normalized path:", path);
 
         if (path !== this.currentRemotePath) {
             // Clear cache when navigating to force refresh
@@ -1942,11 +1983,11 @@ export class RemoteExplorerManager {
             const pathDescription =
                 path === "/" ? "root (/)" : path === "." ? "home" : `"${path}"`;
             console.log(
-                `🧭 Navigating from ${this.currentRemotePath} to ${pathDescription}`,
+                `Navigating from ${this.currentRemotePath} to ${pathDescription}`,
             );
             await this.loadDirectoryContent(path);
         } else {
-            console.log("🧭 Already at target path, no navigation needed");
+            console.log("Already at target path, no navigation needed");
         }
     }
 
@@ -1962,16 +2003,70 @@ export class RemoteExplorerManager {
         }
     }
 
-    showErrorState(message) {
+    showErrorState(message, options = {}) {
         const container = this.getFileListContainer();
         if (container) {
+            const { showSudoRetry = false, path = null } = options;
+            
+            let buttonsHtml = `<button class="retry-btn" onclick="window.remoteExplorerManager.retryCurrentOperation()">Retry</button>`;
+            
+            if (showSudoRetry && path) {
+                buttonsHtml = `
+                    <button class="retry-btn" onclick="window.remoteExplorerManager.retryCurrentOperation()">Retry</button>
+                    <button class="retry-btn sudo-retry-btn" onclick="window.remoteExplorerManager.retryWithSudo('${path.replace(/'/g, "\\'")}')">Retry with sudo</button>
+                `;
+            }
+            
             container.innerHTML = `
                 <div class="error-state">
-                    <div class="error-icon">⚠️</div>
+                    <div class="error-icon"><img src="./icons/${showSudoRetry ? "lock" : "warning"}.svg" class="svg-icon" alt=""></div>
                     <div class="error-message">${message}</div>
-                    <button class="retry-btn" onclick="window.remoteExplorerManager.retryCurrentOperation()">Retry</button>
+                    <div class="error-buttons">${buttonsHtml}</div>
                 </div>
             `;
+        }
+    }
+
+    // Retry directory listing with sudo
+    async retryWithSudo(path) {
+        console.log("Retrying with sudo for path:", path);
+        
+        if (!this.currentSessionID) {
+            this.showErrorState("No active session");
+            return;
+        }
+
+        this.showLoadingState();
+
+        try {
+            const files = await window.go.main.App.ListRemoteFilesWithSudo(
+                this.currentSessionID,
+                path,
+            );
+            
+            console.log("Sudo listing successful, received files:", files?.length || 0);
+            
+            // Process and display files
+            const fileList = files || [];
+            const processedFiles = [...fileList];
+            
+            if (path !== "/") {
+                const parentPath = this.getParentPath(path);
+                processedFiles.unshift({
+                    name: "..",
+                    path: parentPath,
+                    isDir: true,
+                    isParent: true,
+                });
+            }
+
+            this.currentRemotePath = path;
+            this.updateBreadcrumbs(path);
+            this.renderFileList(processedFiles);
+            
+        } catch (error) {
+            console.error("Sudo listing failed:", error);
+            this.showErrorState(`Cannot access directory with sudo: ${error.message}`);
         }
     }
 
@@ -2012,16 +2107,16 @@ export class RemoteExplorerManager {
     }
 
     renderFileExplorerUI() {
-        console.log("🎨 renderFileExplorerUI called");
-        console.log("🎨 isActivePanel:", this.isActivePanel);
+        console.log("renderFileExplorerUI called");
+        console.log("isActivePanel:", this.isActivePanel);
 
         const sidebarContent = document.getElementById("sidebar-content");
         if (!sidebarContent) {
-            console.log("🎨 No sidebar content element found");
+            console.log("No sidebar content element found");
             return;
         }
 
-        console.log("🎨 Rendering file explorer UI");
+        console.log("Rendering file explorer UI");
         sidebarContent.innerHTML = `
             <div class="remote-explorer-container">
                 <div class="file-toolbar">
@@ -2078,7 +2173,7 @@ export class RemoteExplorerManager {
                 </div>
             </div>
         `;
-        console.log("🎨 File explorer UI rendered");
+        console.log("File explorer UI rendered");
 
         // Set up toolbar event listeners after UI is rendered
         this.setupToolbarEventListeners();
@@ -2133,7 +2228,7 @@ export class RemoteExplorerManager {
     }
 
     showUploadDialog() {
-        console.log("📤 Showing upload dialog");
+        console.log("Showing upload dialog");
 
         if (!this.currentSessionID) {
             showNotification("No active SSH session", "error");
@@ -2146,7 +2241,7 @@ export class RemoteExplorerManager {
                 .show({
                     title: "Upload Files",
                     message: `Upload files to: ${this.currentRemotePath}`,
-                    icon: "📤",
+                    icon: '<img src="./icons/arrow-up.svg" class="svg-icon" alt="">',
                     content: `
                     <div style="margin-top: 16px;">
                         <label for="file-upload" style="display: block; margin-bottom: 12px; color: var(--text-primary); font-size: 13px; font-weight: 500;">
@@ -2214,7 +2309,7 @@ export class RemoteExplorerManager {
     }
 
     showNewFolderDialog() {
-        console.log("📁 Showing new folder dialog");
+        console.log("Showing new folder dialog");
 
         // Use the existing modal component with custom content for input
         if (window.modal) {
@@ -2222,7 +2317,7 @@ export class RemoteExplorerManager {
                 .show({
                     title: "Create New Folder",
                     message: `Create a new folder in: ${this.currentRemotePath}`,
-                    icon: "📁",
+                    icon: '<img src="./icons/folder.svg" class="svg-icon" alt="">',
                     content: `
                     <div style="margin-top: 16px;">
                         <label for="new-folder-name" style="display: block; margin-bottom: 6px; color: var(--text-primary); font-size: 13px; font-weight: 500;">
@@ -2277,7 +2372,7 @@ export class RemoteExplorerManager {
     }
 
     showNewFileDialog() {
-        console.log("📄 Showing new file dialog");
+        console.log("Showing new file dialog");
 
         // Use the existing modal component with custom content for input
         if (window.modal) {
@@ -2285,7 +2380,7 @@ export class RemoteExplorerManager {
                 .show({
                     title: "Create New File",
                     message: `Create a new file in: ${this.currentRemotePath}`,
-                    icon: "📄",
+                    icon: '<img src="./icons/document.svg" class="svg-icon" alt="">',
                     content: `
                     <div style="margin-top: 16px;">
                         <label for="new-file-name" style="display: block; margin-bottom: 6px; color: var(--text-primary); font-size: 13px; font-weight: 500;">
@@ -2339,7 +2434,7 @@ export class RemoteExplorerManager {
     }
 
     showRenameDialog(filePath, currentName) {
-        console.log("📝 Showing rename dialog for:", currentName);
+        console.log("Showing rename dialog for:", currentName);
 
         // Use the existing modal component with custom content for input
         if (window.modal) {
@@ -2347,7 +2442,7 @@ export class RemoteExplorerManager {
                 .show({
                     title: "Rename File/Folder",
                     message: `Rename: ${filePath}`,
-                    icon: "📝",
+                    icon: '<img src="./icons/rename.svg" class="svg-icon" alt="">',
                     content: `
                     <div style="margin-top: 16px;">
                         <label for="new-file-name" style="display: block; margin-bottom: 6px; color: var(--text-primary); font-size: 13px; font-weight: 500;">
@@ -2412,7 +2507,7 @@ export class RemoteExplorerManager {
     }
 
     showDeleteConfirmation(filePath, fileName, isDir) {
-        console.log("🗑️ Showing delete confirmation for:", fileName);
+        console.log("Showing delete confirmation for:", fileName);
 
         // Use the existing modal system for confirmation
         if (window.modal) {
@@ -2421,7 +2516,7 @@ export class RemoteExplorerManager {
                 .show({
                     title: `Delete ${itemType}`,
                     message: `Are you sure you want to delete "${fileName}"?${isDir ? " This will delete all contents." : ""}`,
-                    icon: "🗑️",
+                    icon: '<img src="./icons/trash.svg" class="svg-icon" alt="">',
                     buttons: [
                         {
                             text: "Cancel",
@@ -2453,15 +2548,15 @@ export class RemoteExplorerManager {
     }
 
     retryCurrentOperation() {
-        console.log("🔁 Retry operation called");
-        console.log("🔁 Current session ID:", this.currentSessionID);
-        console.log("🔁 Current remote path:", this.currentRemotePath);
+        console.log("Retry operation called");
+        console.log("Current session ID:", this.currentSessionID);
+        console.log("Current remote path:", this.currentRemotePath);
 
         if (this.currentSessionID && this.currentRemotePath) {
-            console.log("🔁 Retrying with valid session and path");
+            console.log("Retrying with valid session and path");
             this.loadDirectoryContent(this.currentRemotePath);
         } else {
-            console.error("🔁 Cannot retry - missing session or path");
+            console.error("Cannot retry - missing session or path");
             this.showErrorState("Cannot retry: no active session or path");
         }
     }
@@ -2525,13 +2620,13 @@ export class RemoteExplorerManager {
             return;
         }
 
-        try {
-            const newFolderPath =
-                this.currentRemotePath === "/"
-                    ? `/${folderName}`
-                    : `${this.currentRemotePath}/${folderName}`;
+        const newFolderPath =
+            this.currentRemotePath === "/"
+                ? `/${folderName}`
+                : `${this.currentRemotePath}/${folderName}`;
 
-            console.log("📁 Creating folder:", newFolderPath);
+        try {
+            console.log("Creating folder:", newFolderPath);
             await window.go.main.App.CreateRemoteDirectory(
                 this.currentSessionID,
                 newFolderPath,
@@ -2546,19 +2641,36 @@ export class RemoteExplorerManager {
             await this.refreshCurrentDirectory();
         } catch (error) {
             console.error("Failed to create folder:", error);
-            let errorMessage = "Unknown error";
-            if (error.message) {
-                errorMessage = error.message;
-            } else if (typeof error === "string") {
-                errorMessage = error;
-            } else if (
-                error.toString &&
-                error.toString() !== "[object Object]"
-            ) {
-                errorMessage = error.toString();
+            const errorMsg = error.message || error.toString();
+            const isPermissionError = this.isPermissionError(errorMsg);
+
+            if (isPermissionError) {
+                // Try with sudo
+                const useSudo = await this.confirmSudoOperation("create folder", folderName);
+                if (useSudo) {
+                    try {
+                        await window.go.main.App.CreateRemoteDirectoryWithSudo(
+                            this.currentSessionID,
+                            newFolderPath,
+                        );
+                        showNotification(
+                            `Folder "${folderName}" created with sudo`,
+                            "success",
+                        );
+                        await this.refreshCurrentDirectory();
+                        return;
+                    } catch (sudoError) {
+                        showNotification(
+                            `Failed to create folder with sudo: ${sudoError.message}`,
+                            "error",
+                        );
+                        return;
+                    }
+                }
             }
+
             showNotification(
-                `Failed to create folder: ${errorMessage}`,
+                `Failed to create folder: ${errorMsg}`,
                 "error",
             );
         }
@@ -2570,13 +2682,13 @@ export class RemoteExplorerManager {
             return;
         }
 
-        try {
-            const newFilePath =
-                this.currentRemotePath === "/"
-                    ? `/${fileName}`
-                    : `${this.currentRemotePath}/${fileName}`;
+        const newFilePath =
+            this.currentRemotePath === "/"
+                ? `/${fileName}`
+                : `${this.currentRemotePath}/${fileName}`;
 
-            console.log("📄 Creating file:", newFilePath);
+        try {
+            console.log("Creating file:", newFilePath);
 
             // Create an empty file by uploading empty content
             await window.go.main.App.UpdateRemoteFileContent(
@@ -2599,8 +2711,40 @@ export class RemoteExplorerManager {
             }, 500); // Small delay to ensure directory refresh completes
         } catch (error) {
             console.error("Failed to create file:", error);
+            const errorMsg = error.message || error.toString();
+            const isPermissionError = this.isPermissionError(errorMsg);
+
+            if (isPermissionError) {
+                // Try with sudo
+                const useSudo = await this.confirmSudoOperation("create file", fileName);
+                if (useSudo) {
+                    try {
+                        await window.go.main.App.UpdateRemoteFileContentWithSudo(
+                            this.currentSessionID,
+                            newFilePath,
+                            "",
+                        );
+                        showNotification(
+                            `File "${fileName}" created with sudo`,
+                            "success",
+                        );
+                        await this.refreshCurrentDirectory();
+                        setTimeout(() => {
+                            this.showFilePreview(newFilePath, fileName);
+                        }, 500);
+                        return;
+                    } catch (sudoError) {
+                        showNotification(
+                            `Failed to create file with sudo: ${sudoError.message}`,
+                            "error",
+                        );
+                        return;
+                    }
+                }
+            }
+
             showNotification(
-                `Failed to create file: ${error.message}`,
+                `Failed to create file: ${errorMsg}`,
                 "error",
             );
         }
@@ -2612,13 +2756,13 @@ export class RemoteExplorerManager {
             return;
         }
 
-        try {
-            // Build new path
-            const pathParts = oldPath.split("/");
-            pathParts[pathParts.length - 1] = newName;
-            const newPath = pathParts.join("/");
+        // Build new path
+        const pathParts = oldPath.split("/");
+        pathParts[pathParts.length - 1] = newName;
+        const newPath = pathParts.join("/");
 
-            console.log("📝 Renaming from:", oldPath, "to:", newPath);
+        try {
+            console.log("Renaming from:", oldPath, "to:", newPath);
             await window.go.main.App.RenameRemotePath(
                 this.currentSessionID,
                 oldPath,
@@ -2631,7 +2775,29 @@ export class RemoteExplorerManager {
             await this.refreshCurrentDirectory();
         } catch (error) {
             console.error("Failed to rename file:", error);
-            showNotification(`Failed to rename: ${error.message}`, "error");
+            const errorMsg = error.message || error.toString();
+            const isPermissionError = this.isPermissionError(errorMsg);
+
+            if (isPermissionError) {
+                const useSudo = await this.confirmSudoOperation("rename", oldName);
+                if (useSudo) {
+                    try {
+                        await window.go.main.App.RenameRemotePathWithSudo(
+                            this.currentSessionID,
+                            oldPath,
+                            newPath,
+                        );
+                        showNotification(`"${oldName}" renamed to "${newName}" with sudo`, "success");
+                        await this.refreshCurrentDirectory();
+                        return;
+                    } catch (sudoError) {
+                        showNotification(`Failed to rename with sudo: ${sudoError.message}`, "error");
+                        return;
+                    }
+                }
+            }
+
+            showNotification(`Failed to rename: ${errorMsg}`, "error");
         }
     }
 
@@ -2641,14 +2807,15 @@ export class RemoteExplorerManager {
             return;
         }
 
+        const itemType = isDir ? "folder" : "file";
+
         try {
-            console.log("🗑️ Deleting:", filePath);
+            console.log("Deleting:", filePath);
             await window.go.main.App.DeleteRemotePath(
                 this.currentSessionID,
                 filePath,
             );
 
-            const itemType = isDir ? "folder" : "file";
             showNotification(
                 `${itemType} "${fileName}" deleted successfully`,
                 "success",
@@ -2658,7 +2825,31 @@ export class RemoteExplorerManager {
             await this.refreshCurrentDirectory();
         } catch (error) {
             console.error("Failed to delete file:", error);
-            showNotification(`Failed to delete: ${error.message}`, "error");
+            const errorMsg = error.message || error.toString();
+            const isPermissionError = this.isPermissionError(errorMsg);
+
+            if (isPermissionError) {
+                const useSudo = await this.confirmSudoOperation("delete", fileName);
+                if (useSudo) {
+                    try {
+                        await window.go.main.App.DeleteRemotePathWithSudo(
+                            this.currentSessionID,
+                            filePath,
+                        );
+                        showNotification(
+                            `${itemType} "${fileName}" deleted with sudo`,
+                            "success",
+                        );
+                        await this.refreshCurrentDirectory();
+                        return;
+                    } catch (sudoError) {
+                        showNotification(`Failed to delete with sudo: ${sudoError.message}`, "error");
+                        return;
+                    }
+                }
+            }
+
+            showNotification(`Failed to delete: ${errorMsg}`, "error");
         }
     }
 
@@ -2668,20 +2859,56 @@ export class RemoteExplorerManager {
             return;
         }
 
+        let useSudoForAll = false;
+        let deletedCount = 0;
+
         try {
             // Delete sequentially to keep backend simple and show progress in status
             for (const el of selectedElements) {
                 const path = el.dataset.path;
                 const name = el.dataset.name;
-                const isDir = el.dataset.isDir === "true";
-                await window.go.main.App.DeleteRemotePath(
-                    this.currentSessionID,
-                    path,
-                );
-                console.log("🗑️ Deleted:", path);
+                
+                try {
+                    if (useSudoForAll) {
+                        await window.go.main.App.DeleteRemotePathWithSudo(
+                            this.currentSessionID,
+                            path,
+                        );
+                    } else {
+                        await window.go.main.App.DeleteRemotePath(
+                            this.currentSessionID,
+                            path,
+                        );
+                    }
+                    deletedCount++;
+                    console.log("Deleted:", path);
+                } catch (itemError) {
+                    const errorMsg = itemError.message || itemError.toString();
+                    const isPermissionError = this.isPermissionError(errorMsg);
+
+                    if (isPermissionError && !useSudoForAll) {
+                        const useSudo = await this.confirmSudoOperation("delete remaining items", `${selectedElements.length - deletedCount} item(s)`);
+                        if (useSudo) {
+                            useSudoForAll = true;
+                            // Retry this item with sudo
+                            await window.go.main.App.DeleteRemotePathWithSudo(
+                                this.currentSessionID,
+                                path,
+                            );
+                            deletedCount++;
+                            console.log("Deleted with sudo:", path);
+                        } else {
+                            throw new Error(`Cancelled - ${deletedCount} item(s) deleted before permission error`);
+                        }
+                    } else {
+                        throw itemError;
+                    }
+                }
             }
+            
+            const sudoSuffix = useSudoForAll ? " with sudo" : "";
             showNotification(
-                `Deleted ${selectedElements.length} item(s)`,
+                `Deleted ${deletedCount} item(s)${sudoSuffix}`,
                 "success",
             );
             await this.refreshCurrentDirectory();
@@ -2691,6 +2918,10 @@ export class RemoteExplorerManager {
                 `Failed to delete items: ${error.message}`,
                 "error",
             );
+            // Still refresh to show what was deleted
+            if (deletedCount > 0) {
+                await this.refreshCurrentDirectory();
+            }
         }
     }
 
@@ -2702,7 +2933,7 @@ export class RemoteExplorerManager {
 
         try {
             console.log(
-                "⬇️ Starting download:",
+                "Starting download:",
                 filePath,
                 `(${isDir ? "directory" : "file"})`,
             );
@@ -2768,7 +2999,7 @@ export class RemoteExplorerManager {
         }
 
         try {
-            console.log("⬆️ Starting upload to:", targetPath);
+            console.log("Starting upload to:", targetPath);
 
             // Use Wails runtime to show file selection dialog
             if (window.go?.main?.App?.SelectFilesToUpload) {
@@ -2787,11 +3018,38 @@ export class RemoteExplorerManager {
                 });
 
                 // Call backend upload method (progress arrives via events)
-                await window.go.main.App.UploadRemoteFiles(
-                    this.currentSessionID,
-                    localPaths,
-                    targetPath,
-                );
+                try {
+                    await window.go.main.App.UploadRemoteFiles(
+                        this.currentSessionID,
+                        localPaths,
+                        targetPath,
+                    );
+                } catch (uploadError) {
+                    const errorMsg = uploadError.message || uploadError.toString();
+                    const isPermissionError = this.isPermissionError(errorMsg);
+
+                    if (isPermissionError) {
+                        this.hideUploadProgress();
+                        const useSudo = await this.confirmSudoOperation("upload files", `${localPaths.length} file(s)`);
+                        if (useSudo) {
+                            this.showUploadProgress({
+                                fileIndex: 0,
+                                totalFiles: localPaths.length,
+                                percent: 0,
+                                fileName: "",
+                            });
+                            await window.go.main.App.UploadRemoteFilesWithSudo(
+                                this.currentSessionID,
+                                localPaths,
+                                targetPath,
+                            );
+                        } else {
+                            throw new Error("Upload cancelled - requires elevated permissions");
+                        }
+                    } else {
+                        throw uploadError;
+                    }
+                }
 
                 // Fallback: ensure the progress bar is cleared when call finishes
                 this.hideUploadProgress();
@@ -2812,6 +3070,7 @@ export class RemoteExplorerManager {
             }
         } catch (error) {
             console.error("Failed to upload files:", error);
+            this.hideUploadProgress();
             showNotification(`Failed to upload: ${error.message}`, "error");
         }
     }
@@ -2830,7 +3089,7 @@ export class RemoteExplorerManager {
 
         try {
             console.log(
-                "⬆️ Starting web file upload of",
+                "Starting web file upload of",
                 files.length,
                 "files",
             );
@@ -2842,7 +3101,7 @@ export class RemoteExplorerManager {
             const fileArray = Array.from(files);
 
             for (const file of fileArray) {
-                console.log("⬆️ Uploading file:", file.name);
+                console.log("Uploading file:", file.name);
 
                 // Read file content as ArrayBuffer
                 const arrayBuffer = await file.arrayBuffer();
@@ -2861,12 +3120,40 @@ export class RemoteExplorerManager {
                     percent: 0,
                     fileName: file.name,
                 });
+                
                 // Upload via backend API that accepts base64 content (progress handled by events)
-                await window.go.main.App.UploadFileContent(
-                    this.currentSessionID,
-                    remotePath,
-                    base64Content,
-                );
+                try {
+                    await window.go.main.App.UploadFileContent(
+                        this.currentSessionID,
+                        remotePath,
+                        base64Content,
+                    );
+                } catch (uploadError) {
+                    const errorMsg = uploadError.message || uploadError.toString();
+                    const isPermissionError = this.isPermissionError(errorMsg);
+
+                    if (isPermissionError) {
+                        // Try with sudo
+                        this.hideUploadProgress();
+                        const useSudo = await this.confirmSudoOperation("upload file", file.name);
+                        if (useSudo) {
+                            try {
+                                await window.go.main.App.UploadFileContentWithSudo(
+                                    this.currentSessionID,
+                                    remotePath,
+                                    base64Content,
+                                );
+                            } catch (sudoError) {
+                                throw new Error(`Sudo upload failed: ${sudoError.message || sudoError}`);
+                            }
+                        } else {
+                            throw new Error(`Upload cancelled - "${file.name}" requires elevated permissions`);
+                        }
+                    } else {
+                        throw uploadError;
+                    }
+                }
+                
                 // Fallback clear
                 this.hideUploadProgress();
             }
@@ -2880,13 +3167,14 @@ export class RemoteExplorerManager {
             await this.refreshCurrentDirectory();
         } catch (error) {
             console.error("Failed to upload files:", error);
+            this.hideUploadProgress();
             showNotification(`Failed to upload: ${error.message}`, "error");
         }
     }
 
     // File preview and editing methods
     async showFilePreview(filePath, fileName) {
-        console.log("👁️ Showing file preview for:", fileName);
+        console.log("Showing file preview for:", fileName);
 
         if (!this.currentSessionID) {
             showNotification("No active session", "error");
@@ -2896,7 +3184,7 @@ export class RemoteExplorerManager {
         // Check if a file preview is already open
         const existingPreview = document.getElementById("file-preview-overlay");
         if (existingPreview) {
-            console.log("📄 File preview already open, bringing to focus");
+            console.log("File preview already open, bringing to focus");
             // If the same file is being opened, just focus the existing preview
             if (
                 this.currentEditingFile &&
@@ -2910,7 +3198,7 @@ export class RemoteExplorerManager {
             } else {
                 // Different file - close existing and open new one
                 console.log(
-                    "📄 Different file requested, closing existing preview",
+                    "Different file requested, closing existing preview",
                 );
                 existingPreview.classList.remove("active");
                 setTimeout(() => {
@@ -2937,10 +3225,31 @@ export class RemoteExplorerManager {
 
         try {
             // Download file content for preview
-            let content = await window.go.main.App.GetRemoteFileContent(
-                this.currentSessionID,
-                filePath,
-            );
+            let content;
+            let usedSudoForRead = false;
+            
+            try {
+                content = await window.go.main.App.GetRemoteFileContent(
+                    this.currentSessionID,
+                    filePath,
+                );
+            } catch (readError) {
+                const errorMsg = readError.message || readError.toString();
+                const isPermissionError = this.isPermissionError(errorMsg);
+                
+                if (isPermissionError) {
+                    console.log("Permission error reading file, trying with sudo");
+                    // Try reading with sudo
+                    content = await window.go.main.App.GetRemoteFileContentWithSudo(
+                        this.currentSessionID,
+                        filePath,
+                    );
+                    usedSudoForRead = true;
+                    console.log("Successfully read file with sudo");
+                } else {
+                    throw readError;
+                }
+            }
 
             // Check if we received base64 content for a file that should be text
             const fileExtension = fileName.split(".").pop().toLowerCase();
@@ -2948,17 +3257,17 @@ export class RemoteExplorerManager {
 
             if (shouldBeText && this.isBase64String(content)) {
                 console.log(
-                    `⚠️ Received base64 content for text file ${fileName}, attempting to decode...`,
+                    `Received base64 content for text file ${fileName}, attempting to decode...`,
                 );
                 try {
                     // Decode base64 to get the actual text content
                     content = atob(content);
                     console.log(
-                        `✅ Successfully decoded base64 content for ${fileName}`,
+                        `Successfully decoded base64 content for ${fileName}`,
                     );
                 } catch (decodeError) {
                     console.warn(
-                        `❌ Failed to decode base64 content for ${fileName}:`,
+                        `Failed to decode base64 content for ${fileName}:`,
                         decodeError,
                     );
                     // Keep original base64 content as fallback
@@ -2968,18 +3277,39 @@ export class RemoteExplorerManager {
             // Track file in history
             await this.addToFileHistory(filePath, fileName);
 
+            // Check if file is writable by the current user
+            let canWrite = true;
+            let requiresSudo = usedSudoForRead; // If we needed sudo to read, we'll need it to write
+            
+            if (!usedSudoForRead) {
+                try {
+                    const [writable, fileExists] = await window.go.main.App.CheckFileWritePermission(
+                        this.currentSessionID,
+                        filePath,
+                    );
+                    canWrite = writable;
+                    requiresSudo = fileExists && !writable;
+                    if (requiresSudo) {
+                        console.log(`File "${fileName}" requires sudo to edit`);
+                    }
+                } catch (permError) {
+                    console.warn("Could not check file permissions:", permError);
+                    // Continue anyway, we'll handle errors on save
+                }
+            }
+
             // Show file preview panel
-            this.showFilePreviewPanel(filePath, fileName, content);
+            this.showFilePreviewPanel(filePath, fileName, content, false, requiresSudo);
 
             // Update status to show file is loaded
-            updateStatus(`Previewing: ${fileName}`);
+            updateStatus(`Previewing: ${fileName}${requiresSudo ? " (read-only)" : ""}`);
         } catch (error) {
             console.error("Failed to load file content:", error);
             showNotification(`Failed to load file: ${error.message}`, "error");
         }
     }
 
-    showFilePreviewPanel(filePath, fileName, content, forceTextMode = false) {
+    showFilePreviewPanel(filePath, fileName, content, forceTextMode = false, requiresSudo = false) {
         // Create a larger panel overlay similar to profile panel but bigger
         const overlay = document.createElement("div");
         overlay.id = "file-preview-overlay";
@@ -3007,12 +3337,15 @@ export class RemoteExplorerManager {
                     "contributing",
                 ].includes(fileName.toLowerCase()));
 
+        // Build sudo indicator if needed
+        const sudoIndicator = requiresSudo ? `<span class="sudo-indicator" title="This file requires elevated permissions to save"><img src="./icons/lock.svg" class="svg-icon" alt=""> sudo</span>` : "";
+
         overlay.innerHTML = `
             <div class="profile-panel file-preview-panel">
                 <div class="profile-panel-header">
                     <div class="profile-panel-title">
-                        <span class="profile-panel-title-icon">${isImageFile ? "🖼️" : isTextFile || forceTextMode ? "📄" : "📦"}</span>
-                        ${fileName}${forceTextMode ? " (Text Mode)" : ""}
+                        <span class="profile-panel-title-icon"><img src="./icons/${isImageFile ? "eye" : "document"}.svg" class="svg-icon" alt=""></span>
+                        ${fileName}${forceTextMode ? " (Text Mode)" : ""}${sudoIndicator}
                     </div>
                     <div class="file-preview-header-actions">
                         <button class="profile-panel-action-btn" id="file-preview-fullscreen" title="Toggle Fullscreen">
@@ -3038,7 +3371,7 @@ export class RemoteExplorerManager {
                             ? `
                         <button class="btn btn-secondary" id="file-preview-cancel">Cancel</button>
                         <button class="btn btn-secondary" id="file-download-btn">Download</button>
-                        <button class="btn btn-primary" id="file-save-btn">Save Changes</button>
+                        <button class="btn btn-primary${requiresSudo ? " sudo-save" : ""}" id="file-save-btn">${requiresSudo ? "Save with sudo" : "Save Changes"}</button>
                     `
                             : `
                         <button class="btn btn-secondary" id="file-preview-close-btn">Close</button>
@@ -3058,6 +3391,7 @@ export class RemoteExplorerManager {
             content: content,
             isText: isTextFile,
             forceTextMode: forceTextMode,
+            requiresSudo: requiresSudo,
         };
 
         // Setup event handlers
@@ -3135,10 +3469,10 @@ export class RemoteExplorerManager {
                 <div class="image-viewer-toolbar">
                     <span class="image-info">Image Preview</span>
                     <div class="image-controls">
-                        <button class="editor-btn" id="zoom-fit-btn" title="Fit to window">📐</button>
-                        <button class="editor-btn" id="zoom-actual-btn" title="Actual size">🔍</button>
-                        <button class="editor-btn" id="zoom-in-btn" title="Zoom in">➕</button>
-                        <button class="editor-btn" id="zoom-out-btn" title="Zoom out">➖</button>
+                        <button class="editor-btn" id="zoom-fit-btn" title="Fit to window"><img src="./icons/ruler.svg" class="svg-icon" alt="Fit"></button>
+                        <button class="editor-btn" id="zoom-actual-btn" title="Actual size"><img src="./icons/search.svg" class="svg-icon" alt="Actual"></button>
+                        <button class="editor-btn" id="zoom-in-btn" title="Zoom in"><img src="./icons/plus.svg" class="svg-icon" alt="+"></button>
+                        <button class="editor-btn" id="zoom-out-btn" title="Zoom out"><img src="./icons/arrow-down.svg" class="svg-icon" alt="-"></button>
                     </div>
                 </div>
                 <div class="image-container">
@@ -3154,7 +3488,7 @@ export class RemoteExplorerManager {
         return `
             <div class="file-binary-viewer">
                 <div class="binary-info">
-                    <div class="binary-icon">${mightBeText ? "📄" : "📦"}</div>
+                    <div class="binary-icon">${mightBeText ? "" : ""}</div>
                     <h3>${mightBeText ? "Unknown Text File" : "Binary File"}</h3>
                     <p>Cannot preview "${fileName}"</p>
                     <p>${
@@ -3164,7 +3498,7 @@ export class RemoteExplorerManager {
                     }</p>
                     <div class="binary-actions">
                         <button class="btn btn-secondary" id="open-as-text-btn">
-                            📝 Open as Text
+                            Open as Text
                         </button>
                         <p class="binary-hint">
                             ${
@@ -3378,7 +3712,7 @@ export class RemoteExplorerManager {
                 document.documentElement.getAttribute("data-theme");
             const newTheme = currentTheme === "dark" ? "vs-dark" : "vs-light";
 
-            console.log("🎨 Updating Monaco Editor theme to:", newTheme);
+            console.log("Updating Monaco Editor theme to:", newTheme);
             window.monaco.editor.setTheme(newTheme);
         }
     }
@@ -3637,36 +3971,225 @@ export class RemoteExplorerManager {
             return;
         }
 
+        const saveBtn = document.getElementById("file-save-btn");
+        const originalBtnText = saveBtn?.textContent;
+
         try {
             const newContent = this.monacoEditor.getValue();
 
-            // Upload the modified content back to the remote server
-            await window.go.main.App.UpdateRemoteFileContent(
-                this.currentSessionID,
-                this.currentEditingFile.path,
-                newContent,
-            );
+            // Update button to show saving state
+            if (saveBtn) {
+                saveBtn.textContent = "Saving...";
+                saveBtn.disabled = true;
+            }
 
-            showNotification(
-                `File "${this.currentEditingFile.name}" saved successfully`,
-                "success",
-            );
+            // Check if we need to use sudo
+            if (this.currentEditingFile.requiresSudo) {
+                // Try to save with sudo
+                await window.go.main.App.UpdateRemoteFileContentWithSudo(
+                    this.currentSessionID,
+                    this.currentEditingFile.path,
+                    newContent,
+                );
+                showNotification(
+                    `File "${this.currentEditingFile.name}" saved with sudo`,
+                    "success",
+                );
+            } else {
+                // Try regular save first
+                try {
+                    await window.go.main.App.UpdateRemoteFileContent(
+                        this.currentSessionID,
+                        this.currentEditingFile.path,
+                        newContent,
+                    );
+                    showNotification(
+                        `File "${this.currentEditingFile.name}" saved successfully`,
+                        "success",
+                    );
+                } catch (regularError) {
+                    // Check if it's a permission error
+                    const errorMsg = regularError.message || regularError.toString();
+                    const isPermissionError = this.isPermissionError(errorMsg);
+
+                    if (isPermissionError) {
+                        // Offer to retry with sudo
+                        console.log("Permission error detected, prompting for sudo retry");
+                        const useSudo = await this.confirmSudoSave(this.currentEditingFile.name);
+                        if (useSudo) {
+                            await window.go.main.App.UpdateRemoteFileContentWithSudo(
+                                this.currentSessionID,
+                                this.currentEditingFile.path,
+                                newContent,
+                            );
+                            // Update the file state to remember it needs sudo
+                            this.currentEditingFile.requiresSudo = true;
+                            // Update UI to show sudo indicator
+                            this.updateSudoIndicator(true);
+                            showNotification(
+                                `File "${this.currentEditingFile.name}" saved with sudo`,
+                                "success",
+                            );
+                        } else {
+                            throw new Error("Save cancelled - file requires elevated permissions");
+                        }
+                    } else {
+                        throw regularError;
+                    }
+                }
+            }
 
             // Reset modified state
             this.currentEditingFile.modified = false;
-            const saveBtn = document.getElementById("file-save-btn");
             if (saveBtn) {
-                saveBtn.textContent = "Save Changes";
+                saveBtn.textContent = this.currentEditingFile.requiresSudo ? "Save with sudo" : "Save Changes";
                 saveBtn.classList.remove("modified");
+                saveBtn.disabled = false;
+                // Update button class for sudo styling
+                if (this.currentEditingFile.requiresSudo) {
+                    saveBtn.classList.add("sudo-save");
+                }
             }
         } catch (error) {
             console.error("Failed to save file:", error);
-            showNotification(`Failed to save file: ${error.message}`, "error");
+            const errorMsg = error.message || error.toString();
+
+            // Provide more helpful error messages
+            let userMessage = `Failed to save file: ${errorMsg}`;
+            if (errorMsg.includes("sudo")) {
+                userMessage = `Could not save with sudo: ${errorMsg}. Make sure your user has sudo privileges without password, or use the terminal to save manually.`;
+            } else if (errorMsg.includes("permission") || errorMsg.includes("denied")) {
+                userMessage = `Permission denied: Cannot write to "${this.currentEditingFile.name}". The file may be owned by root or another user.`;
+            }
+
+            showNotification(userMessage, "error");
+
+            // Restore button state
+            if (saveBtn) {
+                saveBtn.textContent = originalBtnText || "Save Changes";
+                saveBtn.disabled = false;
+            }
+        }
+    }
+
+    // Update the sudo indicator in the file preview panel
+    updateSudoIndicator(showSudo) {
+        const titleElement = document.querySelector(".file-preview-panel .profile-panel-title");
+        if (!titleElement) return;
+
+        // Remove existing indicator if any
+        const existingIndicator = titleElement.querySelector(".sudo-indicator");
+        if (existingIndicator) {
+            existingIndicator.remove();
+        }
+
+        // Add indicator if needed
+        if (showSudo) {
+            const indicator = document.createElement("span");
+            indicator.className = "sudo-indicator";
+            indicator.title = "This file requires elevated permissions to save";
+            indicator.innerHTML = '<img src="./icons/lock.svg" class="svg-icon" alt=""> sudo';
+            titleElement.appendChild(indicator);
+        }
+
+        // Also update the save button
+        const saveBtn = document.getElementById("file-save-btn");
+        if (saveBtn) {
+            if (showSudo) {
+                saveBtn.textContent = "Save with sudo";
+                saveBtn.classList.add("sudo-save");
+            } else {
+                saveBtn.textContent = "Save Changes";
+                saveBtn.classList.remove("sudo-save");
+            }
+        }
+    }
+
+    // Check if an error message indicates a permission problem
+    isPermissionError(errorMsg) {
+        const lowerMsg = errorMsg.toLowerCase();
+        return lowerMsg.includes("permission") ||
+            lowerMsg.includes("denied") ||
+            lowerMsg.includes("access") ||
+            lowerMsg.includes("not permitted") ||
+            lowerMsg.includes("operation not allowed") ||
+            lowerMsg.includes("read-only") ||
+            lowerMsg.includes("cannot create") ||
+            lowerMsg.includes("cannot open") ||
+            lowerMsg.includes("failed to create");
+    }
+
+    // Show confirmation dialog for sudo operation (generic)
+    async confirmSudoOperation(operation, itemName) {
+        if (window.modal) {
+            const result = await window.modal.show({
+                title: "Permission Required",
+                message: `Cannot ${operation} "${itemName}" - elevated permissions required.`,
+                icon: '<img src="./icons/lock.svg" class="svg-icon" alt="">',
+                content: `
+                    <p style="margin-top: 12px; color: var(--text-secondary);">
+                        Do you want to ${operation} using sudo?
+                    </p>
+                    <p style="margin-top: 8px; font-size: 12px; color: var(--text-tertiary);">
+                        Note: This requires your user to have sudo privileges.
+                    </p>
+                `,
+                buttons: [
+                    {
+                        text: "Cancel",
+                        style: "secondary",
+                        action: "cancel",
+                    },
+                    {
+                        text: `${operation.charAt(0).toUpperCase() + operation.slice(1)} with sudo`,
+                        style: "primary",
+                        action: "confirm",
+                    },
+                ],
+            });
+            return result === "confirm";
+        } else {
+            return confirm(`Cannot ${operation} "${itemName}". Use sudo?`);
+        }
+    }
+
+    // Show confirmation dialog for sudo save
+    async confirmSudoSave(fileName) {
+        if (window.modal) {
+            const result = await window.modal.show({
+                title: "Permission Required",
+                message: `The file "${fileName}" requires elevated permissions to save.`,
+                icon: '<img src="./icons/lock.svg" class="svg-icon" alt="">',
+                content: `
+                    <p style="margin-top: 12px; color: var(--text-secondary);">
+                        Do you want to save this file using sudo?
+                    </p>
+                    <p style="margin-top: 8px; font-size: 12px; color: var(--text-tertiary);">
+                        Note: This requires your user to have sudo privileges.
+                    </p>
+                `,
+                buttons: [
+                    {
+                        text: "Cancel",
+                        style: "secondary",
+                        action: "cancel",
+                    },
+                    {
+                        text: "Save with sudo",
+                        style: "primary",
+                        action: "confirm",
+                    },
+                ],
+            });
+            return result === "confirm";
+        } else {
+            // Fallback to confirm dialog
+            return confirm(`The file "${fileName}" requires elevated permissions. Save with sudo?`);
         }
     }
 
     showDirectoryProperties(dirPath, dirName) {
-        console.log("📋 Showing directory properties for:", dirName);
+        console.log("Showing directory properties for:", dirName);
 
         if (!this.currentSessionID) {
             showNotification("No active session", "error");
@@ -3678,7 +4201,7 @@ export class RemoteExplorerManager {
             window.modal.show({
                 title: "Directory Properties",
                 message: `Properties for: ${dirName}`,
-                icon: "📁",
+                icon: '<img src="./icons/folder.svg" class="svg-icon" alt="">',
                 content: `
                     <div style="margin-top: 16px;">
                         <div class="property-row">
@@ -3741,7 +4264,7 @@ export class RemoteExplorerManager {
     }
 
     showFileProperties(filePath, fileName) {
-        console.log("📄 Showing file properties for:", fileName);
+        console.log("Showing file properties for:", fileName);
 
         if (!this.currentSessionID) {
             showNotification("No active session", "error");
@@ -3758,7 +4281,7 @@ export class RemoteExplorerManager {
             window.modal.show({
                 title: "File Properties",
                 message: `Properties for: ${fileName}`,
-                icon: "📄",
+                icon: '<img src="./icons/document.svg" class="svg-icon" alt="">',
                 content: `
                     <div style="margin-top: 16px;">
                         <div class="property-row">
@@ -4081,7 +4604,7 @@ export class RemoteExplorerManager {
         }
 
         console.log(
-            `📚 Added to history: ${fileName} (${profile.fileHistory.length} total files)`,
+            `Added to history: ${fileName} (${profile.fileHistory.length} total files)`,
         );
     }
 
@@ -4118,7 +4641,7 @@ export class RemoteExplorerManager {
         try {
             // Use the backend SaveProfile method
             await window.go.main.App.SaveProfile(profile);
-            console.log(`📚 Profile file history saved: ${profile.name}`);
+            console.log(`Profile file history saved: ${profile.name}`);
         } catch (error) {
             console.error("Failed to save profile history:", error);
             showNotification("Failed to save file history", "error");
@@ -4126,7 +4649,7 @@ export class RemoteExplorerManager {
     }
 
     async showFileHistory() {
-        console.log("📚 Showing file history");
+        console.log("Showing file history");
 
         const history = await this.getFileHistory();
 
@@ -4144,7 +4667,7 @@ export class RemoteExplorerManager {
                 .show({
                     title: "File History",
                     message: `Recently opened files (${history.length} files)`,
-                    icon: "📚",
+                    icon: '<img src="./icons/files.svg" class="svg-icon" alt="">',
                     content: historyContent,
                     buttons: [
                         {
@@ -4309,25 +4832,26 @@ export class RemoteExplorerManager {
 
     getFileIconForExtension(fileName) {
         // Simple version of getFileIcon for history display
+        const svgIcon = (name) => `<img src="./icons/${name}.svg" class="svg-icon file-icon" alt="">`;
         const ext = fileName.split(".").pop().toLowerCase();
         const iconMap = {
-            txt: "📄",
-            md: "📄",
-            log: "📄",
-            js: "📜",
-            ts: "📜",
-            py: "📜",
-            sh: "📜",
-            html: "🌐",
-            css: "🎨",
-            json: "📋",
-            jpg: "🖼️",
-            png: "🖼️",
-            gif: "🖼️",
-            pdf: "📕",
-            zip: "📦",
+            txt: "document",
+            md: "document",
+            log: "document",
+            js: "text",
+            ts: "text",
+            py: "text",
+            sh: "terminal",
+            html: "globe",
+            css: "palette",
+            json: "clipboard",
+            jpg: "eye",
+            png: "eye",
+            gif: "eye",
+            pdf: "page",
+            zip: "files",
         };
-        return iconMap[ext] || "📄";
+        return iconMap[ext] ? svgIcon(iconMap[ext]) : svgIcon("document");
     }
 
     formatRelativeTime(date) {
@@ -4345,16 +4869,16 @@ export class RemoteExplorerManager {
     }
 
     async clearFileHistory() {
-        console.log("🗑️ Clearing file history...");
+        console.log("Clearing file history...");
 
         const activeTab = this.tabsManager.getActiveTab();
         if (!activeTab || !activeTab.profileId) {
-            console.log("🗑️ No active tab or profile ID");
+            console.log("No active tab or profile ID");
             showNotification("No active profile found", "error");
             return;
         }
 
-        console.log("🗑️ Active tab profile ID:", activeTab.profileId);
+        console.log("Active tab profile ID:", activeTab.profileId);
 
         try {
             const profile = await window.go.main.App.GetProfileByIDAPI(
@@ -4362,21 +4886,21 @@ export class RemoteExplorerManager {
             );
             if (profile) {
                 console.log(
-                    "🗑️ Current history length:",
+                    "Current history length:",
                     profile.fileHistory?.length || 0,
                 );
 
                 profile.fileHistory = [];
                 await this.saveProfileHistory(profile);
 
-                console.log("🗑️ History cleared and saved");
+                console.log("History cleared and saved");
 
                 // Update history button count
                 await this.updateHistoryButtonCount();
 
                 showNotification("File history cleared", "success");
             } else {
-                console.log("🗑️ Profile not found");
+                console.log("Profile not found");
                 showNotification("Profile not found", "error");
             }
         } catch (error) {
@@ -4386,7 +4910,7 @@ export class RemoteExplorerManager {
     }
 
     async showFileHistoryView() {
-        console.log("📚 Showing file history view");
+        console.log("Showing file history view");
 
         if (!this.currentSessionID) {
             showNotification("No active SSH session", "info");
@@ -4474,7 +4998,7 @@ export class RemoteExplorerManager {
     }
 
     async showFilesView() {
-        console.log("📁 Returning to files view");
+        console.log("Returning to files view");
 
         // Remove history view class
         const sidebarContent = document.getElementById("sidebar-content");
@@ -4517,7 +5041,7 @@ export class RemoteExplorerManager {
     }
 
     async clearFileHistoryAndRefresh() {
-        console.log("🧹 Clear history button clicked");
+        console.log("Clear history button clicked");
 
         try {
             // Use Modal.js for confirmation
@@ -4527,30 +5051,30 @@ export class RemoteExplorerManager {
             );
 
             if (result === "confirm") {
-                console.log("🧹 User confirmed, clearing history...");
+                console.log("User confirmed, clearing history...");
 
                 await this.clearFileHistory();
-                console.log("🧹 History cleared, refreshing view...");
+                console.log("History cleared, refreshing view...");
 
                 await this.showFileHistoryView(); // Refresh the view
-                console.log("🧹 View refreshed, updating count...");
+                console.log("View refreshed, updating count...");
 
                 await this.updateHistoryButtonCount(); // Update the count badge
-                console.log("🧹 Count updated, done!");
+                console.log("Count updated, done!");
 
                 showNotification("File history cleared", "success");
             } else {
-                console.log("🧹 User cancelled clear operation");
+                console.log("User cancelled clear operation");
             }
         } catch (error) {
-            console.error("🧹 Error during clear and refresh:", error);
+            console.error("Error during clear and refresh:", error);
             showNotification("Failed to clear history", "error");
         }
     }
 
     async openFileFromHistory(filePath, fileName) {
         try {
-            console.log("📂 Opening file from history:", filePath);
+            console.log("Opening file from history:", filePath);
 
             if (!this.currentSessionID) {
                 showNotification("No active SSH session", "error");
@@ -4559,7 +5083,7 @@ export class RemoteExplorerManager {
 
             // Get the directory containing the file
             const dirPath = this.getParentPath(filePath);
-            console.log("📁 File directory:", dirPath);
+            console.log("File directory:", dirPath);
 
             // Return to files view first
             await this.showFilesView();
@@ -4568,7 +5092,7 @@ export class RemoteExplorerManager {
             await new Promise((resolve) => setTimeout(resolve, 200));
 
             // Navigate to the directory containing the file
-            console.log("📁 Navigating to directory:", dirPath);
+            console.log("Navigating to directory:", dirPath);
             await this.navigateToPath(dirPath);
 
             // Wait for the directory to load and file list to update
@@ -4603,7 +5127,7 @@ export class RemoteExplorerManager {
                 item.classList.add("selected");
                 // Scroll into view if needed
                 item.scrollIntoView({ behavior: "smooth", block: "center" });
-                console.log("📄 Highlighted file in list:", fileName);
+                console.log("Highlighted file in list:", fileName);
             }
         });
     }
@@ -4649,7 +5173,7 @@ export class RemoteExplorerManager {
 
         const container = document.querySelector(".remote-files-container");
         if (!container) {
-            console.error("❌ Remote files container not found");
+            console.error("Remote files container not found");
             return;
         }
 
