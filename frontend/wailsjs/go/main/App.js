@@ -14,6 +14,14 @@ export function CancelSFTPTransfer(arg1) {
   return window['go']['main']['App']['CancelSFTPTransfer'](arg1);
 }
 
+export function CheckDirectoryReadPermission(arg1, arg2) {
+  return window['go']['main']['App']['CheckDirectoryReadPermission'](arg1, arg2);
+}
+
+export function CheckFileWritePermission(arg1, arg2) {
+  return window['go']['main']['App']['CheckFileWritePermission'](arg1, arg2);
+}
+
 export function CheckForUpdates() {
   return window['go']['main']['App']['CheckForUpdates']();
 }
@@ -106,6 +114,10 @@ export function CreateRemoteDirectory(arg1, arg2) {
   return window['go']['main']['App']['CreateRemoteDirectory'](arg1, arg2);
 }
 
+export function CreateRemoteDirectoryWithSudo(arg1, arg2) {
+  return window['go']['main']['App']['CreateRemoteDirectoryWithSudo'](arg1, arg2);
+}
+
 export function CreateSSHSession(arg1, arg2) {
   return window['go']['main']['App']['CreateSSHSession'](arg1, arg2);
 }
@@ -152,6 +164,10 @@ export function DeleteRemotePath(arg1, arg2) {
 
 export function DeleteRemotePathAdvanced(arg1, arg2, arg3) {
   return window['go']['main']['App']['DeleteRemotePathAdvanced'](arg1, arg2, arg3);
+}
+
+export function DeleteRemotePathWithSudo(arg1, arg2) {
+  return window['go']['main']['App']['DeleteRemotePathWithSudo'](arg1, arg2);
 }
 
 export function DeleteVirtualFolder(arg1) {
@@ -318,6 +334,10 @@ export function GetRemoteFileContent(arg1, arg2) {
   return window['go']['main']['App']['GetRemoteFileContent'](arg1, arg2);
 }
 
+export function GetRemoteFileContentWithSudo(arg1, arg2) {
+  return window['go']['main']['App']['GetRemoteFileContentWithSudo'](arg1, arg2);
+}
+
 export function GetRemoteSystemStats(arg1) {
   return window['go']['main']['App']['GetRemoteSystemStats'](arg1);
 }
@@ -422,6 +442,10 @@ export function ListRemoteFiles(arg1, arg2) {
   return window['go']['main']['App']['ListRemoteFiles'](arg1, arg2);
 }
 
+export function ListRemoteFilesWithSudo(arg1, arg2) {
+  return window['go']['main']['App']['ListRemoteFilesWithSudo'](arg1, arg2);
+}
+
 export function LoadProfile(arg1) {
   return window['go']['main']['App']['LoadProfile'](arg1);
 }
@@ -476,6 +500,10 @@ export function RecordStats(arg1, arg2) {
 
 export function RenameRemotePath(arg1, arg2, arg3) {
   return window['go']['main']['App']['RenameRemotePath'](arg1, arg2, arg3);
+}
+
+export function RenameRemotePathWithSudo(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RenameRemotePathWithSudo'](arg1, arg2, arg3);
 }
 
 export function RenameTab(arg1, arg2) {
@@ -622,6 +650,10 @@ export function UpdateRemoteFileContent(arg1, arg2, arg3) {
   return window['go']['main']['App']['UpdateRemoteFileContent'](arg1, arg2, arg3);
 }
 
+export function UpdateRemoteFileContentWithSudo(arg1, arg2, arg3) {
+  return window['go']['main']['App']['UpdateRemoteFileContentWithSudo'](arg1, arg2, arg3);
+}
+
 export function UpdateVirtualFolder(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['UpdateVirtualFolder'](arg1, arg2, arg3, arg4);
 }
@@ -630,8 +662,16 @@ export function UploadFileContent(arg1, arg2, arg3) {
   return window['go']['main']['App']['UploadFileContent'](arg1, arg2, arg3);
 }
 
+export function UploadFileContentWithSudo(arg1, arg2, arg3) {
+  return window['go']['main']['App']['UploadFileContentWithSudo'](arg1, arg2, arg3);
+}
+
 export function UploadRemoteFiles(arg1, arg2, arg3) {
   return window['go']['main']['App']['UploadRemoteFiles'](arg1, arg2, arg3);
+}
+
+export function UploadRemoteFilesWithSudo(arg1, arg2, arg3) {
+  return window['go']['main']['App']['UploadRemoteFilesWithSudo'](arg1, arg2, arg3);
 }
 
 export function WaitForSessionClose(arg1) {

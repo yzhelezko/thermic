@@ -9,6 +9,10 @@ export function CacheMonitoringResult(arg1:main.SSHSession,arg2:string,arg3:stri
 
 export function CancelSFTPTransfer(arg1:string):Promise<void>;
 
+export function CheckDirectoryReadPermission(arg1:string,arg2:string):Promise<boolean>;
+
+export function CheckFileWritePermission(arg1:string,arg2:string):Promise<boolean>;
+
 export function CheckForUpdates():Promise<main.UpdateInfo>;
 
 export function CheckWSLAvailable():Promise<boolean>;
@@ -55,6 +59,8 @@ export function CreateProfileWithFolderIDAPI(arg1:string,arg2:string,arg3:string
 
 export function CreateRemoteDirectory(arg1:string,arg2:string):Promise<void>;
 
+export function CreateRemoteDirectoryWithSudo(arg1:string,arg2:string):Promise<void>;
+
 export function CreateSSHSession(arg1:string,arg2:main.SSHConfig):Promise<main.SSHSession>;
 
 export function CreateSSHSessionWithSize(arg1:string,arg2:main.SSHConfig,arg3:number,arg4:number):Promise<main.SSHSession>;
@@ -78,6 +84,8 @@ export function DeleteProfileFolderWithContentsAPI(arg1:string):Promise<void>;
 export function DeleteRemotePath(arg1:string,arg2:string):Promise<void>;
 
 export function DeleteRemotePathAdvanced(arg1:string,arg2:string,arg3:boolean):Promise<void>;
+
+export function DeleteRemotePathWithSudo(arg1:string,arg2:string):Promise<void>;
 
 export function DeleteVirtualFolder(arg1:string):Promise<void>;
 
@@ -161,6 +169,8 @@ export function GetRecentProfiles(arg1:number,arg2:number):Promise<Array<main.Pr
 
 export function GetRemoteFileContent(arg1:string,arg2:string):Promise<string>;
 
+export function GetRemoteFileContentWithSudo(arg1:string,arg2:string):Promise<string>;
+
 export function GetRemoteSystemStats(arg1:string):Promise<Record<string, any>>;
 
 export function GetRemoteWorkingDirectory(arg1:string):Promise<string>;
@@ -213,6 +223,8 @@ export function IsWindowMaximized():Promise<boolean>;
 
 export function ListRemoteFiles(arg1:string,arg2:string):Promise<Array<main.RemoteFileEntry>>;
 
+export function ListRemoteFilesWithSudo(arg1:string,arg2:string):Promise<Array<main.RemoteFileEntry>>;
+
 export function LoadProfile(arg1:string):Promise<main.Profile>;
 
 export function LoadProfileFolder(arg1:string):Promise<main.ProfileFolder>;
@@ -240,6 +252,8 @@ export function RecordMetric(arg1:string,arg2:string,arg3:number):Promise<void>;
 export function RecordStats(arg1:string,arg2:Record<string, any>):Promise<void>;
 
 export function RenameRemotePath(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function RenameRemotePathWithSudo(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function RenameTab(arg1:string,arg2:string):Promise<void>;
 
@@ -313,11 +327,17 @@ export function UpdateProfileTagsAPI(arg1:string,arg2:Array<string>):Promise<voi
 
 export function UpdateRemoteFileContent(arg1:string,arg2:string,arg3:string):Promise<void>;
 
+export function UpdateRemoteFileContentWithSudo(arg1:string,arg2:string,arg3:string):Promise<void>;
+
 export function UpdateVirtualFolder(arg1:string,arg2:string,arg3:string,arg4:main.VirtualFilter):Promise<void>;
 
 export function UploadFileContent(arg1:string,arg2:string,arg3:string):Promise<void>;
 
+export function UploadFileContentWithSudo(arg1:string,arg2:string,arg3:string):Promise<void>;
+
 export function UploadRemoteFiles(arg1:string,arg2:Array<string>,arg3:string):Promise<void>;
+
+export function UploadRemoteFilesWithSudo(arg1:string,arg2:Array<string>,arg3:string):Promise<void>;
 
 export function WaitForSessionClose(arg1:string):Promise<void>;
 

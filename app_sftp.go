@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -595,6 +596,183 @@ func (a *App) ListRemoteFiles(sessionID string, remotePath string) ([]RemoteFile
 	return entries, nil
 }
 
+// ListRemoteFilesWithSudo lists files using sudo when regular access is denied
+func (a *App) ListRemoteFilesWithSudo(sessionID string, remotePath string) ([]RemoteFileEntry, error) {
+	a.ssh.sshSessionsMutex.RLock()
+	sshSession, exists := a.ssh.sshSessions[sessionID]
+	a.ssh.sshSessionsMutex.RUnlock()
+
+	if !exists || sshSession == nil {
+		return nil, fmt.Errorf("SSH session %s not found", sessionID)
+	}
+
+	// Normalize path
+	if remotePath == "" {
+		remotePath = "."
+	}
+
+	fmt.Printf("SFTP: Listing files with sudo for session %s, path: %s\n", sessionID, remotePath)
+
+	// Use sudo ls -la to get detailed file listing
+	// Format: permissions, links, owner, group, size, month, day, time/year, name
+	cmd := fmt.Sprintf("sudo ls -la --time-style='+%%Y-%%m-%%d %%H:%%M:%%S' %q 2>&1", remotePath)
+	output, err := a.ExecuteMonitoringCommand(sshSession, cmd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list directory with sudo: %w", err)
+	}
+
+	// Check for error in output
+	if strings.Contains(output, "No such file or directory") {
+		return nil, fmt.Errorf("directory not found: %s", remotePath)
+	}
+	if strings.Contains(output, "Not a directory") {
+		return nil, fmt.Errorf("not a directory: %s", remotePath)
+	}
+	if strings.Contains(output, "Permission denied") {
+		return nil, fmt.Errorf("permission denied even with sudo: %s", remotePath)
+	}
+
+	// Parse ls -la output
+	var entries []RemoteFileEntry
+	lines := strings.Split(output, "\n")
+
+	// Resolve base directory for constructing full paths
+	baseDir := remotePath
+	if remotePath == "." {
+		// Try to get absolute path
+		pwdOutput, pwdErr := a.ExecuteMonitoringCommand(sshSession, "pwd")
+		if pwdErr == nil {
+			baseDir = strings.TrimSpace(pwdOutput)
+		}
+	}
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		// Skip "total X" line
+		if strings.HasPrefix(line, "total ") {
+			continue
+		}
+
+		// Parse ls -la output line
+		entry, err := a.parseLsLine(line, baseDir)
+		if err != nil {
+			fmt.Printf("SFTP: Failed to parse ls line: %s, error: %v\n", line, err)
+			continue
+		}
+
+		// Skip . and .. entries
+		if entry.Name == "." || entry.Name == ".." {
+			continue
+		}
+
+		entries = append(entries, entry)
+	}
+
+	fmt.Printf("SFTP: Successfully listed %d entries with sudo for path: %s\n", len(entries), remotePath)
+	return entries, nil
+}
+
+// parseLsLine parses a single line from ls -la output
+func (a *App) parseLsLine(line string, baseDir string) (RemoteFileEntry, error) {
+	// Expected format with --time-style='+%Y-%m-%d %H:%M:%S':
+	// -rw-r--r-- 1 root root 1234 2024-01-15 10:30:45 filename
+	// drwxr-xr-x 2 root root 4096 2024-01-15 10:30:45 dirname
+	// lrwxrwxrwx 1 root root   11 2024-01-15 10:30:45 link -> target
+
+	fields := strings.Fields(line)
+	if len(fields) < 8 {
+		return RemoteFileEntry{}, fmt.Errorf("invalid ls line format: not enough fields")
+	}
+
+	mode := fields[0]
+	// fields[1] = number of links
+	// fields[2] = owner
+	// fields[3] = group
+	sizeStr := fields[4]
+	dateStr := fields[5]
+	timeStr := fields[6]
+
+	// The filename starts at field 7, but may contain spaces
+	// For symlinks, it includes " -> target"
+	nameStartIdx := 0
+	for i := 0; i < 7; i++ {
+		nameStartIdx = strings.Index(line[nameStartIdx:], fields[i]) + len(fields[i]) + nameStartIdx
+	}
+	// Skip whitespace after time field
+	for nameStartIdx < len(line) && (line[nameStartIdx] == ' ' || line[nameStartIdx] == '\t') {
+		nameStartIdx++
+	}
+	nameField := line[nameStartIdx:]
+
+	// Parse size
+	size, _ := strconv.ParseInt(sizeStr, 10, 64)
+
+	// Parse datetime
+	modTime, _ := time.Parse("2006-01-02 15:04:05", dateStr+" "+timeStr)
+
+	// Determine file type from mode string
+	isDir := len(mode) > 0 && mode[0] == 'd'
+	isSymlink := len(mode) > 0 && mode[0] == 'l'
+
+	// Extract filename and symlink target
+	name := nameField
+	symlinkTarget := ""
+	if isSymlink {
+		// Parse "linkname -> target"
+		parts := strings.SplitN(nameField, " -> ", 2)
+		name = parts[0]
+		if len(parts) > 1 {
+			symlinkTarget = parts[1]
+		}
+	}
+
+	// Construct full path
+	var fullPath string
+	if baseDir == "/" {
+		fullPath = "/" + name
+	} else if baseDir == "." {
+		fullPath = name
+	} else {
+		fullPath = strings.TrimSuffix(baseDir, "/") + "/" + name
+	}
+
+	return RemoteFileEntry{
+		Name:          name,
+		Path:          fullPath,
+		IsDir:         isDir,
+		IsSymlink:     isSymlink,
+		SymlinkTarget: symlinkTarget,
+		Size:          size,
+		Mode:          mode,
+		ModifiedTime:  modTime,
+	}, nil
+}
+
+// CheckDirectoryReadPermission checks if the current user can read a directory
+func (a *App) CheckDirectoryReadPermission(sessionID string, remotePath string) (bool, error) {
+	a.ssh.sshSessionsMutex.RLock()
+	sshSession, exists := a.ssh.sshSessions[sessionID]
+	a.ssh.sshSessionsMutex.RUnlock()
+
+	if !exists || sshSession == nil {
+		return false, fmt.Errorf("SSH session %s not found", sessionID)
+	}
+
+	// Use test -r to check if directory is readable
+	cmd := fmt.Sprintf("test -r %q && test -x %q && echo 'readable' || echo 'denied'", remotePath, remotePath)
+	output, err := a.ExecuteMonitoringCommand(sshSession, cmd)
+	if err != nil {
+		// If monitoring session is not available, assume readable and let SFTP fail if not
+		return true, nil
+	}
+
+	return strings.Contains(output, "readable"), nil
+}
+
 // DownloadRemoteFile downloads a file from the remote server to local path with progress reporting
 func (a *App) DownloadRemoteFile(sessionID string, remotePath string, localPath string) error {
 	return a.DownloadRemoteFileWithProgress(sessionID, remotePath, localPath, 1, 1)
@@ -1153,6 +1331,146 @@ func (a *App) CreateRemoteDirectory(sessionID string, remotePath string) error {
 	return nil
 }
 
+// CreateRemoteDirectoryWithSudo creates a new directory using sudo
+func (a *App) CreateRemoteDirectoryWithSudo(sessionID string, remotePath string) error {
+	a.ssh.sshSessionsMutex.RLock()
+	sshSession, exists := a.ssh.sshSessions[sessionID]
+	a.ssh.sshSessionsMutex.RUnlock()
+
+	if !exists || sshSession == nil {
+		return fmt.Errorf("SSH session %s not found", sessionID)
+	}
+
+	cmd := fmt.Sprintf("sudo mkdir -p %q", remotePath)
+	_, err := a.ExecuteMonitoringCommand(sshSession, cmd)
+	if err != nil {
+		return fmt.Errorf("failed to create directory with sudo: %w", err)
+	}
+
+	return nil
+}
+
+// UploadFileContentWithSudo uploads file content using sudo when regular upload fails
+func (a *App) UploadFileContentWithSudo(sessionID string, remotePath string, base64Content string) error {
+	a.ssh.sshSessionsMutex.RLock()
+	sshSession, exists := a.ssh.sshSessions[sessionID]
+	a.ssh.sshSessionsMutex.RUnlock()
+
+	if !exists || sshSession == nil {
+		return fmt.Errorf("SSH session %s not found", sessionID)
+	}
+
+	// Check if monitoring session is available
+	sshSession.monitoringMutex.RLock()
+	monitoringEnabled := sshSession.monitoringEnabled
+	monitoringClient := sshSession.monitoringClient
+	sshSession.monitoringMutex.RUnlock()
+
+	if !monitoringEnabled || monitoringClient == nil {
+		return fmt.Errorf("monitoring session not available - cannot use sudo")
+	}
+
+	// Decode base64 content
+	content, err := base64.StdEncoding.DecodeString(base64Content)
+	if err != nil {
+		return fmt.Errorf("failed to decode base64 content: %w", err)
+	}
+
+	// Create a new session for this command
+	session, err := monitoringClient.NewSession()
+	if err != nil {
+		return fmt.Errorf("failed to create SSH session for sudo: %w", err)
+	}
+	defer session.Close()
+
+	// Capture stderr for error messages
+	var stderrBuf strings.Builder
+	session.Stderr = &stderrBuf
+
+	// Use sudo tee to write the file content
+	stdin, err := session.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stdin pipe: %w", err)
+	}
+
+	cmd := fmt.Sprintf("sudo tee %q > /dev/null", remotePath)
+
+	if err := session.Start(cmd); err != nil {
+		return fmt.Errorf("failed to start sudo tee command: %w", err)
+	}
+
+	_, err = stdin.Write(content)
+	if err != nil {
+		return fmt.Errorf("failed to write content via sudo: %w", err)
+	}
+
+	stdin.Close()
+
+	if err := session.Wait(); err != nil {
+		stderrOutput := strings.TrimSpace(stderrBuf.String())
+		if stderrOutput != "" {
+			return fmt.Errorf("sudo upload failed: %s", stderrOutput)
+		}
+		return fmt.Errorf("sudo upload failed: %w", err)
+	}
+
+	return nil
+}
+
+// UploadRemoteFilesWithSudo uploads local files to remote using sudo
+func (a *App) UploadRemoteFilesWithSudo(sessionID string, localFilePaths []string, remotePath string) error {
+	totalFiles := len(localFilePaths)
+	if totalFiles == 0 {
+		return nil
+	}
+
+	// Emit batch start
+	a.emitUploadEvent(sessionID, "batch-start", map[string]interface{}{
+		"totalFiles": totalFiles,
+		"targetPath": remotePath,
+	})
+
+	for i, localFilePath := range localFilePaths {
+		fileName := filepath.Base(localFilePath)
+		remoteFilePath := joinRemotePath(remotePath, fileName)
+
+		// Read local file
+		content, err := os.ReadFile(localFilePath)
+		if err != nil {
+			return fmt.Errorf("failed to read local file %s: %w", localFilePath, err)
+		}
+
+		// Emit file start
+		a.emitUploadEvent(sessionID, "start", map[string]interface{}{
+			"fileName":   fileName,
+			"fileIndex":  i + 1,
+			"totalFiles": totalFiles,
+			"total":      int64(len(content)),
+		})
+
+		// Upload using sudo (encode to base64)
+		base64Content := base64.StdEncoding.EncodeToString(content)
+		if err := a.UploadFileContentWithSudo(sessionID, remoteFilePath, base64Content); err != nil {
+			return fmt.Errorf("failed to upload %s with sudo: %w", fileName, err)
+		}
+
+		// Emit file complete
+		a.emitUploadEvent(sessionID, "complete", map[string]interface{}{
+			"fileName":   fileName,
+			"fileIndex":  i + 1,
+			"totalFiles": totalFiles,
+		})
+	}
+
+	// Emit batch complete
+	a.emitUploadEvent(sessionID, "batch-complete", map[string]interface{}{
+		"totalFiles": totalFiles,
+		"targetPath": remotePath,
+	})
+
+	return nil
+}
+
 // DeleteRemotePath deletes a file or directory on the remote server (auto-detects recursion)
 func (a *App) DeleteRemotePath(sessionID string, remotePath string) error {
 	a.ssh.sftpClientsMutex.RLock()
@@ -1269,6 +1587,62 @@ func (a *App) RenameRemotePath(sessionID string, oldPath string, newPath string)
 	return nil
 }
 
+// DeleteRemotePathWithSudo deletes a file or directory using sudo
+func (a *App) DeleteRemotePathWithSudo(sessionID string, remotePath string) error {
+	a.ssh.sshSessionsMutex.RLock()
+	sshSession, exists := a.ssh.sshSessions[sessionID]
+	a.ssh.sshSessionsMutex.RUnlock()
+
+	if !exists || sshSession == nil {
+		return fmt.Errorf("SSH session %s not found", sessionID)
+	}
+
+	// Use sudo rm -rf for both files and directories
+	cmd := fmt.Sprintf("sudo rm -rf %q", remotePath)
+	output, err := a.ExecuteMonitoringCommand(sshSession, cmd)
+	if err != nil {
+		return fmt.Errorf("failed to delete with sudo: %w", err)
+	}
+
+	// Check for errors in output
+	if strings.Contains(output, "No such file") {
+		return fmt.Errorf("file or directory not found: %s", remotePath)
+	}
+	if strings.Contains(output, "Permission denied") {
+		return fmt.Errorf("permission denied even with sudo: %s", remotePath)
+	}
+
+	return nil
+}
+
+// RenameRemotePathWithSudo renames a file or directory using sudo
+func (a *App) RenameRemotePathWithSudo(sessionID string, oldPath string, newPath string) error {
+	a.ssh.sshSessionsMutex.RLock()
+	sshSession, exists := a.ssh.sshSessions[sessionID]
+	a.ssh.sshSessionsMutex.RUnlock()
+
+	if !exists || sshSession == nil {
+		return fmt.Errorf("SSH session %s not found", sessionID)
+	}
+
+	// Use sudo mv for rename
+	cmd := fmt.Sprintf("sudo mv %q %q", oldPath, newPath)
+	output, err := a.ExecuteMonitoringCommand(sshSession, cmd)
+	if err != nil {
+		return fmt.Errorf("failed to rename with sudo: %w", err)
+	}
+
+	// Check for errors in output
+	if strings.Contains(output, "No such file") {
+		return fmt.Errorf("file or directory not found: %s", oldPath)
+	}
+	if strings.Contains(output, "Permission denied") {
+		return fmt.Errorf("permission denied even with sudo")
+	}
+
+	return nil
+}
+
 // GetRemoteFileContent reads the content of a remote file
 func (a *App) GetRemoteFileContent(sessionID string, remotePath string) (string, error) {
 	a.ssh.sftpClientsMutex.RLock()
@@ -1300,6 +1674,50 @@ func (a *App) GetRemoteFileContent(sessionID string, remotePath string) (string,
 
 	// For text files, return as string
 	return string(content), nil
+}
+
+// GetRemoteFileContentWithSudo reads file content using sudo when regular access is denied
+func (a *App) GetRemoteFileContentWithSudo(sessionID string, remotePath string) (string, error) {
+	a.ssh.sshSessionsMutex.RLock()
+	sshSession, exists := a.ssh.sshSessions[sessionID]
+	a.ssh.sshSessionsMutex.RUnlock()
+
+	if !exists || sshSession == nil {
+		return "", fmt.Errorf("SSH session %s not found", sessionID)
+	}
+
+	// Check if monitoring session is available
+	sshSession.monitoringMutex.RLock()
+	monitoringEnabled := sshSession.monitoringEnabled
+	monitoringClient := sshSession.monitoringClient
+	sshSession.monitoringMutex.RUnlock()
+
+	if !monitoringEnabled || monitoringClient == nil {
+		return "", fmt.Errorf("monitoring session not available - cannot use sudo")
+	}
+
+	// Create a new session for this command
+	session, err := monitoringClient.NewSession()
+	if err != nil {
+		return "", fmt.Errorf("failed to create SSH session for sudo: %w", err)
+	}
+	defer session.Close()
+
+	// Use sudo cat to read the file content
+	cmd := fmt.Sprintf("sudo cat %q", remotePath)
+	output, err := session.CombinedOutput(cmd)
+	if err != nil {
+		return "", fmt.Errorf("failed to read file with sudo: %w", err)
+	}
+
+	// Check if it's a binary file based on extension and content
+	if !isTextContentWithExtension(remotePath, output) {
+		// For binary files, return base64 encoded content
+		return base64.StdEncoding.EncodeToString(output), nil
+	}
+
+	// For text files, return as string
+	return string(output), nil
 }
 
 // UpdateRemoteFileContent updates the content of a remote file
@@ -1478,6 +1896,123 @@ func isTextContentWithExtension(filePath string, content []byte) bool {
 
 	// For other files, fall back to content-based detection
 	return isTextContent(content)
+}
+
+// CheckFileWritePermission checks if the current user can write to a file
+// Returns: canWrite, fileExists, error
+func (a *App) CheckFileWritePermission(sessionID string, remotePath string) (bool, bool, error) {
+	a.ssh.sshSessionsMutex.RLock()
+	sshSession, exists := a.ssh.sshSessions[sessionID]
+	a.ssh.sshSessionsMutex.RUnlock()
+
+	if !exists || sshSession == nil {
+		return false, false, fmt.Errorf("SSH session %s not found", sessionID)
+	}
+
+	// Use monitoring session to check write permission
+	// Using test -w to check if file is writable, test -e to check if exists
+	cmd := fmt.Sprintf("test -e %q && echo 'exists' || echo 'notexists'; test -w %q && echo 'writable' || echo 'readonly'", remotePath, remotePath)
+	output, err := a.ExecuteMonitoringCommand(sshSession, cmd)
+	if err != nil {
+		// If monitoring session is not available, try to check via SFTP stat
+		return a.checkWritePermissionViaSFTP(sessionID, remotePath)
+	}
+
+	fileExists := strings.Contains(output, "exists")
+	canWrite := strings.Contains(output, "writable")
+
+	return canWrite, fileExists, nil
+}
+
+// checkWritePermissionViaSFTP is a fallback when monitoring session is unavailable
+func (a *App) checkWritePermissionViaSFTP(sessionID string, remotePath string) (bool, bool, error) {
+	a.ssh.sftpClientsMutex.RLock()
+	sftpClient, exists := a.ssh.sftpClients[sessionID]
+	a.ssh.sftpClientsMutex.RUnlock()
+
+	if !exists {
+		return false, false, fmt.Errorf("SFTP client not initialized for session %s", sessionID)
+	}
+
+	// Check if file exists
+	_, err := sftpClient.Stat(remotePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// File doesn't exist, check if parent directory is writable
+			parentDir := filepath.Dir(remotePath)
+			_, parentErr := sftpClient.Stat(parentDir)
+			if parentErr != nil {
+				return false, false, nil
+			}
+			// Can't easily check parent write permission via SFTP alone
+			// Assume writable and let the save operation fail if not
+			return true, false, nil
+		}
+		return false, false, err
+	}
+
+	// File exists - we can't reliably check write permission via SFTP stat alone
+	// Return true and let the actual write operation determine if it fails
+	return true, true, nil
+}
+
+// UpdateRemoteFileContentWithSudo updates file content using sudo when regular write fails
+func (a *App) UpdateRemoteFileContentWithSudo(sessionID string, remotePath string, content string) error {
+	a.ssh.sshSessionsMutex.RLock()
+	sshSession, exists := a.ssh.sshSessions[sessionID]
+	a.ssh.sshSessionsMutex.RUnlock()
+
+	if !exists || sshSession == nil {
+		return fmt.Errorf("SSH session %s not found", sessionID)
+	}
+
+	// Check if monitoring session is available
+	sshSession.monitoringMutex.RLock()
+	monitoringEnabled := sshSession.monitoringEnabled
+	monitoringClient := sshSession.monitoringClient
+	sshSession.monitoringMutex.RUnlock()
+
+	if !monitoringEnabled || monitoringClient == nil {
+		return fmt.Errorf("monitoring session not available - cannot use sudo")
+	}
+
+	// Create a new session for this command
+	session, err := monitoringClient.NewSession()
+	if err != nil {
+		return fmt.Errorf("failed to create SSH session for sudo: %w", err)
+	}
+	defer session.Close()
+
+	// Use sudo tee to write the file content
+	// This approach pipes content to sudo tee which writes to the file
+	stdin, err := session.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create stdin pipe: %w", err)
+	}
+
+	// Use tee to write content, redirect stdout to /dev/null to avoid echo
+	cmd := fmt.Sprintf("sudo tee %q > /dev/null", remotePath)
+
+	// Start the command
+	if err := session.Start(cmd); err != nil {
+		return fmt.Errorf("failed to start sudo tee command: %w", err)
+	}
+
+	// Write content to stdin
+	_, err = stdin.Write([]byte(content))
+	if err != nil {
+		return fmt.Errorf("failed to write content via sudo: %w", err)
+	}
+
+	// Close stdin to signal end of input
+	stdin.Close()
+
+	// Wait for command to complete
+	if err := session.Wait(); err != nil {
+		return fmt.Errorf("sudo write failed: %w", err)
+	}
+
+	return nil
 }
 
 // isTextContent checks if the content is likely text (not binary) - legacy function for fallback
