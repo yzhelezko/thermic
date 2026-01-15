@@ -25,6 +25,8 @@ export function CloseFileExplorerSession(arg1:string):Promise<void>;
 
 export function CloseMonitoringSession(arg1:main.SSHSession):Promise<void>;
 
+export function CloseRDPSession(arg1:string):Promise<void>;
+
 export function CloseSSHSession(arg1:main.SSHSession):Promise<void>;
 
 export function CloseShell(arg1:string):Promise<void>;
@@ -57,6 +59,10 @@ export function CreateProfileWithFolderID(arg1:string,arg2:string,arg3:string,ar
 
 export function CreateProfileWithFolderIDAPI(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<main.Profile>;
 
+export function CreateRDPSession(arg1:string,arg2:main.RDPConfig):Promise<main.RDPSession>;
+
+export function CreateRDPSessionWithSize(arg1:string,arg2:main.RDPConfig,arg3:number,arg4:number):Promise<main.RDPSession>;
+
 export function CreateRemoteDirectory(arg1:string,arg2:string):Promise<void>;
 
 export function CreateRemoteDirectoryWithSudo(arg1:string,arg2:string):Promise<void>;
@@ -66,6 +72,8 @@ export function CreateSSHSession(arg1:string,arg2:main.SSHConfig):Promise<main.S
 export function CreateSSHSessionWithSize(arg1:string,arg2:main.SSHConfig,arg3:number,arg4:number):Promise<main.SSHSession>;
 
 export function CreateTab(arg1:string,arg2:main.SSHConfig):Promise<main.Tab>;
+
+export function CreateTabEx(arg1:string,arg2:main.SSHConfig,arg3:main.RDPConfig):Promise<main.Tab>;
 
 export function CreateTabFromProfile(arg1:string):Promise<main.Tab>;
 
@@ -100,6 +108,8 @@ export function DownloadRemoteFileWithProgress(arg1:string,arg2:string,arg3:stri
 export function DuplicateProfile(arg1:string):Promise<main.Profile>;
 
 export function EnableAI(arg1:boolean):Promise<void>;
+
+export function EnableRDPAudio(arg1:string,arg2:boolean):Promise<void>;
 
 export function ExecuteMonitoringCommand(arg1:main.SSHSession,arg2:string):Promise<string>;
 
@@ -164,6 +174,8 @@ export function GetProfilesByTag(arg1:string):Promise<Array<main.Profile>>;
 export function GetProfilesByType(arg1:string):Promise<Array<main.Profile>>;
 
 export function GetProfilesDirectory():Promise<string>;
+
+export function GetRDPSessionInfo(arg1:string):Promise<Record<string, any>>;
 
 export function GetRecentProfiles(arg1:number,arg2:number):Promise<Array<main.Profile>>;
 
@@ -261,6 +273,8 @@ export function ReorderTabs(arg1:Array<string>):Promise<void>;
 
 export function ResetMetrics():Promise<void>;
 
+export function ResizeRDPSession(arg1:string,arg2:number,arg3:number):Promise<void>;
+
 export function ResizeSSHSession(arg1:main.SSHSession,arg2:number,arg3:number):Promise<void>;
 
 export function ResizeShell(arg1:string,arg2:number,arg3:number):Promise<void>;
@@ -289,6 +303,10 @@ export function SelectSaveLocation(arg1:string):Promise<string>;
 
 export function SendAIRequest(arg1:string):Promise<main.AIResponse>;
 
+export function SendRDPKeyEvent(arg1:string,arg2:number,arg3:boolean):Promise<void>;
+
+export function SendRDPMouseEvent(arg1:string,arg2:number,arg3:number,arg4:number,arg5:boolean):Promise<void>;
+
 export function SetAIConfig(arg1:main.AIConfig):Promise<void>;
 
 export function SetAIProvider(arg1:string):Promise<void>;
@@ -313,9 +331,13 @@ export function StartTabShellWithSize(arg1:string,arg2:number,arg3:number):Promi
 
 export function StopProfileWatcher():Promise<void>;
 
+export function SyncRDPClipboard(arg1:string,arg2:string):Promise<void>;
+
 export function TestAIConnection():Promise<Record<string, any>>;
 
 export function ToggleFavoriteAPI(arg1:string):Promise<void>;
+
+export function TransferRDPFile(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<void>;
 
 export function UpdateHostKey(arg1:string,arg2:string,arg3:boolean):Promise<void>;
 

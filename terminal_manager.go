@@ -338,7 +338,7 @@ func (a *App) WriteToShell(sessionId string, data string) error {
 	return fmt.Errorf("session %s not found", sessionId)
 }
 
-// ResizeShell resizes the PTY or SSH session
+// ResizeShell resizes the PTY, SSH, or RDP session
 func (a *App) ResizeShell(sessionId string, cols, rows int) error {
 	a.terminal.mutex.Lock()
 	// Check if it's a PTY session
@@ -362,6 +362,15 @@ func (a *App) ResizeShell(sessionId string, cols, rows int) error {
 		return a.ResizeSSHSession(sshSession, cols, rows)
 	}
 	a.ssh.sshSessionsMutex.Unlock()
+
+	// Check if it's an RDP session
+	a.rdp.rdpSessionsMutex.RLock()
+	_, isRDPSession := a.rdp.rdpSessions[sessionId]
+	a.rdp.rdpSessionsMutex.RUnlock()
+
+	if isRDPSession {
+		return a.ResizeRDPSession(sessionId, cols, rows)
+	}
 
 	return fmt.Errorf("session %s not found", sessionId)
 }
@@ -432,6 +441,15 @@ func (a *App) CloseShell(sessionId string) error {
 
 	if isSSHSession {
 		return a.CloseSSHSession(sshSession)
+	}
+
+	// Check if it's an RDP session
+	a.rdp.rdpSessionsMutex.Lock()
+	_, isRDPSession := a.rdp.rdpSessions[sessionId]
+	a.rdp.rdpSessionsMutex.Unlock()
+
+	if isRDPSession {
+		return a.CloseRDPSession(sessionId)
 	}
 
 	return fmt.Errorf("session %s not found", sessionId)
