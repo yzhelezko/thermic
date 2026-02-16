@@ -477,10 +477,13 @@ type ProfileTreeNode struct {
 
 // ProfileWatcher handles file system watching for profile changes
 type ProfileWatcher struct {
-	watchDir    string
-	stopChan    chan bool
-	updatesChan chan ProfileUpdate
-	manager     *ProfileManager
+	watchDir      string
+	stopChan      chan bool
+	doneChan      chan struct{} // Signals the goroutine has exited
+	updatesChan   chan ProfileUpdate
+	manager       *ProfileManager
+	debounceTimer *time.Timer
+	debounceMutex sync.Mutex
 }
 
 // ProfileUpdate represents a profile file change event

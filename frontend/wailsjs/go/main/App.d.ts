@@ -269,6 +269,8 @@ export function RestartApplication():Promise<void>;
 
 export function RestartProfileWatcher():Promise<void>;
 
+export function SaveAllFolderStates():Promise<void>;
+
 export function SaveProfile(arg1:main.Profile):Promise<void>;
 
 export function SaveProfileFolder(arg1:main.ProfileFolder):Promise<void>;
@@ -294,6 +296,8 @@ export function SetAIConfig(arg1:main.AIConfig):Promise<void>;
 export function SetAIProvider(arg1:string):Promise<void>;
 
 export function SetActiveTab(arg1:string):Promise<void>;
+
+export function SetFolderExpandedAPI(arg1:string,arg2:boolean):Promise<void>;
 
 export function SetUpdateRate(arg1:string,arg2:number):Promise<void>;
 

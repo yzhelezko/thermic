@@ -7,13 +7,17 @@ import (
 	"time"
 )
 
-// buildFolderPath builds the full path for a folder by recursively traversing parent folders
+// buildFolderPath builds the full path for a folder by recursively traversing parent folders.
+// Acquires RLock internally — safe to call without holding any lock.
 func (a *App) buildFolderPath(folderID string) string {
-	return a.buildFolderPathWithDepth(folderID, 0)
+	a.profiles.mutex.RLock()
+	defer a.profiles.mutex.RUnlock()
+	return a.buildFolderPathLockFree(folderID, 0)
 }
 
-// buildFolderPathWithDepth prevents infinite recursion with depth tracking
-func (a *App) buildFolderPathWithDepth(folderID string, depth int) string {
+// buildFolderPathLockFree builds folder path without acquiring locks.
+// Caller must hold at least RLock on a.profiles.mutex.
+func (a *App) buildFolderPathLockFree(folderID string, depth int) string {
 	if folderID == "" {
 		return ""
 	}
@@ -24,10 +28,7 @@ func (a *App) buildFolderPathWithDepth(folderID string, depth int) string {
 		return ""
 	}
 
-	a.profiles.mutex.RLock()
 	folder, exists := a.profiles.profileFolders[folderID]
-	a.profiles.mutex.RUnlock()
-
 	if !exists {
 		return ""
 	}
@@ -42,7 +43,7 @@ func (a *App) buildFolderPathWithDepth(folderID string, depth int) string {
 		return folder.Name
 	}
 
-	parentPath := a.buildFolderPathWithDepth(folder.ParentFolderID, depth+1)
+	parentPath := a.buildFolderPathLockFree(folder.ParentFolderID, depth+1)
 	if parentPath == "" {
 		return folder.Name
 	}
@@ -50,7 +51,8 @@ func (a *App) buildFolderPathWithDepth(folderID string, depth int) string {
 	return parentPath + "/" + folder.Name
 }
 
-// findFolderByPath finds a folder ID by its full path
+// findFolderByPath finds a folder ID by its full path.
+// Acquires RLock internally — safe to call without holding any lock.
 func (a *App) findFolderByPath(path string) string {
 	if path == "" {
 		return ""
@@ -58,67 +60,36 @@ func (a *App) findFolderByPath(path string) string {
 
 	a.profiles.mutex.RLock()
 	defer a.profiles.mutex.RUnlock()
+	return a.findFolderByPathLockFree(path)
+}
 
-	// Use a timeout to prevent hanging on problematic folder structures
-	done := make(chan string, 1)
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				fmt.Printf("Warning: Panic in findFolderByPath for path '%s': %v\n", path, r)
-				done <- ""
-			}
-		}()
-
-		for id := range a.profiles.profileFolders {
-			folderPath := a.buildFolderPath(id)
-			if folderPath == path {
-				done <- id
-				return
-			}
-		}
-		done <- ""
-	}()
-
-	select {
-	case result := <-done:
-		return result
-	case <-time.After(5 * time.Second):
-		fmt.Printf("Warning: Timeout finding folder by path: %s\n", path)
+// findFolderByPathLockFree finds a folder ID by path without acquiring locks.
+// Caller must hold at least RLock on a.profiles.mutex.
+func (a *App) findFolderByPathLockFree(path string) string {
+	if path == "" {
 		return ""
 	}
+
+	for id := range a.profiles.profileFolders {
+		if a.buildFolderPathLockFree(id, 0) == path {
+			return id
+		}
+	}
+	return ""
 }
 
 // GetProfileTree builds the profile tree for the frontend with enhanced organization
 func (a *App) GetProfileTree() []*ProfileTreeNode {
 	a.profiles.mutex.RLock()
+	defer a.profiles.mutex.RUnlock()
 
-	// Create local copies to avoid holding lock during path building
-	profiles := make(map[string]*Profile)
-	folders := make(map[string]*ProfileFolder)
-
-	for k, v := range a.profiles.profiles {
-		profiles[k] = v
-	}
-	for k, v := range a.profiles.profileFolders {
-		folders[k] = v
-	}
-
-	a.profiles.mutex.RUnlock()
-
-	// Debug logging
-	fmt.Printf("DEBUG: GetProfileTree - Found %d profiles and %d folders\n", len(profiles), len(folders))
-	for id, folder := range folders {
-		fmt.Printf("DEBUG: Folder: %s (ID: %s, Parent: %s)\n", folder.Name, id, folder.ParentFolderID)
-	}
-
-	// Build tree structure without holding locks
+	// Build tree structure
 	tree := make(map[string]*ProfileTreeNode)
 	var rootNodes []*ProfileTreeNode
 
 	// Add folders first
-	for _, folder := range folders {
+	for _, folder := range a.profiles.profileFolders {
 		if folder == nil {
-			fmt.Printf("DEBUG: Skipping nil folder\n")
 			continue
 		}
 
@@ -127,63 +98,43 @@ func (a *App) GetProfileTree() []*ProfileTreeNode {
 			Name:     folder.Name,
 			Icon:     folder.Icon,
 			Type:     TreeNodeTypeFolder,
-			Path:     a.buildFolderPath(folder.ID),
+			Path:     a.buildFolderPathLockFree(folder.ID, 0),
 			Children: make([]*ProfileTreeNode, 0),
 			Expanded: folder.Expanded,
 		}
 		tree[folder.ID] = node
-		fmt.Printf("DEBUG: Added folder node %s to tree\n", folder.Name)
 	}
 
 	// Add profiles
-	for _, profile := range profiles {
+	for _, profile := range a.profiles.profiles {
 		node := &ProfileTreeNode{
 			ID:      profile.ID,
 			Name:    profile.Name,
 			Icon:    profile.Icon,
 			Type:    TreeNodeTypeProfile,
-			Path:    a.buildFolderPath(profile.FolderID),
+			Path:    a.buildFolderPathLockFree(profile.FolderID, 0),
 			Profile: profile,
 		}
 
-		// Find parent folder - prioritize ID-based reference
-		var parentID string
-		if profile.FolderID != "" {
-			parentID = profile.FolderID
-		}
-
-		if parentID != "" && tree[parentID] != nil {
-			tree[parentID].Children = append(tree[parentID].Children, node)
+		// Find parent folder
+		if profile.FolderID != "" && tree[profile.FolderID] != nil {
+			tree[profile.FolderID].Children = append(tree[profile.FolderID].Children, node)
 		} else {
-			// Parent not found or profile is at root level
 			rootNodes = append(rootNodes, node)
 		}
 	}
 
 	// Add folders to their parents or root
-	for folderID, folder := range folders {
+	for folderID, folder := range a.profiles.profileFolders {
 		node := tree[folderID]
-
 		if node == nil {
-			fmt.Printf("DEBUG: ERROR: No tree node found for folder %s (ID: %s)\n", folder.Name, folderID)
 			continue
 		}
 
-		// Find parent folder - prioritize ID-based reference
-		var parentID string
-		if folder.ParentFolderID != "" {
-			parentID = folder.ParentFolderID
-		}
-
-		fmt.Printf("DEBUG: Processing folder %s (ID: %s, ParentID: %s)\n", folder.Name, folderID, parentID)
-
-		if parentID != "" && tree[parentID] != nil {
-			tree[parentID].Children = append(tree[parentID].Children, node)
-			fmt.Printf("DEBUG: Added folder %s as child of %s\n", folder.Name, parentID)
+		if folder.ParentFolderID != "" && tree[folder.ParentFolderID] != nil {
+			tree[folder.ParentFolderID].Children = append(tree[folder.ParentFolderID].Children, node)
 		} else {
-			// Parent not found or folder is at root level
 			rootNodes = append(rootNodes, node)
-			fmt.Printf("DEBUG: Added folder %s to root (parent %s not found or empty)\n", folder.Name, parentID)
 		}
 	}
 
@@ -193,11 +144,8 @@ func (a *App) GetProfileTree() []*ProfileTreeNode {
 		a.sortTreeNodes(node.Children)
 	}
 
-	// Debug logging for final result
-	fmt.Printf("DEBUG: GetProfileTree returning %d root nodes\n", len(rootNodes))
-	for i, node := range rootNodes {
-		fmt.Printf("DEBUG: Root node %d: %s (Type: %s, Children: %d)\n", i, node.Name, node.Type, len(node.Children))
-	}
+	fmt.Printf("GetProfileTree: %d root nodes, %d profiles, %d folders\n",
+		len(rootNodes), len(a.profiles.profiles), len(a.profiles.profileFolders))
 
 	return rootNodes
 }

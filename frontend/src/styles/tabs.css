@@ -26,8 +26,13 @@
 }
 
 /* Platform-specific titlebar adjustments */
-.platform-darwin .tabs-titlebar {
-    height: 28px;
+.platform-darwin .tabs-titlebar,
+.platform-linux .tabs-titlebar {
+    height: 0;
+    min-height: 0;
+    padding: 0;
+    border: none;
+    overflow: hidden;
     background: var(--bg-primary);
 }
 

@@ -61,42 +61,15 @@ func (a *App) DeleteProfileAPI(id string) error {
 		return err
 	}
 
-	// Temporarily stop the file watcher to prevent conflicts
-	wasWatcherRunning := a.profiles.profileWatcher != nil
-	if wasWatcherRunning {
-		a.StopProfileWatcher()
-	}
-
-	// Find and delete the file
 	filename := fmt.Sprintf("%s-%s.yaml", profile.Name, id)
 	filename = sanitizeFilename(filename)
-
 	filePath := filepath.Join(profilesDir, filename)
 
 	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
-		// Restart watcher before returning error
-		if wasWatcherRunning {
-			go func() {
-				if watchErr := a.StartProfileWatcher(); watchErr != nil {
-					fmt.Printf("Warning: Failed to restart profile watcher: %v\n", watchErr)
-				}
-			}()
-		}
 		return fmt.Errorf("failed to delete profile file %s: %w", filePath, err)
 	}
 
-	// Remove from memory
 	delete(a.profiles.profiles, id)
-
-	// Restart the file watcher
-	if wasWatcherRunning {
-		go func() {
-			if watchErr := a.StartProfileWatcher(); watchErr != nil {
-				fmt.Printf("Warning: Failed to restart profile watcher: %v\n", watchErr)
-			}
-		}()
-	}
-
 	return nil
 }
 
@@ -115,42 +88,15 @@ func (a *App) DeleteProfileFolderAPI(id string) error {
 		return err
 	}
 
-	// Temporarily stop the file watcher to prevent conflicts
-	wasWatcherRunning := a.profiles.profileWatcher != nil
-	if wasWatcherRunning {
-		a.StopProfileWatcher()
-	}
-
-	// Find and delete the file
 	filename := fmt.Sprintf("folder-%s-%s.yaml", folder.Name, id)
 	filename = sanitizeFilename(filename)
-
 	filePath := filepath.Join(profilesDir, filename)
 
 	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
-		// Restart watcher before returning error
-		if wasWatcherRunning {
-			go func() {
-				if watchErr := a.StartProfileWatcher(); watchErr != nil {
-					fmt.Printf("Warning: Failed to restart profile watcher: %v\n", watchErr)
-				}
-			}()
-		}
 		return fmt.Errorf("failed to delete profile folder file %s: %w", filePath, err)
 	}
 
-	// Remove from memory
 	delete(a.profiles.profileFolders, id)
-
-	// Restart the file watcher
-	if wasWatcherRunning {
-		go func() {
-			if watchErr := a.StartProfileWatcher(); watchErr != nil {
-				fmt.Printf("Warning: Failed to restart profile watcher: %v\n", watchErr)
-			}
-		}()
-	}
-
 	return nil
 }
 
@@ -193,7 +139,7 @@ func (a *App) MoveProfile(profileID, newFolderPath string) error {
 
 	// If newFolderPath is provided, try to find the corresponding folder ID
 	if newFolderPath != "" {
-		folderID := a.findFolderByPath(newFolderPath)
+		folderID := a.findFolderByPathLockFree(newFolderPath)
 		profile.FolderID = folderID
 	} else {
 		// Root level
@@ -279,12 +225,12 @@ func (a *App) DeleteProfileFolderWithContentsAPI(id string) error {
 	}
 
 	// Delete all profiles in this folder first
-	folderPath := a.buildFolderPath(id)
+	folderPath := a.buildFolderPathLockFree(id, 0)
 	profilesToDelete := make([]string, 0)
 
 	// Collect profiles to delete
 	for profileID, profile := range a.profiles.profiles {
-		if strings.HasPrefix(a.buildFolderPath(profile.FolderID), folderPath) {
+		if strings.HasPrefix(a.buildFolderPathLockFree(profile.FolderID, 0), folderPath) {
 			profilesToDelete = append(profilesToDelete, profileID)
 		}
 	}
@@ -496,4 +442,33 @@ func (a *App) GetFolderByIDAPI(folderID string) (*ProfileFolder, error) {
 
 func (a *App) GetProfileByIDAPI(profileID string) (*Profile, error) {
 	return a.GetProfileByID(profileID)
+}
+
+// SetFolderExpandedAPI updates a folder's expanded state in memory only (no disk write).
+// This avoids the file watcher triggering a full reload on every folder toggle.
+// The state is persisted to disk on shutdown via SaveAllFolderStates.
+func (a *App) SetFolderExpandedAPI(folderID string, expanded bool) error {
+	a.profiles.mutex.Lock()
+	defer a.profiles.mutex.Unlock()
+
+	folder, exists := a.profiles.profileFolders[folderID]
+	if !exists {
+		return fmt.Errorf("profile folder not found: %s", folderID)
+	}
+
+	folder.Expanded = expanded
+	return nil
+}
+
+// SaveAllFolderStates persists all folder states to disk.
+// Called during shutdown to flush in-memory expanded states.
+func (a *App) SaveAllFolderStates() {
+	a.profiles.mutex.Lock()
+	defer a.profiles.mutex.Unlock()
+
+	for _, folder := range a.profiles.profileFolders {
+		if err := a.saveProfileFolderInternal(folder); err != nil {
+			fmt.Printf("Warning: Failed to save folder %s state: %v\n", folder.Name, err)
+		}
+	}
 }

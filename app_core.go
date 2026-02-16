@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -13,6 +14,18 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+// linuxGpuPolicy returns the appropriate GPU policy for the current display server.
+// On XWayland (Wayland session forced to X11), GPU compositing causes GBM buffer failures,
+// so software rendering is used. On native X11, GPU acceleration is allowed.
+func linuxGpuPolicy() linux.WebviewGpuPolicy {
+	if os.Getenv("WAYLAND_DISPLAY") != "" {
+		// Running on Wayland (or XWayland fallback) — disable GPU to avoid GBM buffer errors
+		return linux.WebviewGpuPolicyNever
+	}
+	// Native X11 session — GPU works fine
+	return linux.WebviewGpuPolicyOnDemand
+}
 
 // startup is called when the app starts. The context is saved
 // so we can call the runtime methods
@@ -142,6 +155,9 @@ func (a *App) shutdown(ctx context.Context) {
 
 	// Force save any pending config changes
 	a.saveConfigIfDirty()
+
+	// Flush in-memory folder expanded states to disk before stopping watcher
+	a.SaveAllFolderStates()
 
 	// Stop profile watcher
 	a.StopProfileWatcher()
@@ -283,7 +299,8 @@ func createAppOptions(app *App, assets embed.FS, isFrameless bool) *options.App 
 			CSSDropValue:       "drop",
 		},
 		Linux: &linux.Options{
-			Icon: nil,
+			ProgramName:      "Thermic",
+			WebviewGpuPolicy: linuxGpuPolicy(),
 		},
 	}
 }

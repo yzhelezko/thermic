@@ -102,7 +102,9 @@ func (a *App) LoadProfiles() error {
 		}
 
 		if err != nil {
-			return err
+			// Skip individual file errors instead of aborting entire load
+			fmt.Printf("Warning: Error accessing %s: %v\n", path, err)
+			return nil
 		}
 
 		// Skip directories and non-yaml files
@@ -163,13 +165,6 @@ func (a *App) LoadProfiles() error {
 	a.profiles.mutex.RLock()
 	profileCount := len(a.profiles.profiles)
 	folderCount := len(a.profiles.profileFolders)
-
-	// Debug: List all loaded folders
-	fmt.Printf("DEBUG: LoadProfiles - All loaded folders:\n")
-	for id, folder := range a.profiles.profileFolders {
-		fmt.Printf("DEBUG: - %s (ID: %s, Parent: %s, Path: %s)\n", folder.Name, id, folder.ParentFolderID, a.buildFolderPath(id))
-	}
-
 	a.profiles.mutex.RUnlock()
 
 	fmt.Printf("Loaded %d profiles and %d folders\n", profileCount, folderCount)
@@ -344,7 +339,8 @@ func (a *App) findFolderFile(folderID string) (string, error) {
 	return foundFile, nil
 }
 
-// saveProfileInternal saves a profile to file without mutex locking (internal use) with enhanced safety
+// saveProfileInternal saves a profile to file without mutex locking (internal use)
+// The file watcher may fire for our own writes — that's harmless (just a redundant re-read).
 func (a *App) saveProfileInternal(profile *Profile) error {
 	if profile == nil {
 		return fmt.Errorf("profile cannot be nil")
@@ -372,50 +368,27 @@ func (a *App) saveProfileInternal(profile *Profile) error {
 		return fmt.Errorf("invalid file path: %w", err)
 	}
 
-	// Temporarily stop the file watcher to prevent race conditions
-	wasWatcherRunning := a.profiles.profileWatcher != nil
-	if wasWatcherRunning {
-		a.StopProfileWatcher()
-	}
-
 	// Find and delete any existing file for this profile ID (handles renames)
 	existingFile, err := a.findProfileFile(profile.ID)
 	if err == nil && existingFile != "" && existingFile != filePath {
-		// Only delete if it's a different file (different name)
 		if deleteErr := os.Remove(existingFile); deleteErr != nil && !os.IsNotExist(deleteErr) {
 			fmt.Printf("Warning: Failed to delete old profile file %s: %v\n", existingFile, deleteErr)
 		}
 	}
 
-	// Write file with proper permissions
+	// Write file
 	if err := os.WriteFile(filePath, data, ConfigFileMode); err != nil {
-		// Restart watcher before returning error
-		if wasWatcherRunning {
-			go func() {
-				if watchErr := a.StartProfileWatcher(); watchErr != nil {
-					fmt.Printf("Warning: Failed to restart profile watcher: %v\n", watchErr)
-				}
-			}()
-		}
 		return fmt.Errorf("failed to write profile file: %w", err)
 	}
 
 	// Update in memory
 	a.profiles.profiles[profile.ID] = profile
 
-	// Restart the file watcher
-	if wasWatcherRunning {
-		go func() {
-			if watchErr := a.StartProfileWatcher(); watchErr != nil {
-				fmt.Printf("Warning: Failed to restart profile watcher: %v\n", watchErr)
-			}
-		}()
-	}
-
 	return nil
 }
 
-// saveProfileFolderInternal saves a profile folder to file without mutex locking (internal use) with enhanced safety
+// saveProfileFolderInternal saves a profile folder to file without mutex locking (internal use)
+// The file watcher may fire for our own writes — that's harmless (just a redundant re-read).
 func (a *App) saveProfileFolderInternal(folder *ProfileFolder) error {
 	if folder == nil {
 		return fmt.Errorf("folder cannot be nil")
@@ -443,45 +416,21 @@ func (a *App) saveProfileFolderInternal(folder *ProfileFolder) error {
 		return fmt.Errorf("invalid file path: %w", err)
 	}
 
-	// Temporarily stop the file watcher to prevent race conditions
-	wasWatcherRunning := a.profiles.profileWatcher != nil
-	if wasWatcherRunning {
-		a.StopProfileWatcher()
-	}
-
 	// Find and delete any existing file for this folder ID (handles renames)
 	existingFile, err := a.findFolderFile(folder.ID)
 	if err == nil && existingFile != "" && existingFile != filePath {
-		// Only delete if it's a different file (different name)
 		if deleteErr := os.Remove(existingFile); deleteErr != nil && !os.IsNotExist(deleteErr) {
 			fmt.Printf("Warning: Failed to delete old folder file %s: %v\n", existingFile, deleteErr)
 		}
 	}
 
-	// Write file with proper permissions
+	// Write file
 	if err := os.WriteFile(filePath, data, ConfigFileMode); err != nil {
-		// Restart watcher before returning error
-		if wasWatcherRunning {
-			go func() {
-				if watchErr := a.StartProfileWatcher(); watchErr != nil {
-					fmt.Printf("Warning: Failed to restart profile watcher: %v\n", watchErr)
-				}
-			}()
-		}
 		return fmt.Errorf("failed to write profile folder file: %w", err)
 	}
 
 	// Update in memory
 	a.profiles.profileFolders[folder.ID] = folder
-
-	// Restart the file watcher
-	if wasWatcherRunning {
-		go func() {
-			if watchErr := a.StartProfileWatcher(); watchErr != nil {
-				fmt.Printf("Warning: Failed to restart profile watcher: %v\n", watchErr)
-			}
-		}()
-	}
 
 	return nil
 }

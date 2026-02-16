@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -153,7 +154,7 @@ func (a *App) CreateProfile(name, profileType, shell, icon, folderPath string) (
 
 	// If folderPath is provided, try to find the corresponding folder ID
 	if folderPath != "" {
-		folderID := a.findFolderByPath(folderPath)
+		folderID := a.findFolderByPathLockFree(folderPath)
 		profile.FolderID = folderID
 	}
 
@@ -243,7 +244,7 @@ func (a *App) CreateProfileFolder(name, icon, parentPath string) (*ProfileFolder
 
 	// If parentPath is provided, try to find the corresponding folder ID
 	if parentPath != "" {
-		parentID := a.findFolderByPath(parentPath)
+		parentID := a.findFolderByPathLockFree(parentPath)
 		folder.ParentFolderID = parentID
 	}
 
@@ -421,14 +422,13 @@ func (a *App) DeleteProfileFolder(id string) error {
 	}
 
 	// Move any profiles in this folder to root
-	folderPath := a.buildFolderPath(id)
+	folderPath := a.buildFolderPathLockFree(id, 0)
 	for _, profile := range a.profiles.profiles {
-		if strings.HasPrefix(a.buildFolderPath(profile.FolderID), folderPath) {
-			// Remove this folder from the path
-			newPath := strings.TrimPrefix(a.buildFolderPath(profile.FolderID), folderPath)
-			newPath = strings.TrimPrefix(newPath, "/")
-			profile.FolderID = newPath
-			a.SaveProfile(profile)
+		profilePath := a.buildFolderPathLockFree(profile.FolderID, 0)
+		if strings.HasPrefix(profilePath, folderPath) {
+			// Move profile to root
+			profile.FolderID = ""
+			a.saveProfileInternal(profile)
 		}
 	}
 
@@ -510,18 +510,44 @@ func (a *App) CreateDefaultProfiles() error {
 		return fmt.Errorf("failed to create Local Shells folder: %w", err)
 	}
 
-	// Create some default local profiles
-	defaultShells := []struct {
+	// Create platform-appropriate default local profiles
+	type defaultShell struct {
 		name  string
 		shell string
 		icon  string
-	}{
-		{"PowerShell", "powershell.exe", "💻"},
-		{"Command Prompt", "cmd.exe", "⚫"},
-		{"PowerShell Core", "pwsh.exe", "🔷"},
+	}
+
+	var defaultShells []defaultShell
+	switch runtime.GOOS {
+	case "windows":
+		defaultShells = []defaultShell{
+			{"PowerShell", "powershell", "💻"},
+			{"Command Prompt", "cmd", "⚫"},
+			{"PowerShell Core", "pwsh", "🔷"},
+		}
+	case "darwin":
+		defaultShells = []defaultShell{
+			{"Zsh", "zsh", "💻"},
+			{"Bash", "bash", "⚫"},
+		}
+	default: // linux and other unix
+		defaultShells = []defaultShell{
+			{"Bash", "bash", "💻"},
+			{"Zsh", "zsh", "⚫"},
+		}
+	}
+
+	// Only create profiles for shells that are actually available
+	availableShells := a.getAvailableShells()
+	availableSet := make(map[string]bool)
+	for _, s := range availableShells {
+		availableSet[s] = true
 	}
 
 	for _, shell := range defaultShells {
+		if !availableSet[shell.shell] {
+			continue
+		}
 		_, err := a.CreateProfile(shell.name, "local", shell.shell, shell.icon, localFolder.Name)
 		if err != nil {
 			fmt.Printf("Warning: Failed to create default profile %s: %v\n", shell.name, err)
