@@ -271,7 +271,11 @@ func configurePtyProcess(cmd *pty.Cmd) {
 		cmd.SysProcAttr.Noctty = false
 	} else {
 		// Linux and other Unix systems
-		cmd.SysProcAttr.Setpgid = true
+		// Do NOT set Setpgid=true because go-pty/creack-pty internally
+		// sets Setsid=true and Setctty=true for PTY session setup.
+		// Setpgid and Setsid are mutually exclusive on Linux and combining
+		// them causes "operation not permitted" (EPERM).
+		cmd.SysProcAttr.Setpgid = false
 		cmd.SysProcAttr.Noctty = false
 	}
 }

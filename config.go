@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 )
 
 const (
@@ -102,6 +104,15 @@ type AppConfig struct {
 	SFTP SFTPConfig `yaml:"sftp"` // SFTP transfer optimization settings
 }
 
+// defaultProfilesPath returns the resolved default profiles directory path
+func defaultProfilesPath() string {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(configDir, ConfigDirName, ProfilesDirName)
+}
+
 // DefaultConfig returns a new AppConfig with default values
 func DefaultConfig() *AppConfig {
 	return &AppConfig{
@@ -114,7 +125,7 @@ func DefaultConfig() *AppConfig {
 			Linux:   "",
 			Darwin:  "",
 		},
-		ProfilesPath: "", // Empty string means use default profiles directory
+		ProfilesPath: defaultProfilesPath(), // Explicit default so it's visible in config file
 		// Default context menu settings
 		EnableSelectToCopy: false, // Default to disabled (standard context menu behavior)
 		// Default sidebar settings

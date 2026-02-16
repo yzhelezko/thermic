@@ -9,9 +9,11 @@ export function createTabsTemplate() {
     // Detect platform for correct button order
     const userAgent = navigator.userAgent.toLowerCase();
     const isMacOS = userAgent.includes('mac');
-    
-    // Define button order based on platform - no controls for macOS since it uses native ones
-    const windowControlsHTML = isMacOS ? '' : `
+    const isLinux = userAgent.includes('linux');
+    const useNativeControls = isMacOS || isLinux;
+
+    // Define button order based on platform - no controls for macOS/Linux since they use native ones
+    const windowControlsHTML = useNativeControls ? '' : `
         <!-- Windows/Linux order: minimize, maximize, close -->
         <button class="window-control window-minimize" id="window-minimize" title="Minimize">
             <span class="window-control-icon">
@@ -39,7 +41,7 @@ export function createTabsTemplate() {
     return `
         <div class="tabs-titlebar">
             <div class="titlebar-content">
-                ${isMacOS ? `
+                ${useNativeControls ? `
                     <div class="window-title">Thermic</div>
                     <div class="titlebar-spacer"></div>
                 ` : `

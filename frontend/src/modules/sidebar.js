@@ -2,6 +2,7 @@
 import { updateStatus, showNotification } from './utils.js';
 import { modal } from '../components/Modal.js';
 import { LiveSearch } from '../components/LiveSearch.js';
+import { EventsOn } from '../../wailsjs/runtime/runtime';
 
 export class SidebarManager {
     constructor() {
@@ -79,21 +80,24 @@ export class SidebarManager {
                 this.profileTree = [];
             }
 
-            // Populate expandedFolders set based on loaded tree
-            this.expandedFolders.clear(); // Clear existing state
-            const populateExpanded = (nodes) => {
-                if (!nodes || !Array.isArray(nodes)) return;
-                for (const node of nodes) {
-                    if (node && node.type === 'folder' && node.expanded) {
-                        this.expandedFolders.add(node.id);
+            // Populate expandedFolders from backend state only on first load
+            // (when expandedFolders is empty). On subsequent reloads triggered by
+            // the file watcher, preserve the current frontend expanded state.
+            if (this.expandedFolders.size === 0) {
+                const populateExpanded = (nodes) => {
+                    if (!nodes || !Array.isArray(nodes)) return;
+                    for (const node of nodes) {
+                        if (node && node.type === 'folder' && node.expanded) {
+                            this.expandedFolders.add(node.id);
+                        }
+                        if (node && node.children) {
+                            populateExpanded(node.children);
+                        }
                     }
-                    if (node && node.children) {
-                        populateExpanded(node.children);
-                    }
-                }
-            };
-            populateExpanded(this.profileTree);
-            console.log('Initialized expanded folders:', Array.from(this.expandedFolders));
+                };
+                populateExpanded(this.profileTree);
+                console.log('Initialized expanded folders:', Array.from(this.expandedFolders));
+            }
             
             // Load virtual folders with timeout protection
             try {
@@ -1188,9 +1192,8 @@ export class SidebarManager {
 
     async updateFolderExpandedState(folderId, expanded) {
         try {
-            const folder = await window.go.main.App.GetProfileFolder(folderId);
-            folder.expanded = expanded;
-            await window.go.main.App.UpdateProfileFolder(folder);
+            // Use lightweight in-memory-only update — no disk write, no watcher trigger
+            await window.go.main.App.SetFolderExpandedAPI(folderId, expanded);
         } catch (error) {
             console.error('Failed to update folder state:', error);
         }
@@ -1198,15 +1201,21 @@ export class SidebarManager {
 
     setupProfileUpdateListener() {
         // Listen for profile updates from file watcher
-        if (window.runtime && window.runtime.EventsOn) {
-            window.runtime.EventsOn('profile:updated', (data) => {
-                console.log('Profile update event received:', data);
-                // Reload and re-render the profile tree
-                this.loadProfileTree().then(() => {
-                    this.renderProfileTree();
-                });
+        EventsOn('profile:file:changed', (data) => {
+            console.log('Profile file changed event received:', data);
+            // Reload and re-render the profile tree
+            this.loadProfileTree().then(() => {
+                this.renderProfileTree();
             });
-        }
+        });
+
+        // Listen for full profile reload (e.g. profiles path changed)
+        EventsOn('profiles:reloaded', () => {
+            console.log('Profiles reloaded event received, refreshing tree...');
+            this.loadProfileTree().then(() => {
+                this.renderProfileTree();
+            });
+        });
     }
 
     // Helper methods

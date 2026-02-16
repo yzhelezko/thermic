@@ -1,0 +1,84 @@
+name: Update AUR Package
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  aur-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Updating AUR package to version $VERSION"
+
+      - name: Generate PKGBUILD
+        env:
+          PKGVER: ${{ steps.version.outputs.version }}
+        run: |
+          # Download release assets to compute sha256
+          BASE="https://github.com/yzhelezko/thermic"
+          curl -sL "${BASE}/releases/download/${GITHUB_REF_NAME}/thermic-linux-amd64" -o /tmp/thermic-bin
+          curl -sL "https://raw.githubusercontent.com/yzhelezko/thermic/${GITHUB_REF_NAME}/build/linux/appimage/Thermic.desktop" -o /tmp/thermic.desktop
+          curl -sL "https://raw.githubusercontent.com/yzhelezko/thermic/${GITHUB_REF_NAME}/build/appicon.png" -o /tmp/thermic.png
+
+          BINARY_SHA=$(sha256sum /tmp/thermic-bin | cut -d' ' -f1)
+          DESKTOP_SHA=$(sha256sum /tmp/thermic.desktop | cut -d' ' -f1)
+          ICON_SHA=$(sha256sum /tmp/thermic.png | cut -d' ' -f1)
+
+          echo "Binary SHA256:  $BINARY_SHA"
+          echo "Desktop SHA256: $DESKTOP_SHA"
+          echo "Icon SHA256:    $ICON_SHA"
+
+          # Generate PKGBUILD — uses envsubst for version, shell vars for checksums
+          cat > /tmp/PKGBUILD <<EOF
+          # Maintainer: Yuri Zhelezko <yzhelezko@github.com>
+          pkgname=thermic-bin
+          pkgver=${PKGVER}
+          pkgrel=1
+          pkgdesc="Modern cross-platform terminal emulator with SSH management and WSL support"
+          arch=('x86_64')
+          url="https://github.com/yzhelezko/thermic"
+          license=('MIT')
+          depends=('webkit2gtk-4.1' 'gtk3')
+          optdepends=('openssh: SSH connection support')
+          provides=('thermic')
+          conflicts=('thermic' 'thermic-git')
+          source=(
+              "\${pkgname}-\${pkgver}::https://github.com/yzhelezko/thermic/releases/download/v\${pkgver}/thermic-linux-amd64"
+              "thermic.desktop::https://raw.githubusercontent.com/yzhelezko/thermic/v\${pkgver}/build/linux/appimage/Thermic.desktop"
+              "thermic.png::https://raw.githubusercontent.com/yzhelezko/thermic/v\${pkgver}/build/appicon.png"
+          )
+          sha256sums=('${BINARY_SHA}' '${DESKTOP_SHA}' '${ICON_SHA}')
+
+          package() {
+              install -Dm755 "\${srcdir}/\${pkgname}-\${pkgver}" "\${pkgdir}/usr/bin/thermic"
+              install -Dm644 "\${srcdir}/thermic.desktop" "\${pkgdir}/usr/share/applications/thermic.desktop"
+              sed -i 's|Exec=Thermic|Exec=thermic|g' "\${pkgdir}/usr/share/applications/thermic.desktop"
+              sed -i 's|Icon=appicon|Icon=thermic|g' "\${pkgdir}/usr/share/applications/thermic.desktop"
+              install -Dm644 "\${srcdir}/thermic.png" "\${pkgdir}/usr/share/icons/hicolor/512x512/apps/thermic.png"
+          }
+          EOF
+
+          # Remove leading whitespace from heredoc (GitHub Actions indentation)
+          sed -i 's/^          //' /tmp/PKGBUILD
+
+          echo "=== Generated PKGBUILD ==="
+          cat /tmp/PKGBUILD
+
+      - name: Publish to AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v3.0.1
+        with:
+          pkgname: thermic-bin
+          pkgbuild: /tmp/PKGBUILD
+          commit_username: ${{ github.repository_owner }}
+          commit_email: yzhelezko@users.noreply.github.com
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Update to ${{ github.ref_name }}"
+          force_push: true

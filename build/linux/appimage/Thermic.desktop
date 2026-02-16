@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Thermic
+Exec=Thermic
+Icon=appicon
+Categories=System;TerminalEmulator;Utility;
+Comment=Modern cross-platform terminal application
+Terminal=false
+StartupWMClass=Thermic
+MimeType=
+Keywords=terminal;ssh;shell;console;

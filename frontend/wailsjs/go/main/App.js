@@ -534,6 +534,10 @@ export function RestartProfileWatcher() {
   return window['go']['main']['App']['RestartProfileWatcher']();
 }
 
+export function SaveAllFolderStates() {
+  return window['go']['main']['App']['SaveAllFolderStates']();
+}
+
 export function SaveProfile(arg1) {
   return window['go']['main']['App']['SaveProfile'](arg1);
 }
@@ -584,6 +588,10 @@ export function SetAIProvider(arg1) {
 
 export function SetActiveTab(arg1) {
   return window['go']['main']['App']['SetActiveTab'](arg1);
+}
+
+export function SetFolderExpandedAPI(arg1, arg2) {
+  return window['go']['main']['App']['SetFolderExpandedAPI'](arg1, arg2);
 }
 
 export function SetUpdateRate(arg1, arg2) {

@@ -422,11 +422,40 @@ func (c *SettingConfig) Update(a *App, value SettingValue) error {
 	case "ProfilesPath":
 		path := value.(string)
 		if a.config.config.ProfilesPath != path {
+			// Stop existing watcher before changing path
+			a.StopProfileWatcher()
+
 			a.config.config.ProfilesPath = path
 			fmt.Printf("Profiles path updated to: %s\n", path)
+
+			// Ensure new directory exists
+			if path != "" {
+				if err := os.MkdirAll(path, ConfigDirMode); err != nil {
+					fmt.Printf("Warning: Failed to create profiles directory %s: %v\n", path, err)
+				}
+			}
+
 			// Reload profiles from new path
 			if err := a.LoadProfiles(); err != nil {
 				fmt.Printf("Warning: Failed to reload profiles from new path: %v\n", err)
+			}
+
+			// Create default profiles if the new folder is empty
+			if len(a.profiles.profiles) == 0 {
+				fmt.Println("No profiles found in new path, creating defaults...")
+				if err := a.CreateDefaultProfiles(); err != nil {
+					fmt.Printf("Warning: Failed to create default profiles: %v\n", err)
+				}
+			}
+
+			// Restart watcher on new directory
+			if err := a.StartProfileWatcher(); err != nil {
+				fmt.Printf("Warning: Failed to restart profile watcher: %v\n", err)
+			}
+
+			// Emit event to frontend so sidebar refreshes automatically
+			if a.ctx != nil {
+				wailsRuntime.EventsEmit(a.ctx, "profiles:reloaded")
 			}
 		}
 		return nil

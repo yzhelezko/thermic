@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -12,29 +12,11 @@ import (
 
 // Watcher constants
 const (
-	WatcherBufferSize = 10
-	WatcherTimeout    = 5 * time.Second
+	WatcherBufferSize  = 10
+	WatcherDebounceMs  = 300 * time.Millisecond
 )
 
-// ProfileWatcherManager handles safe file watching with proper cleanup
-type ProfileWatcherManager struct {
-	watcher     *fsnotify.Watcher
-	stopChan    chan bool
-	updatesChan chan ProfileUpdate
-	mutex       sync.RWMutex
-	running     bool
-}
-
-// NewProfileWatcherManager creates a new watcher manager
-func NewProfileWatcherManager() *ProfileWatcherManager {
-	return &ProfileWatcherManager{
-		stopChan:    make(chan bool, 1),
-		updatesChan: make(chan ProfileUpdate, WatcherBufferSize),
-		running:     false,
-	}
-}
-
-// StartProfileWatcher starts monitoring profile files for changes with enhanced safety
+// StartProfileWatcher starts monitoring profile files for changes
 func (a *App) StartProfileWatcher() error {
 	profilesDir, err := a.GetProfilesDirectory()
 	if err != nil {
@@ -51,62 +33,46 @@ func (a *App) StartProfileWatcher() error {
 		return fmt.Errorf("failed to create file watcher: %w", err)
 	}
 
-	// Watch the profiles directory
 	err = watcher.Add(profilesDir)
 	if err != nil {
 		watcher.Close()
 		return fmt.Errorf("failed to watch profiles directory: %w", err)
 	}
 
-	a.profiles.profileWatcher = &ProfileWatcher{
+	pw := &ProfileWatcher{
 		watchDir:    profilesDir,
 		stopChan:    make(chan bool, 1),
+		doneChan:    make(chan struct{}),
 		updatesChan: make(chan ProfileUpdate, WatcherBufferSize),
 		manager:     a.profiles,
 	}
+	a.profiles.profileWatcher = pw
 
-	// Start watcher goroutine with proper error handling
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
 				fmt.Printf("Profile watcher panic recovered: %v\n", r)
 			}
 			watcher.Close()
+			close(pw.doneChan) // Signal that the goroutine has exited
 		}()
-
-		watcherTimeout := time.NewTimer(WatcherTimeout)
-		defer watcherTimeout.Stop()
 
 		for {
 			select {
 			case event, ok := <-watcher.Events:
 				if !ok {
-					fmt.Println("Profile watcher events channel closed")
 					return
 				}
-
-				// Reset timeout
-				if !watcherTimeout.Stop() {
-					<-watcherTimeout.C
-				}
-				watcherTimeout.Reset(WatcherTimeout)
-
 				a.handleProfileFileEvent(event)
 
 			case err, ok := <-watcher.Errors:
 				if !ok {
-					fmt.Println("Profile watcher errors channel closed")
 					return
 				}
 				fmt.Printf("Profile watcher error: %v\n", err)
 
-			case <-a.profiles.profileWatcher.stopChan:
-				fmt.Println("Profile watcher stop signal received")
+			case <-pw.stopChan:
 				return
-
-			case <-watcherTimeout.C:
-				// Periodic check - could be used for cleanup or health checks
-				watcherTimeout.Reset(WatcherTimeout)
 			}
 		}
 	}()
@@ -115,46 +81,53 @@ func (a *App) StartProfileWatcher() error {
 	return nil
 }
 
-// StopProfileWatcher stops the profile file watcher with proper cleanup
+// StopProfileWatcher stops the profile file watcher and waits for it to exit
 func (a *App) StopProfileWatcher() {
-	if a.profiles.profileWatcher != nil {
-		// Send stop signal
-		select {
-		case a.profiles.profileWatcher.stopChan <- true:
-			// Signal sent successfully
-		default:
-			// Channel might be full or closed, that's okay
-		}
-
-		// Close stop channel to ensure cleanup
-		close(a.profiles.profileWatcher.stopChan)
-
-		// Clear reference
-		a.profiles.profileWatcher = nil
-
-		fmt.Println("Profile file watcher stopped")
+	pw := a.profiles.profileWatcher
+	if pw == nil {
+		return
 	}
+
+	// Cancel any pending debounce timer
+	pw.debounceMutex.Lock()
+	if pw.debounceTimer != nil {
+		pw.debounceTimer.Stop()
+		pw.debounceTimer = nil
+	}
+	pw.debounceMutex.Unlock()
+
+	// Send stop signal
+	select {
+	case pw.stopChan <- true:
+	default:
+	}
+
+	// Wait for the goroutine to actually exit (with timeout)
+	select {
+	case <-pw.doneChan:
+	case <-time.After(2 * time.Second):
+		fmt.Println("Warning: Profile watcher goroutine did not exit in time")
+	}
+
+	a.profiles.profileWatcher = nil
+	fmt.Println("Profile file watcher stopped")
 }
 
-// handleProfileFileEvent processes file system events for profile files with better error handling
+// handleProfileFileEvent processes file system events for profile files
 func (a *App) handleProfileFileEvent(event fsnotify.Event) {
+	baseName := filepath.Base(event.Name)
+
 	// Only process YAML files
-	if !strings.HasSuffix(strings.ToLower(event.Name), ".yaml") {
+	if !strings.HasSuffix(strings.ToLower(baseName), ".yaml") {
 		return
 	}
 
 	// Skip metrics file
-	fileName := strings.ToLower(event.Name)
-	if strings.Contains(fileName, "metrics.yaml") {
+	if strings.EqualFold(baseName, "metrics.yaml") {
 		return
 	}
 
-	// Prevent processing during our own file operations
-	if a.profiles.profileWatcher == nil {
-		return
-	}
-
-	fmt.Printf("Profile file event: %s %s\n", event.Op.String(), event.Name)
+	fmt.Printf("Profile file event: %s %s\n", event.Op.String(), baseName)
 
 	switch {
 	case event.Op&fsnotify.Write == fsnotify.Write:
@@ -167,21 +140,37 @@ func (a *App) handleProfileFileEvent(event fsnotify.Event) {
 		a.handleFileRenamed(event.Name)
 	}
 
-	// Emit update to frontend if context is available
-	if a.ctx != nil {
-		wailsRuntime.EventsEmit(a.ctx, "profile:file:changed", ProfileUpdate{
-			Type:     event.Op.String(),
-			FilePath: event.Name,
-		})
+	// Debounced emit to frontend — coalesces rapid events into one refresh
+	a.emitProfileChangedDebounced()
+}
+
+// emitProfileChangedDebounced debounces the profile:file:changed event to the frontend.
+// Multiple rapid file events are coalesced into a single frontend refresh.
+func (a *App) emitProfileChangedDebounced() {
+	pw := a.profiles.profileWatcher
+	if pw == nil || a.ctx == nil {
+		return
 	}
+
+	pw.debounceMutex.Lock()
+	defer pw.debounceMutex.Unlock()
+
+	if pw.debounceTimer != nil {
+		pw.debounceTimer.Stop()
+	}
+
+	pw.debounceTimer = time.AfterFunc(WatcherDebounceMs, func() {
+		if a.ctx != nil {
+			wailsRuntime.EventsEmit(a.ctx, "profile:file:changed", nil)
+		}
+	})
 }
 
 // handleFileModified handles file modification events
 func (a *App) handleFileModified(filePath string) {
-	// Determine if it's a profile or folder file
-	fileName := strings.ToLower(filePath)
+	baseName := filepath.Base(filePath)
 
-	if strings.Contains(fileName, "folder-") {
+	if strings.HasPrefix(strings.ToLower(baseName), "folder-") {
 		a.handleFolderFileModified(filePath)
 	} else {
 		a.handleProfileFileModified(filePath)
@@ -220,31 +209,30 @@ func (a *App) handleFolderFileModified(filePath string) {
 
 // handleFileCreated handles file creation events
 func (a *App) handleFileCreated(filePath string) {
-	// Same as modification for our purposes
 	a.handleFileModified(filePath)
 }
 
 // handleFileRemoved handles file deletion events
 func (a *App) handleFileRemoved(filePath string) {
-	fileName := strings.ToLower(filePath)
+	baseName := filepath.Base(filePath)
 
-	if strings.Contains(fileName, "folder-") {
-		a.handleFolderFileRemoved(filePath)
+	if strings.HasPrefix(strings.ToLower(baseName), "folder-") {
+		a.handleFolderFileRemoved(baseName)
 	} else {
-		a.handleProfileFileRemoved(filePath)
+		a.handleProfileFileRemoved(baseName)
 	}
 }
 
 // handleProfileFileRemoved removes a deleted profile from memory
-func (a *App) handleProfileFileRemoved(filePath string) {
-	// Extract ID from filename
-	fileName := strings.ToLower(filePath)
-	parts := strings.Split(fileName, "-")
+func (a *App) handleProfileFileRemoved(baseName string) {
+	// Extract ID from filename: Name-ID.yaml
+	name := strings.TrimSuffix(baseName, ".yaml")
+	parts := strings.Split(name, "-")
 	if len(parts) < 2 {
 		return
 	}
 
-	id := strings.TrimSuffix(parts[len(parts)-1], ".yaml")
+	id := parts[len(parts)-1]
 
 	a.profiles.mutex.Lock()
 	if _, exists := a.profiles.profiles[id]; exists {
@@ -255,15 +243,15 @@ func (a *App) handleProfileFileRemoved(filePath string) {
 }
 
 // handleFolderFileRemoved removes a deleted folder from memory
-func (a *App) handleFolderFileRemoved(filePath string) {
-	// Extract ID from filename (folder-Name-ID.yaml)
-	fileName := strings.ToLower(filePath)
-	parts := strings.Split(fileName, "-")
+func (a *App) handleFolderFileRemoved(baseName string) {
+	// Extract ID from filename: folder-Name-ID.yaml
+	name := strings.TrimSuffix(baseName, ".yaml")
+	parts := strings.Split(name, "-")
 	if len(parts) < 3 {
 		return
 	}
 
-	id := strings.TrimSuffix(parts[len(parts)-1], ".yaml")
+	id := parts[len(parts)-1]
 
 	a.profiles.mutex.Lock()
 	if _, exists := a.profiles.profileFolders[id]; exists {
@@ -275,7 +263,6 @@ func (a *App) handleFolderFileRemoved(filePath string) {
 
 // handleFileRenamed handles file rename events
 func (a *App) handleFileRenamed(filePath string) {
-	// For renames, we treat it as a removal since the new file will trigger a create event
 	a.handleFileRemoved(filePath)
 }
 
@@ -303,14 +290,6 @@ func (a *App) GetWatcherStatus() map[string]interface{} {
 
 // RestartProfileWatcher safely restarts the profile watcher
 func (a *App) RestartProfileWatcher() error {
-	fmt.Println("Restarting profile watcher...")
-
-	// Stop current watcher
 	a.StopProfileWatcher()
-
-	// Wait a bit for cleanup
-	time.Sleep(100 * time.Millisecond)
-
-	// Start new watcher
 	return a.StartProfileWatcher()
 }
