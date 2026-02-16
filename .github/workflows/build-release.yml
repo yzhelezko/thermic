@@ -400,3 +400,78 @@ jobs:
             artifacts/thermic-darwin-arm64.zip/thermic-darwin-arm64.zip
           draft: false
           prerelease: false
+
+  aur-publish:
+    needs: release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Linux binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: thermic-linux-amd64
+          path: aur-assets
+
+      - name: Generate PKGBUILD
+        run: |
+          PKGVER="${GITHUB_REF_NAME#v}"
+
+          # Compute sha256 checksums from the actual build artifacts
+          BINARY_SHA=$(sha256sum aur-assets/thermic-linux-amd64 | cut -d' ' -f1)
+          DESKTOP_SHA=$(sha256sum build/linux/appimage/Thermic.desktop | cut -d' ' -f1)
+          ICON_SHA=$(sha256sum build/appicon.png | cut -d' ' -f1)
+
+          echo "Version:        $PKGVER"
+          echo "Binary SHA256:  $BINARY_SHA"
+          echo "Desktop SHA256: $DESKTOP_SHA"
+          echo "Icon SHA256:    $ICON_SHA"
+
+          # Write PKGBUILD to workspace (accessible by Docker)
+          cat > PKGBUILD <<EOF
+          # Maintainer: Yuri Zhelezko <yzhelezko@github.com>
+          pkgname=thermic-bin
+          pkgver=${PKGVER}
+          pkgrel=1
+          pkgdesc="Modern cross-platform terminal emulator with SSH management and WSL support"
+          arch=('x86_64')
+          url="https://github.com/yzhelezko/thermic"
+          license=('MIT')
+          depends=('webkit2gtk-4.1' 'gtk3')
+          optdepends=('openssh: SSH connection support')
+          provides=('thermic')
+          conflicts=('thermic' 'thermic-git')
+          source=(
+              "\${pkgname}-\${pkgver}::https://github.com/yzhelezko/thermic/releases/download/v\${pkgver}/thermic-linux-amd64"
+              "thermic.desktop::https://raw.githubusercontent.com/yzhelezko/thermic/v\${pkgver}/build/linux/appimage/Thermic.desktop"
+              "thermic.png::https://raw.githubusercontent.com/yzhelezko/thermic/v\${pkgver}/build/appicon.png"
+          )
+          sha256sums=('${BINARY_SHA}' '${DESKTOP_SHA}' '${ICON_SHA}')
+
+          package() {
+              install -Dm755 "\${srcdir}/\${pkgname}-\${pkgver}" "\${pkgdir}/usr/bin/thermic"
+              install -Dm644 "\${srcdir}/thermic.desktop" "\${pkgdir}/usr/share/applications/thermic.desktop"
+              sed -i 's|Exec=Thermic|Exec=thermic|g' "\${pkgdir}/usr/share/applications/thermic.desktop"
+              sed -i 's|Icon=appicon|Icon=thermic|g' "\${pkgdir}/usr/share/applications/thermic.desktop"
+              install -Dm644 "\${srcdir}/thermic.png" "\${pkgdir}/usr/share/icons/hicolor/512x512/apps/thermic.png"
+          }
+          EOF
+
+          # Strip leading whitespace from heredoc indentation
+          sed -i 's/^          //' PKGBUILD
+
+          echo "=== Generated PKGBUILD ==="
+          cat PKGBUILD
+
+      - name: Publish to AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v3.0.1
+        with:
+          pkgname: thermic-bin
+          pkgbuild: ./PKGBUILD
+          commit_username: ${{ github.repository_owner }}
+          commit_email: yzhelezko@users.noreply.github.com
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Update to ${{ github.ref_name }}"
+          force_push: true
