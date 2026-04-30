@@ -2,3 +2,5 @@ build/bin
 node_modules
 frontend/dist
 package.json.md5
+/thermic
+/thermic.exe
