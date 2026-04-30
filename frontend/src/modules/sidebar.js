@@ -407,6 +407,7 @@ export class SidebarManager {
         };
 
         item.classList.add('dragging');
+        document.body.classList.add('tree-dragging');
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', ''); // Required for Firefox
     }
@@ -450,6 +451,17 @@ export class SidebarManager {
             return { folderID: '', anchor: null, blocked: true, reason: 'virtual' };
         }
 
+        // Explicit "drop to root" zones (gap zones, tail zone, ROOT FOLDER header)
+        // take priority over closest tree-item lookup.
+        const rootZone = e.target.closest('[data-drop-root="true"]');
+        if (rootZone) {
+            const folderID = '';
+            if (folderID === this.draggedItem.currentParent) {
+                return { folderID, anchor: rootZone, blocked: true, reason: 'noop' };
+            }
+            return { folderID, anchor: rootZone, blocked: false };
+        }
+
         const hover = e.target.closest('.tree-item');
         let folderID = '';
         let anchor = null;
@@ -484,7 +496,7 @@ export class SidebarManager {
     }
 
     clearDropHighlights() {
-        document.querySelectorAll('.tree-item.drop-target, .tree-item.drop-blocked').forEach(el => {
+        document.querySelectorAll('.drop-target, .drop-blocked').forEach(el => {
             el.classList.remove('drop-target', 'drop-blocked');
         });
         document.querySelectorAll('.profile-tree.drop-target-root').forEach(el => {
@@ -496,15 +508,15 @@ export class SidebarManager {
         if (!this.draggedItem) return;
         e.preventDefault();
 
-        const { folderID, anchor, blocked } = this.resolveDropTarget(e);
+        const { folderID, anchor, blocked, reason } = this.resolveDropTarget(e);
         e.dataTransfer.dropEffect = blocked ? 'none' : 'move';
 
         this.clearDropHighlights();
 
         if (blocked) {
-            // Light up the would-be target as blocked, but only when we have one
-            // and the reason isn't "noop" (no-op shouldn't visually scream).
-            if (anchor) anchor.classList.add('drop-blocked');
+            // Light up the would-be target as blocked, but no-ops stay silent
+            // (e.g. hovering ROOT FOLDER for an item that's already at root).
+            if (anchor && reason !== 'noop') anchor.classList.add('drop-blocked');
             return;
         }
 
@@ -554,6 +566,7 @@ export class SidebarManager {
             this.draggedItem = null;
         }
 
+        document.body.classList.remove('tree-dragging');
         this.clearDropHighlights();
     }
 
@@ -719,8 +732,9 @@ export class SidebarManager {
         sidebarContent.innerHTML = `
             ${virtualFoldersHTML}
             <div class="profile-tree">
-                <div class="section-header">ROOT FOLDER</div>
-                ${this.renderTreeNodes(this.profileTree)}
+                <div class="section-header" data-drop-root="true">ROOT FOLDER</div>
+                ${this.renderTopLevelTreeNodes(this.profileTree)}
+                <div class="tree-root-drop-zone" data-drop-root="true" aria-label="Drop here to move to root"></div>
             </div>
         `;
 
@@ -938,6 +952,21 @@ export class SidebarManager {
                 return this.renderProfileNode(node, level, parentFolderID);
             }
         }).join('');
+    }
+
+    // Top-level wrapper: interleaves slim "drop to root" gap zones between
+    // root-level items so users can drag an item out of a folder by dropping
+    // it between siblings at the root.
+    renderTopLevelTreeNodes(nodes) {
+        if (!nodes || nodes.length === 0) return '';
+        const parts = ['<div class="tree-gap-drop-zone" data-drop-root="true"></div>'];
+        for (const node of nodes) {
+            parts.push(node.type === 'folder'
+                ? this.renderFolderNode(node, 0, '')
+                : this.renderProfileNode(node, 0, ''));
+            parts.push('<div class="tree-gap-drop-zone" data-drop-root="true"></div>');
+        }
+        return parts.join('');
     }
 
     renderFolderNode(folder, level, parentFolderID = '') {

@@ -355,6 +355,65 @@
     border-radius: var(--radius-md);
 }
 
+/* Root drop zones: thin gap zones between root items + a tail zone after
+   the last item. Invisible until a tree drag is in progress, expand on
+   hover so it's easy to land on them. */
+.tree-gap-drop-zone {
+    height: 4px;
+    margin: 0 6px;
+    border-radius: var(--radius-sm, 3px);
+    pointer-events: none;
+    transition: height 0.12s ease, background-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.tree-root-drop-zone {
+    min-height: 24px;
+    margin: 4px 6px 8px;
+    border-radius: var(--radius-md);
+    pointer-events: none;
+    transition: background-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+body.tree-dragging .tree-gap-drop-zone,
+body.tree-dragging .tree-root-drop-zone {
+    pointer-events: auto;
+}
+
+body.tree-dragging .tree-gap-drop-zone.drop-target {
+    height: 10px;
+    background-color: rgba(var(--thermic-orange-rgb), 0.20);
+    box-shadow: inset 0 0 0 1px var(--thermic-orange);
+}
+
+body.tree-dragging .tree-root-drop-zone.drop-target {
+    background-color: rgba(var(--thermic-orange-rgb), 0.10);
+    box-shadow: inset 0 0 0 1px dashed var(--thermic-orange);
+}
+
+body.tree-dragging .tree-gap-drop-zone.drop-blocked,
+body.tree-dragging .tree-root-drop-zone.drop-blocked {
+    background-color: rgba(var(--error-color-rgb), 0.10);
+    cursor: not-allowed;
+}
+
+/* ROOT FOLDER header doubles as a drop target for "move to root" */
+body.tree-dragging .section-header[data-drop-root="true"] {
+    cursor: copy;
+}
+
+.section-header[data-drop-root="true"].drop-target {
+    color: var(--text-primary);
+    background-color: rgba(var(--thermic-orange-rgb), 0.18);
+    box-shadow: inset 0 0 0 1px var(--thermic-orange);
+    border-radius: var(--radius-sm, 3px);
+}
+
+.section-header[data-drop-root="true"].drop-blocked {
+    background-color: rgba(var(--error-color-rgb), 0.10);
+    border-radius: var(--radius-sm, 3px);
+    cursor: not-allowed;
+}
+
 /* Context menu styles are handled in context-menu.css */
 
 /* Icon Selector Styles for Profile Panel */
