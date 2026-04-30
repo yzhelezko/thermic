@@ -4,6 +4,16 @@ import { modal } from '../components/Modal.js';
 import { LiveSearch } from '../components/LiveSearch.js';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
 import { hotkeyManager } from './hotkey-manager.js';
+import { resolveIconName } from '../utils/icons.js';
+
+function profileIconHtml(icon, fallback = 'laptop') {
+    const name = resolveIconName(icon) || fallback;
+    return `<img src="./icons/${name}.svg" class="svg-icon" alt="">`;
+}
+
+function favoriteStarHtml() {
+    return `<img src="./icons/star.svg" class="svg-icon favorite-star-icon" alt="favorite">`;
+}
 
 export class SidebarManager {
     constructor() {
@@ -652,7 +662,7 @@ export class SidebarManager {
                 const result = await modal.show({
                     title: 'Delete Folder',
                     message: `What would you like to do with the profiles in "${folderName}"?`,
-                    icon: '🗑️',
+                    icon: '<img src="./icons/trash.svg" class="svg-icon" alt="">',
                     buttons: [
                         { text: 'Cancel', style: 'secondary', action: 'cancel' },
                         { text: 'Move to Root', style: 'primary', action: 'move' },
@@ -719,7 +729,7 @@ export class SidebarManager {
         return this.virtualFolders.map(vf => `
             <div class="virtual-folder" data-id="${vf.id}" data-type="virtual">
                 <div class="tree-item-content">
-                    <span class="tree-item-icon">${vf.icon}</span>
+                    <span class="tree-item-icon">${profileIconHtml(vf.icon, 'folder')}</span>
                     <span class="tree-item-text">${vf.name}</span>
                     <span class="virtual-folder-count" data-folder-id="${vf.id}">...</span>
                 </div>
@@ -790,7 +800,7 @@ export class SidebarManager {
         const backButton = `
             <div class="virtual-folder-header">
                 <button class="back-btn" onclick="window.sidebarManager.renderProfileTree()">← Back</button>
-                <h3>${vf.icon} ${vf.name}</h3>
+                <h3>${profileIconHtml(vf.icon, 'folder')} ${vf.name}</h3>
             </div>
         `;
 
@@ -799,9 +809,9 @@ export class SidebarManager {
             return `
                 <div class="tree-item virtual-profile" data-id="${profile.id}" data-type="profile" title="${tooltipText}">
                     <div class="tree-item-content">
-                        <span class="tree-item-icon">${profile.icon}</span>
+                        <span class="tree-item-icon">${profileIconHtml(profile.icon)}</span>
                         <span class="tree-item-text">${profile.name}</span>
-                        ${profile.isFavorite ? '<span class="favorite-star">⭐</span>' : ''}
+                        ${profile.isFavorite ? `<span class="favorite-star">${favoriteStarHtml()}</span>` : ''}
                         ${profile.usageCount > 0 ? `<span class="usage-count">${profile.usageCount}</span>` : ''}
                     </div>
                 </div>
@@ -819,7 +829,7 @@ export class SidebarManager {
             <div class="search-panel">
                 <div class="search-header">
                     <button class="back-btn" onclick="window.sidebarManager.renderProfileTree()">← Back</button>
-                    <h3>🔍 Search Profiles</h3>
+                    <h3><img src="./icons/search.svg" class="svg-icon" alt=""> Search Profiles</h3>
                 </div>
                 <div class="search-controls">
                     <input type="text" id="search-input" placeholder="Search profiles..." class="search-input"
@@ -895,9 +905,9 @@ export class SidebarManager {
                 return `
                     <div class="tree-item search-result" data-id="${profile.id}" data-type="profile" title="${tooltipText}">
                         <div class="tree-item-content">
-                            <span class="tree-item-icon">${profile.icon}</span>
+                            <span class="tree-item-icon">${profileIconHtml(profile.icon)}</span>
                             <span class="tree-item-text">${profile.name}</span>
-                            ${profile.isFavorite ? '<span class="favorite-star">⭐</span>' : ''}
+                            ${profile.isFavorite ? `<span class="favorite-star">${favoriteStarHtml()}</span>` : ''}
                             <div class="profile-meta">
                                 ${profile.tags?.length ? `<span class="profile-tags">${profile.tags.join(', ')}</span>` : ''}
                                 ${profile.usageCount > 0 ? `<span class="usage-count">Used ${profile.usageCount} times</span>` : ''}
@@ -949,7 +959,7 @@ export class SidebarManager {
                         <span class="tree-folder-toggle" data-folder-id="${folder.id}">
                             ${isExpanded ? '▼' : '▶'}
                         </span>
-                        <span class="tree-item-icon">${folder.icon}</span>
+                        <span class="tree-item-icon">${profileIconHtml(folder.icon, 'folder')}</span>
                         <span class="tree-item-text">${folder.name}</span>
                     </div>
                 </div>
@@ -961,7 +971,7 @@ export class SidebarManager {
     }
 
     renderProfileNode(profile, level, parentFolderID = '') {
-        const favoriteIcon = profile.profile?.isFavorite ? '<span class="favorite-indicator">⭐</span>' : '';
+        const favoriteIcon = profile.profile?.isFavorite ? `<span class="favorite-indicator">${favoriteStarHtml()}</span>` : '';
         const profileType = profile.profile?.type || 'local';
         const description = profile.profile?.description || '';
         const tooltipText = description
@@ -988,7 +998,7 @@ export class SidebarManager {
                  draggable="true"
                  title="${tooltipText}"${colorAttr}>
                 <div class="tree-item-content" style="padding-left: ${(level + 1) * 16}px">
-                    <span class="tree-item-icon">${profile.icon}</span>
+                    <span class="tree-item-icon">${profileIconHtml(profile.icon)}</span>
                     <span class="tree-item-text">${profile.name}</span>
                     ${favoriteIcon}
                     <span class="tree-item-type">${profileType}</span>
@@ -1122,35 +1132,35 @@ export class SidebarManager {
 
         // Handle icon option clicks
         const handleIconClick = (e) => {
-            if (e.target.classList.contains('icon-option')) {
-                const icon = e.target.dataset.icon;
-                const dropdown = e.target.closest('.icon-dropdown');
-                
+            const option = e.target.closest('.icon-option');
+            if (option && option.closest('.icon-grid-compact')) {
+                const icon = option.dataset.icon;
+                const dropdown = option.closest('.icon-dropdown');
+
                 if (!dropdown) {
-                    console.warn('Icon dropdown not found for option:', e.target);
+                    console.warn('Icon dropdown not found for option:', option);
                     return;
                 }
-                
+
                 const button = dropdown.parentElement.querySelector('.icon-selector-button');
                 const currentIconSpan = button.querySelector('.current-icon');
-                
-                // Update the current icon display
-                currentIconSpan.textContent = icon;
-                
+
+                // Update the current icon display with an SVG preview
+                currentIconSpan.innerHTML = `<img src="./icons/${icon}.svg" class="svg-icon" alt="">`;
+
                 // Update the hidden input value
                 const isFolder = dropdown.id.includes('folder');
                 const hiddenInput = document.getElementById(isFolder ? 'folder-icon' : 'profile-icon');
                 if (hiddenInput) {
                     hiddenInput.value = icon;
-                    console.log('Updated icon value:', icon, 'for', isFolder ? 'folder' : 'profile');
                 } else {
                     console.warn('Hidden input not found for:', isFolder ? 'folder-icon' : 'profile-icon');
                 }
-                
+
                 // Close dropdown
                 button.classList.remove('active');
                 dropdown.classList.remove('active');
-                
+
                 e.stopPropagation();
             }
         };

@@ -5,7 +5,7 @@
 // Map of emoji to SVG file names
 const EMOJI_TO_ICON = {
     '🖥️': 'terminal',
-    '🎨': 'palette', 
+    '🎨': 'palette',
     '⚙️': 'settings',
     'ℹ️': 'info',
     '❌': 'error',
@@ -44,8 +44,61 @@ const EMOJI_TO_ICON = {
     '📝': 'rename',
     '🗂️': 'files',
     '🌐': 'globe',
-    '👁️': 'eye'
+    '👁️': 'eye',
+    '🔷': 'diamond',
+    '⚫': 'circle',
+    '🐧': 'penguin',
+    '🐳': 'whale',
+    '🕒': 'clock',
+    '⏰': 'clock',
+    '📈': 'chart',
+    '📊': 'chart'
 };
+
+// Curated picker sets — the canonical icon names users can pick for profiles/folders
+export const PROFILE_ICON_NAMES = ['laptop', 'diamond', 'circle', 'penguin', 'globe', 'whale', 'lightning', 'rocket'];
+export const FOLDER_ICON_NAMES = ['folder', 'folder-open', 'files', 'clipboard', 'tools', 'globe', 'wrench', 'settings'];
+
+const KNOWN_ICON_NAMES = new Set([
+    ...Object.values(EMOJI_TO_ICON),
+    'sun', 'moon', 'ai', 'send', 'circle', 'clock', 'chart'
+]);
+
+/**
+ * Resolve a profile/folder icon value to a usable icon name.
+ * Accepts either a canonical icon name ("laptop") or a legacy emoji ("💻").
+ * Returns null if the value can't be resolved.
+ */
+export function resolveIconName(value) {
+    if (!value) return null;
+    if (KNOWN_ICON_NAMES.has(value)) return value;
+    if (EMOJI_TO_ICON[value]) return EMOJI_TO_ICON[value];
+    return null;
+}
+
+/**
+ * Build an inline <svg> markup for a profile/folder icon, using the cached
+ * SVG content if available. Falls back to a synchronous <img> if not yet cached.
+ * Use this in render paths where you want immediate output.
+ */
+export function renderIconHtml(value, fallbackName, className = 'tree-item-icon-svg') {
+    const name = resolveIconName(value) || fallbackName;
+    if (!name) return '';
+    const cacheKey = `${name}_v${SVG_CACHE_VERSION}`;
+    const cached = svgCache.get(cacheKey);
+    if (cached) {
+        return cached.replace('<svg', `<svg class="svg-icon ${className}"`);
+    }
+    return `<img src="./icons/${name}.svg" class="svg-icon ${className}" data-icon-name="${name}" alt="">`;
+}
+
+/**
+ * Preload a list of icon names into the SVG cache. Call this once on startup so
+ * `renderIconHtml` can return inline SVG synchronously thereafter.
+ */
+export async function preloadIcons(names) {
+    await Promise.all(names.map(n => loadSvgContent(n)));
+}
 
 // Cache for loaded SVG content with version to prevent corruption
 const SVG_CACHE_VERSION = '1.2'; // Increment to invalidate old cache

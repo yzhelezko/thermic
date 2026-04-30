@@ -1,4 +1,13 @@
 // HTML template functions for UI components
+import { PROFILE_ICON_NAMES, FOLDER_ICON_NAMES, resolveIconName } from '../utils/icons.js';
+
+function iconOption(name) {
+    return `<span class="icon-option" data-icon="${name}" title="${name}"><img src="./icons/${name}.svg" class="svg-icon" alt=""></span>`;
+}
+
+function currentIconHtml(name) {
+    return `<img src="./icons/${name}.svg" class="svg-icon" alt="">`;
+}
 
 export function createHeaderTemplate() {
     // Return empty since we're removing the header
@@ -1087,24 +1096,17 @@ export function createProfileFormTemplate(mode, type, data = null) {
                     autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
                         <div class="icon-selector-compact">
                             <button type="button" class="icon-selector-button" id="folder-icon-btn">
-                                <span class="current-icon" id="folder-current-icon">${data?.icon || '📁'}</span>
+                                <span class="current-icon" id="folder-current-icon">${currentIconHtml(resolveIconName(data?.icon) || 'folder')}</span>
                                 <span class="icon-selector-arrow">▼</span>
                             </button>
                             <div class="icon-dropdown" id="folder-icon-dropdown">
                                 <div class="icon-grid-compact">
-                                    <span class="icon-option" data-icon="📁">📁</span>
-                                    <span class="icon-option" data-icon="📂">📂</span>
-                                    <span class="icon-option" data-icon="🗂️">🗂️</span>
-                                    <span class="icon-option" data-icon="📋">📋</span>
-                                    <span class="icon-option" data-icon="🛠️">🛠️</span>
-                                    <span class="icon-option" data-icon="🌐">🌐</span>
-                                    <span class="icon-option" data-icon="🔧">🔧</span>
-                                    <span class="icon-option" data-icon="⚙️">⚙️</span>
+                                    ${FOLDER_ICON_NAMES.map(iconOption).join('')}
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <input type="hidden" id="folder-icon" value="${data?.icon || '📁'}">
+                    <input type="hidden" id="folder-icon" value="${resolveIconName(data?.icon) || 'folder'}">
                 </div>
             </div>
         `;
@@ -1122,24 +1124,17 @@ export function createProfileFormTemplate(mode, type, data = null) {
                     autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
                         <div class="icon-selector-compact">
                             <button type="button" class="icon-selector-button" id="profile-icon-btn">
-                                <span class="current-icon" id="profile-current-icon">${data?.icon || '💻'}</span>
+                                <span class="current-icon" id="profile-current-icon">${currentIconHtml(resolveIconName(data?.icon) || 'laptop')}</span>
                                 <span class="icon-selector-arrow">▼</span>
                             </button>
                             <div class="icon-dropdown" id="profile-icon-dropdown">
                                 <div class="icon-grid-compact">
-                                    <span class="icon-option" data-icon="💻">💻</span>
-                                    <span class="icon-option" data-icon="🔷">🔷</span>
-                                    <span class="icon-option" data-icon="⚫">⚫</span>
-                                    <span class="icon-option" data-icon="🐧">🐧</span>
-                                    <span class="icon-option" data-icon="🌐">🌐</span>
-                                    <span class="icon-option" data-icon="🐳">🐳</span>
-                                    <span class="icon-option" data-icon="⚡">⚡</span>
-                                    <span class="icon-option" data-icon="🚀">🚀</span>
+                                    ${PROFILE_ICON_NAMES.map(iconOption).join('')}
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <input type="hidden" id="profile-icon" value="${data?.icon || '💻'}">
+                    <input type="hidden" id="profile-icon" value="${resolveIconName(data?.icon) || 'laptop'}">
                 </div>
             </div>
 

@@ -303,7 +303,7 @@ func (a *App) initializeVirtualFolders() {
 		{
 			ID:   "vf_favorites",
 			Name: "Favorites",
-			Icon: "⭐",
+			Icon: "star",
 			Type: "favorite",
 			Filter: VirtualFilter{
 				Type:      "favorite",
@@ -314,7 +314,7 @@ func (a *App) initializeVirtualFolders() {
 		{
 			ID:   "vf_recent",
 			Name: "Recent",
-			Icon: "🕒",
+			Icon: "clock",
 			Type: "recent",
 			Filter: VirtualFilter{
 				Type:      "recent",
@@ -327,7 +327,7 @@ func (a *App) initializeVirtualFolders() {
 		{
 			ID:   "vf_most_used",
 			Name: "Most Used",
-			Icon: "📈",
+			Icon: "chart",
 			Type: "usage",
 			Filter: VirtualFilter{
 				Type:      "usage",
