@@ -481,6 +481,24 @@ func (c *SettingConfig) Update(a *App, value SettingValue) error {
 		a.config.config.TerminalLineHeight = value.(int)
 	case "TerminalCursorBlink":
 		a.config.config.TerminalCursorBlink = value.(bool)
+	case "TerminalCursorStyle":
+		a.config.config.TerminalCursorStyle = value.(string)
+	case "TerminalBellSound":
+		a.config.config.TerminalBellSound = value.(bool)
+	case "TerminalWordSeparators":
+		a.config.config.TerminalWordSeparators = value.(string)
+	case "TerminalScrollSensitivity":
+		a.config.config.TerminalScrollSensitivity = value.(int)
+	case "TerminalFastScrollSensitivity":
+		a.config.config.TerminalFastScrollSensitivity = value.(int)
+	case "ConfirmCloseActiveSessions":
+		a.config.config.ConfirmCloseActiveSessions = value.(bool)
+	case "RestoreTabsOnLaunch":
+		a.config.config.RestoreTabsOnLaunch = value.(bool)
+	case "SSHConnectionTimeout":
+		a.config.config.SSHConnectionTimeout = value.(int)
+	case "SSHKeepAliveInterval":
+		a.config.config.SSHKeepAliveInterval = value.(int)
 	case "AutoCheckUpdates":
 		a.config.config.AutoCheckUpdates = value.(bool)
 	case "UIScale":
@@ -572,6 +590,20 @@ func updateAIAPIKeySetting(a *App, value SettingValue) error {
 	}
 
 	fmt.Printf("AI API key updated\n") // Don't log the actual key for security
+	return nil
+}
+
+// Custom update function for AlwaysOnTop — applies the runtime call as well as persisting the flag
+func updateAlwaysOnTopSetting(a *App, value SettingValue) error {
+	enabled, ok := value.(bool)
+	if !ok {
+		return fmt.Errorf("invalid AlwaysOnTop value: expected bool, got %T", value)
+	}
+	a.config.config.AlwaysOnTop = enabled
+	if a.ctx != nil {
+		wailsRuntime.WindowSetAlwaysOnTop(a.ctx, enabled)
+	}
+	fmt.Printf("AlwaysOnTop set to: %v\n", enabled)
 	return nil
 }
 
@@ -734,6 +766,76 @@ var settingConfigs = map[string]*SettingConfig{
 		EventName:     "config:terminal-cursor-blink-changed",
 		ConfigField:   "TerminalCursorBlink",
 	},
+	"TerminalCursorStyle": {
+		Name:          "TerminalCursorStyle",
+		Type:          SettingTypeString,
+		AllowedValues: AllowedTerminalCursorStyles,
+		RequiresEvent: true,
+		EventName:     "config:terminal-cursor-style-changed",
+		ConfigField:   "TerminalCursorStyle",
+	},
+	"TerminalBellSound": {
+		Name:          "TerminalBellSound",
+		Type:          SettingTypeBool,
+		RequiresEvent: true,
+		EventName:     "config:terminal-bell-changed",
+		ConfigField:   "TerminalBellSound",
+	},
+	"TerminalWordSeparators": {
+		Name:          "TerminalWordSeparators",
+		Type:          SettingTypeString,
+		MaxLength:     intPtr(64),
+		RequiresEvent: true,
+		EventName:     "config:terminal-word-separators-changed",
+		ConfigField:   "TerminalWordSeparators",
+	},
+	"TerminalScrollSensitivity": {
+		Name:          "TerminalScrollSensitivity",
+		Type:          SettingTypeInt,
+		Min:           intPtr(MinScrollSensitivity),
+		Max:           intPtr(MaxScrollSensitivity),
+		RequiresEvent: true,
+		EventName:     "config:terminal-scroll-changed",
+		ConfigField:   "TerminalScrollSensitivity",
+	},
+	"TerminalFastScrollSensitivity": {
+		Name:          "TerminalFastScrollSensitivity",
+		Type:          SettingTypeInt,
+		Min:           intPtr(MinFastScrollSensitivity),
+		Max:           intPtr(MaxFastScrollSensitivity),
+		RequiresEvent: true,
+		EventName:     "config:terminal-scroll-changed",
+		ConfigField:   "TerminalFastScrollSensitivity",
+	},
+	"AlwaysOnTop": {
+		Name:         "AlwaysOnTop",
+		Type:         SettingTypeBool,
+		CustomUpdate: updateAlwaysOnTopSetting,
+	},
+	"ConfirmCloseActiveSessions": {
+		Name:        "ConfirmCloseActiveSessions",
+		Type:        SettingTypeBool,
+		ConfigField: "ConfirmCloseActiveSessions",
+	},
+	"RestoreTabsOnLaunch": {
+		Name:        "RestoreTabsOnLaunch",
+		Type:        SettingTypeBool,
+		ConfigField: "RestoreTabsOnLaunch",
+	},
+	"SSHConnectionTimeout": {
+		Name:        "SSHConnectionTimeout",
+		Type:        SettingTypeInt,
+		Min:         intPtr(MinSSHConnectionTimeout),
+		Max:         intPtr(MaxSSHConnectionTimeout),
+		ConfigField: "SSHConnectionTimeout",
+	},
+	"SSHKeepAliveInterval": {
+		Name:        "SSHKeepAliveInterval",
+		Type:        SettingTypeInt,
+		Min:         intPtr(MinSSHKeepAliveInterval),
+		Max:         intPtr(MaxSSHKeepAliveInterval),
+		ConfigField: "SSHKeepAliveInterval",
+	},
 	"AutoCheckUpdates": {
 		Name:          "AutoCheckUpdates",
 		Type:          SettingTypeBool,
@@ -880,6 +982,41 @@ func (a *App) ConfigGet(settingName string) (SettingValue, error) {
 		return a.config.config.TerminalLineHeight, nil
 	case "TerminalCursorBlink":
 		return a.config.config.TerminalCursorBlink, nil
+	case "TerminalCursorStyle":
+		if a.config.config.TerminalCursorStyle == "" {
+			return DefaultTerminalCursorStyle, nil
+		}
+		return a.config.config.TerminalCursorStyle, nil
+	case "TerminalBellSound":
+		return a.config.config.TerminalBellSound, nil
+	case "TerminalWordSeparators":
+		if a.config.config.TerminalWordSeparators == "" {
+			return DefaultTerminalWordSeparators, nil
+		}
+		return a.config.config.TerminalWordSeparators, nil
+	case "TerminalScrollSensitivity":
+		if a.config.config.TerminalScrollSensitivity == 0 {
+			return DefaultTerminalScrollSensitivity, nil
+		}
+		return a.config.config.TerminalScrollSensitivity, nil
+	case "TerminalFastScrollSensitivity":
+		if a.config.config.TerminalFastScrollSensitivity == 0 {
+			return DefaultTerminalFastScrollSensitivity, nil
+		}
+		return a.config.config.TerminalFastScrollSensitivity, nil
+	case "AlwaysOnTop":
+		return a.config.config.AlwaysOnTop, nil
+	case "ConfirmCloseActiveSessions":
+		return a.config.config.ConfirmCloseActiveSessions, nil
+	case "RestoreTabsOnLaunch":
+		return a.config.config.RestoreTabsOnLaunch, nil
+	case "SSHConnectionTimeout":
+		if a.config.config.SSHConnectionTimeout == 0 {
+			return DefaultSSHConnectionTimeout, nil
+		}
+		return a.config.config.SSHConnectionTimeout, nil
+	case "SSHKeepAliveInterval":
+		return a.config.config.SSHKeepAliveInterval, nil
 	case "AutoCheckUpdates":
 		return a.config.config.AutoCheckUpdates, nil
 	case "UIScale":

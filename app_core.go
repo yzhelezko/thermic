@@ -57,6 +57,12 @@ func (a *App) startup(ctx context.Context) {
 			wailsRuntime.WindowMaximise(a.ctx)
 			fmt.Println("Window restored to maximized state")
 		}
+
+		// Apply Always-on-Top preference
+		if a.config.config.AlwaysOnTop {
+			wailsRuntime.WindowSetAlwaysOnTop(a.ctx, true)
+			fmt.Println("Window set always-on-top")
+		}
 	} else {
 		// This case should ideally not be reached if NewApp initializes config correctly
 		fmt.Println("Config is nil, cannot set initial window size.")
@@ -152,6 +158,9 @@ func (a *App) shutdown(ctx context.Context) {
 			fmt.Println("Window state changed during shutdown, explicitly marked config dirty for final save.")
 		}
 	}
+
+	// Capture open tabs so they can be reopened next launch
+	a.captureOpenTabsForRestore()
 
 	// Force save any pending config changes
 	a.saveConfigIfDirty()

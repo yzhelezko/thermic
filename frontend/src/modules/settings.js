@@ -170,9 +170,56 @@ export class SettingsManager {
                 }
             });
 
-            // Dark mode toggle in settings panel
+            // Theme selector (dark / light / system)
             try {
-                console.log('Setting up dark mode toggle...');
+                const themeSelect = document.getElementById('theme-mode-select');
+                if (themeSelect) {
+                    let currentTheme = 'dark';
+                    try {
+                        if (window.go?.main?.App?.ConfigGet) {
+                            currentTheme = await window.go.main.App.ConfigGet('Theme') || 'dark';
+                        }
+                    } catch (_) { /* fallback to default */ }
+                    themeSelect.value = currentTheme;
+
+                    themeSelect.addEventListener('change', async (event) => {
+                        const value = event.target.value;
+                        try {
+                            if (window.themeManager) {
+                                await window.themeManager.setTheme(value);
+                            }
+                            // Compute the effective dark/light to update terminal + icons
+                            let effectiveDark = value === 'dark';
+                            if (value === 'system' && window.matchMedia) {
+                                effectiveDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                            }
+                            const themeToggle = document.getElementById('theme-toggle');
+                            if (themeToggle) {
+                                await updateThemeToggleIcon(themeToggle, effectiveDark);
+                            }
+                            await updateAllIconsToInline();
+                            if (window.thermicApp?.terminalManager) {
+                                window.thermicApp.terminalManager.updateTheme(effectiveDark);
+                            }
+                            if (window.thermicApp?.uiManager?.onThemeChange) {
+                                window.thermicApp.uiManager.onThemeChange(effectiveDark);
+                            }
+                            if (window.thermicApp?.activityBarManager) {
+                                window.thermicApp.activityBarManager.isDarkTheme = effectiveDark;
+                            }
+                            showNotification(`Theme set to ${value}`, 'info');
+                        } catch (error) {
+                            console.error('Error applying theme:', error);
+                            showNotification(`Failed to apply theme: ${error.message}`, 'error');
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Error setting up theme selector:', error);
+            }
+
+            // Legacy dark-mode toggle (kept for backwards compatibility if surfaced elsewhere)
+            try {
                 const darkModeToggle = document.getElementById('dark-mode-toggle');
                 if (darkModeToggle) {
                     console.log('Dark mode toggle element found');
@@ -359,6 +406,26 @@ export class SettingsManager {
         // --- About Logic ---
         this.setupAboutSection().catch(error => {
             console.error('Error setting up about section:', error);
+        });
+
+        // --- Terminal Behavior (bell, word separators, confirm-close, restore tabs) ---
+        this.setupTerminalBehaviorSettings().catch(error => {
+            console.error('Error setting up terminal behavior settings:', error);
+        });
+
+        // --- Scroll Sensitivity ---
+        this.setupScrollSensitivitySettings().catch(error => {
+            console.error('Error setting up scroll sensitivity settings:', error);
+        });
+
+        // --- Window: Always on Top ---
+        this.setupWindowSettings().catch(error => {
+            console.error('Error setting up window settings:', error);
+        });
+
+        // --- SSH Defaults ---
+        this.setupSSHDefaultsSettings().catch(error => {
+            console.error('Error setting up SSH defaults settings:', error);
         });
 
         // --- UI Zoom Setting Logic ---
@@ -1086,6 +1153,7 @@ export class SettingsManager {
         const fontSizeInput = document.getElementById('terminal-font-size-input');
         const lineHeightInput = document.getElementById('terminal-line-height-input');
         const cursorBlinkToggle = document.getElementById('terminal-cursor-blink-toggle');
+        const cursorStyleSelect = document.getElementById('terminal-cursor-style-select');
 
         if (!fontFamilyInput || !fontSizeInput || !lineHeightInput || !cursorBlinkToggle) {
             console.warn('Typography settings elements not found in DOM');
@@ -1097,13 +1165,26 @@ export class SettingsManager {
             const fontSize = await window.go.main.App.ConfigGet('TerminalFontSize');
             const lineHeightPct = await window.go.main.App.ConfigGet('TerminalLineHeight');
             const cursorBlink = await window.go.main.App.ConfigGet('TerminalCursorBlink');
+            const cursorStyle = await window.go.main.App.ConfigGet('TerminalCursorStyle');
 
             fontFamilyInput.value = fontFamily || '';
             fontSizeInput.value = fontSize || 14;
             lineHeightInput.value = (lineHeightPct ? lineHeightPct / 100 : 1.0).toFixed(1);
             cursorBlinkToggle.checked = !!cursorBlink;
+            if (cursorStyleSelect) cursorStyleSelect.value = cursorStyle || 'block';
         } catch (error) {
             console.warn('Failed to load typography settings:', error);
+        }
+
+        if (cursorStyleSelect) {
+            cursorStyleSelect.addEventListener('change', async (event) => {
+                try {
+                    await window.go.main.App.ConfigSet('TerminalCursorStyle', event.target.value);
+                } catch (error) {
+                    console.error('Error updating cursor style:', error);
+                    showNotification(`Failed to update cursor style: ${error.message}`, 'error');
+                }
+            });
         }
 
         let fontFamilyTimeout;
@@ -1237,6 +1318,169 @@ export class SettingsManager {
         if (sourceBtn) sourceBtn.addEventListener('click', () => BrowserOpenURL(REPO_URL));
         if (issuesBtn) issuesBtn.addEventListener('click', () => BrowserOpenURL(ISSUES_URL));
         if (releasesBtn) releasesBtn.addEventListener('click', () => BrowserOpenURL(RELEASES_URL));
+    }
+
+    async setupTerminalBehaviorSettings() {
+        const bellToggle = document.getElementById('terminal-bell-toggle');
+        const wordSepInput = document.getElementById('terminal-word-separators-input');
+        const confirmCloseToggle = document.getElementById('confirm-close-active-toggle');
+        const restoreTabsToggle = document.getElementById('restore-tabs-toggle');
+
+        if (!bellToggle && !wordSepInput && !confirmCloseToggle && !restoreTabsToggle) {
+            return;
+        }
+
+        try {
+            if (bellToggle) bellToggle.checked = !!(await window.go.main.App.ConfigGet('TerminalBellSound'));
+            if (wordSepInput) wordSepInput.value = (await window.go.main.App.ConfigGet('TerminalWordSeparators')) || '';
+            if (confirmCloseToggle) confirmCloseToggle.checked = !!(await window.go.main.App.ConfigGet('ConfirmCloseActiveSessions'));
+            if (restoreTabsToggle) restoreTabsToggle.checked = !!(await window.go.main.App.ConfigGet('RestoreTabsOnLaunch'));
+        } catch (error) {
+            console.warn('Failed to load terminal behavior settings:', error);
+        }
+
+        if (bellToggle) {
+            bellToggle.addEventListener('change', async (event) => {
+                try {
+                    await window.go.main.App.ConfigSet('TerminalBellSound', event.target.checked);
+                } catch (error) {
+                    console.error('Error updating bell setting:', error);
+                    event.target.checked = !event.target.checked;
+                }
+            });
+        }
+
+        if (wordSepInput) {
+            let timeout;
+            wordSepInput.addEventListener('input', (event) => {
+                clearTimeout(timeout);
+                timeout = setTimeout(async () => {
+                    try {
+                        await window.go.main.App.ConfigSet('TerminalWordSeparators', event.target.value);
+                    } catch (error) {
+                        console.error('Error updating word separators:', error);
+                        showNotification(`Failed to update word separators: ${error.message}`, 'error');
+                    }
+                }, 800);
+            });
+        }
+
+        if (confirmCloseToggle) {
+            confirmCloseToggle.addEventListener('change', async (event) => {
+                try {
+                    await window.go.main.App.ConfigSet('ConfirmCloseActiveSessions', event.target.checked);
+                } catch (error) {
+                    console.error('Error updating confirm-close setting:', error);
+                    event.target.checked = !event.target.checked;
+                }
+            });
+        }
+
+        if (restoreTabsToggle) {
+            restoreTabsToggle.addEventListener('change', async (event) => {
+                try {
+                    await window.go.main.App.ConfigSet('RestoreTabsOnLaunch', event.target.checked);
+                    showNotification(`Tab restore ${event.target.checked ? 'enabled' : 'disabled'} (applies on next launch)`, 'info');
+                } catch (error) {
+                    console.error('Error updating restore-tabs setting:', error);
+                    event.target.checked = !event.target.checked;
+                }
+            });
+        }
+    }
+
+    async setupScrollSensitivitySettings() {
+        const scrollInput = document.getElementById('terminal-scroll-sensitivity-input');
+        const fastScrollInput = document.getElementById('terminal-fast-scroll-sensitivity-input');
+        if (!scrollInput && !fastScrollInput) return;
+
+        try {
+            if (scrollInput) scrollInput.value = await window.go.main.App.ConfigGet('TerminalScrollSensitivity');
+            if (fastScrollInput) fastScrollInput.value = await window.go.main.App.ConfigGet('TerminalFastScrollSensitivity');
+        } catch (error) {
+            console.warn('Failed to load scroll sensitivity:', error);
+        }
+
+        const debouncedSet = (key, min, max, label) => {
+            let t;
+            return (event) => {
+                clearTimeout(t);
+                t = setTimeout(async () => {
+                    const val = parseInt(event.target.value, 10);
+                    if (isNaN(val) || val < min || val > max) {
+                        showNotification(`${label} must be between ${min} and ${max}`, 'error');
+                        return;
+                    }
+                    try {
+                        await window.go.main.App.ConfigSet(key, val);
+                    } catch (error) {
+                        console.error(`Error updating ${key}:`, error);
+                        showNotification(`Failed to update ${label}: ${error.message}`, 'error');
+                    }
+                }, 600);
+            };
+        };
+
+        if (scrollInput) scrollInput.addEventListener('input', debouncedSet('TerminalScrollSensitivity', 1, 50, 'Scroll sensitivity'));
+        if (fastScrollInput) fastScrollInput.addEventListener('input', debouncedSet('TerminalFastScrollSensitivity', 1, 100, 'Fast scroll sensitivity'));
+    }
+
+    async setupWindowSettings() {
+        const alwaysOnTopToggle = document.getElementById('always-on-top-toggle');
+        if (!alwaysOnTopToggle) return;
+
+        try {
+            alwaysOnTopToggle.checked = !!(await window.go.main.App.ConfigGet('AlwaysOnTop'));
+        } catch (error) {
+            console.warn('Failed to load AlwaysOnTop:', error);
+        }
+
+        alwaysOnTopToggle.addEventListener('change', async (event) => {
+            try {
+                await window.go.main.App.ConfigSet('AlwaysOnTop', event.target.checked);
+                showNotification(`Always on Top ${event.target.checked ? 'enabled' : 'disabled'}`, 'info');
+            } catch (error) {
+                console.error('Error updating AlwaysOnTop:', error);
+                showNotification(`Failed: ${error.message}`, 'error');
+                event.target.checked = !event.target.checked;
+            }
+        });
+    }
+
+    async setupSSHDefaultsSettings() {
+        const timeoutInput = document.getElementById('ssh-timeout-input');
+        const keepaliveInput = document.getElementById('ssh-keepalive-input');
+        if (!timeoutInput && !keepaliveInput) return;
+
+        try {
+            if (timeoutInput) timeoutInput.value = await window.go.main.App.ConfigGet('SSHConnectionTimeout');
+            if (keepaliveInput) keepaliveInput.value = await window.go.main.App.ConfigGet('SSHKeepAliveInterval');
+        } catch (error) {
+            console.warn('Failed to load SSH defaults:', error);
+        }
+
+        const debouncedSet = (key, min, max, label) => {
+            let t;
+            return (event) => {
+                clearTimeout(t);
+                t = setTimeout(async () => {
+                    const val = parseInt(event.target.value, 10);
+                    if (isNaN(val) || val < min || val > max) {
+                        showNotification(`${label} must be between ${min} and ${max}`, 'error');
+                        return;
+                    }
+                    try {
+                        await window.go.main.App.ConfigSet(key, val);
+                    } catch (error) {
+                        console.error(`Error updating ${key}:`, error);
+                        showNotification(`Failed to update ${label}: ${error.message}`, 'error');
+                    }
+                }, 700);
+            };
+        };
+
+        if (timeoutInput) timeoutInput.addEventListener('input', debouncedSet('SSHConnectionTimeout', 1, 300, 'SSH timeout'));
+        if (keepaliveInput) keepaliveInput.addEventListener('input', debouncedSet('SSHKeepAliveInterval', 0, 600, 'Keep-alive interval'));
     }
 
 }

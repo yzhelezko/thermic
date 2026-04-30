@@ -485,6 +485,105 @@ func (a *App) ReorderTabs(tabIds []string) error {
 	return nil
 }
 
+// captureOpenTabsForRestore snapshots open tabs into config.LastOpenTabs.
+// Called from shutdown. Honors RestoreTabsOnLaunch — clears the snapshot when disabled
+// so we never replay stale state if the user toggles it back on later.
+func (a *App) captureOpenTabsForRestore() {
+	if a.config == nil || a.config.config == nil {
+		return
+	}
+
+	if !a.config.config.RestoreTabsOnLaunch {
+		if len(a.config.config.LastOpenTabs) > 0 {
+			a.config.config.LastOpenTabs = nil
+			a.markConfigDirty()
+		}
+		return
+	}
+
+	a.terminal.mutex.RLock()
+	tabs := make([]*Tab, 0, len(a.terminal.tabs))
+	for _, tab := range a.terminal.tabs {
+		tabs = append(tabs, tab)
+	}
+	a.terminal.mutex.RUnlock()
+
+	// Sort by creation order so they reopen in the same order
+	for i := 0; i < len(tabs)-1; i++ {
+		for j := i + 1; j < len(tabs); j++ {
+			if tabs[i].Created.After(tabs[j].Created) {
+				tabs[i], tabs[j] = tabs[j], tabs[i]
+			}
+		}
+	}
+
+	saved := make([]SavedTab, 0, len(tabs))
+	for _, tab := range tabs {
+		entry := SavedTab{ProfileID: tab.ProfileID}
+		if tab.ProfileID == "" {
+			entry.Shell = tab.Shell
+		}
+		saved = append(saved, entry)
+	}
+
+	a.config.config.LastOpenTabs = saved
+	a.markConfigDirty()
+	fmt.Printf("Captured %d tab(s) for next-launch restore.\n", len(saved))
+}
+
+// RestoreTabs recreates tabs from the previous-session snapshot if the feature is enabled
+// and the in-memory tab map is empty (i.e. fresh launch). Returns the recreated tabs so
+// the frontend can drive shell startup the same way it does for normal tabs.
+func (a *App) RestoreTabs() ([]*Tab, error) {
+	if a.config == nil || a.config.config == nil {
+		return nil, nil
+	}
+	if !a.config.config.RestoreTabsOnLaunch {
+		return nil, nil
+	}
+
+	a.terminal.mutex.RLock()
+	hasExisting := len(a.terminal.tabs) > 0
+	a.terminal.mutex.RUnlock()
+	if hasExisting {
+		return nil, nil
+	}
+
+	saved := a.config.config.LastOpenTabs
+	if len(saved) == 0 {
+		return nil, nil
+	}
+
+	restored := make([]*Tab, 0, len(saved))
+	for _, entry := range saved {
+		var tab *Tab
+		var err error
+		if entry.ProfileID != "" {
+			tab, err = a.CreateTabFromProfile(entry.ProfileID)
+		} else if entry.Shell != "" {
+			tab, err = a.CreateTab(entry.Shell, nil)
+		} else {
+			continue
+		}
+		if err != nil {
+			fmt.Printf("Skipping tab restore (%+v): %v\n", entry, err)
+			continue
+		}
+		restored = append(restored, tab)
+	}
+
+	// Mark first as active if any
+	if len(restored) > 0 {
+		a.terminal.mutex.Lock()
+		a.terminal.activeTabId = restored[0].ID
+		restored[0].IsActive = true
+		a.terminal.mutex.Unlock()
+	}
+
+	fmt.Printf("Restored %d tab(s) from previous session.\n", len(restored))
+	return restored, nil
+}
+
 // CreateTabFromProfile creates a new tab using a profile
 func (a *App) CreateTabFromProfile(profileID string) (*Tab, error) {
 	a.profiles.mutex.RLock()

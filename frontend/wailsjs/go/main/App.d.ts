@@ -137,6 +137,18 @@ export function GetMetrics():Promise<main.ProfileMetrics>;
 
 export function GetMetricsAPI():Promise<main.ProfileMetrics>;
 
+export function GetHotkeyActions():Promise<Array<main.HotkeyAction>>;
+
+export function GetHotkeys():Promise<Record<string, string>>;
+
+export function SetHotkey(arg1:string,arg2:string):Promise<void>;
+
+export function ResetHotkey(arg1:string):Promise<void>;
+
+export function ResetAllHotkeys():Promise<void>;
+
+export function FindHotkeyConflicts():Promise<Array<string>>;
+
 export function GetOSInfo():Promise<Record<string, any>>;
 
 export function GetPlatformInfo():Promise<Record<string, any>>;
@@ -270,6 +282,8 @@ export function ResizeShell(arg1:string,arg2:number,arg3:number):Promise<void>;
 export function RestartApplication():Promise<void>;
 
 export function RestartProfileWatcher():Promise<void>;
+
+export function RestoreTabs():Promise<Array<main.Tab>>;
 
 export function SaveAllFolderStates():Promise<void>;
 

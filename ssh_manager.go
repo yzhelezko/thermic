@@ -391,10 +391,14 @@ func (a *App) CreateSSHSessionWithSize(sessionID string, config *SSHConfig, cols
 	}
 
 	// Create SSH client configuration with secure host key verification
+	timeoutSec := DefaultSSHConnectionTimeout
+	if a.config != nil && a.config.config != nil && a.config.config.SSHConnectionTimeout > 0 {
+		timeoutSec = a.config.config.SSHConnectionTimeout
+	}
 	sshConfig := &ssh.ClientConfig{
 		User:            config.Username,
 		HostKeyCallback: a.createHostKeyCallback(sessionID),
-		Timeout:         10 * time.Second,
+		Timeout:         time.Duration(timeoutSec) * time.Second,
 	}
 
 	// Add authentication methods
@@ -545,9 +549,51 @@ func (a *App) CreateSSHSessionWithSize(sessionID string, config *SSHConfig, cols
 		activeGoroutines:  0,
 	}
 
+	// Spawn keep-alive goroutine if configured
+	a.startKeepAlive(sshSession)
+
 	// Session is ready - this should be called from the tab management layer
 	// after StartSSHShell succeeds, so we don't call SessionReady here
 	return sshSession, nil
+}
+
+// startKeepAlive spawns a goroutine that pings the SSH server periodically while the
+// session is open, keeping NAT/firewall mappings alive on idle connections.
+// Stops when the session's done/closed/forceClose channel fires.
+func (a *App) startKeepAlive(s *SSHSession) {
+	intervalSec := 0
+	if a.config != nil && a.config.config != nil {
+		intervalSec = a.config.config.SSHKeepAliveInterval
+	}
+	if intervalSec <= 0 {
+		return // Disabled
+	}
+	interval := time.Duration(intervalSec) * time.Second
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-s.done:
+				return
+			case <-s.closed:
+				return
+			case <-s.forceClose:
+				return
+			case <-ticker.C:
+				s.mu.RLock()
+				client := s.client
+				s.mu.RUnlock()
+				if client == nil {
+					return
+				}
+				if _, _, err := client.SendRequest("keepalive@openssh.com", true, nil); err != nil {
+					fmt.Printf("SSH keep-alive failed for %s: %v\n", s.sessionID, err)
+					return
+				}
+			}
+		}
+	}()
 }
 
 // StartSSHShell starts a shell on the SSH session

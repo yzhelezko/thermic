@@ -74,6 +74,11 @@ export class TerminalManager {
         this.terminalFontSize = 14;
         this.terminalLineHeight = 1.0;
         this.terminalCursorBlink = true;
+        this.terminalCursorStyle = 'block';
+        this.terminalBellSound = false;
+        this.terminalWordSeparators = ' ()[]{}\',":;<>';
+        this.terminalScrollSensitivity = 1;
+        this.terminalFastScrollSensitivity = 5;
 
         // Load terminal config from backend
         this.loadTerminalConfig();
@@ -503,6 +508,11 @@ export class TerminalManager {
             fontSize: this.terminalFontSize,
             lineHeight: this.terminalLineHeight,
             cursorBlink: this.terminalCursorBlink,
+            cursorStyle: this.terminalCursorStyle,
+            bellStyle: this.terminalBellSound ? 'sound' : 'none',
+            wordSeparator: this.terminalWordSeparators,
+            scrollSensitivity: this.terminalScrollSensitivity,
+            fastScrollSensitivity: this.terminalFastScrollSensitivity,
         });
 
         // Add addons
@@ -2025,6 +2035,11 @@ export class TerminalManager {
             const fontSize = await ConfigGet("TerminalFontSize");
             const lineHeightPct = await ConfigGet("TerminalLineHeight");
             const cursorBlink = await ConfigGet("TerminalCursorBlink");
+            const cursorStyle = await ConfigGet("TerminalCursorStyle");
+            const bellSound = await ConfigGet("TerminalBellSound");
+            const wordSeparators = await ConfigGet("TerminalWordSeparators");
+            const scrollSensitivity = await ConfigGet("TerminalScrollSensitivity");
+            const fastScrollSensitivity = await ConfigGet("TerminalFastScrollSensitivity");
 
             this.scrollbackLines = scrollbackLines;
             this.maxBufferLines = scrollbackLines;
@@ -2033,6 +2048,11 @@ export class TerminalManager {
             if (fontSize) this.terminalFontSize = fontSize;
             if (lineHeightPct) this.terminalLineHeight = lineHeightPct / 100;
             this.terminalCursorBlink = !!cursorBlink;
+            if (cursorStyle) this.terminalCursorStyle = cursorStyle;
+            this.terminalBellSound = !!bellSound;
+            if (wordSeparators) this.terminalWordSeparators = wordSeparators;
+            if (scrollSensitivity) this.terminalScrollSensitivity = scrollSensitivity;
+            if (fastScrollSensitivity) this.terminalFastScrollSensitivity = fastScrollSensitivity;
 
             console.log(
                 `Loaded terminal config: scrollback=${scrollbackLines}, font=${this.terminalFontFamily} ${this.terminalFontSize}px, lineHeight=${this.terminalLineHeight}, cursorBlink=${this.terminalCursorBlink}`,
@@ -2088,6 +2108,37 @@ export class TerminalManager {
             this.terminalCursorBlink = !!cursorBlink;
             this.applyConfigToAllTerminals();
         });
+
+        // Listen for cursor style changes
+        EventsOn("config:terminal-cursor-style-changed", (data) => {
+            const style = data?.TerminalCursorStyle;
+            if (style) this.terminalCursorStyle = style;
+            this.applyConfigToAllTerminals();
+        });
+
+        // Listen for bell setting changes
+        EventsOn("config:terminal-bell-changed", (data) => {
+            this.terminalBellSound = !!data?.TerminalBellSound;
+            this.applyConfigToAllTerminals();
+        });
+
+        // Listen for word separator changes
+        EventsOn("config:terminal-word-separators-changed", (data) => {
+            const value = data?.TerminalWordSeparators;
+            if (typeof value === 'string') this.terminalWordSeparators = value;
+            this.applyConfigToAllTerminals();
+        });
+
+        // Listen for scroll sensitivity changes (fires for both regular and fast)
+        EventsOn("config:terminal-scroll-changed", async () => {
+            try {
+                this.terminalScrollSensitivity = await ConfigGet("TerminalScrollSensitivity");
+                this.terminalFastScrollSensitivity = await ConfigGet("TerminalFastScrollSensitivity");
+                this.applyConfigToAllTerminals();
+            } catch (error) {
+                console.warn("Failed to refresh scroll sensitivity:", error);
+            }
+        });
     }
 
     applyConfigToAllTerminals() {
@@ -2101,6 +2152,11 @@ export class TerminalManager {
                     opts.fontSize = this.terminalFontSize;
                     opts.lineHeight = this.terminalLineHeight;
                     opts.cursorBlink = this.terminalCursorBlink;
+                    opts.cursorStyle = this.terminalCursorStyle;
+                    opts.bellStyle = this.terminalBellSound ? 'sound' : 'none';
+                    opts.wordSeparator = this.terminalWordSeparators;
+                    opts.scrollSensitivity = this.terminalScrollSensitivity;
+                    opts.fastScrollSensitivity = this.terminalFastScrollSensitivity;
                     // Re-fit so the new font metrics take effect
                     if (terminalSession.fitAddon) {
                         try { terminalSession.fitAddon.fit(); } catch (_) { /* container may be hidden */ }

@@ -1,6 +1,7 @@
 // Tabs management module
-import { CreateTab, GetTabs, SetActiveTab, CloseTab, StartTabShell, GetAvailableShellsFormatted, StartTabShellWithSize, ResizeShell, ForceDisconnectTab, ReconnectTab } from '../../wailsjs/go/main/App';
+import { CreateTab, GetTabs, SetActiveTab, CloseTab, StartTabShell, GetAvailableShellsFormatted, StartTabShellWithSize, ResizeShell, ForceDisconnectTab, ReconnectTab, RestoreTabs, ConfigGet } from '../../wailsjs/go/main/App';
 import { generateSessionId, formatShellName, updateStatus } from './utils.js';
+import { modal } from '../components/Modal.js';
 
 export class TabsManager {
     constructor(terminalManager) {
@@ -576,16 +577,38 @@ export class TabsManager {
             return;
         }
 
+        const tab = this.tabs.get(tabId);
+        if (!tab) {
+            console.warn('Tab not found:', tabId);
+            return;
+        }
+
+        // Confirm before closing if the tab has a live session and the user opted in
+        try {
+            const confirmEnabled = await ConfigGet('ConfirmCloseActiveSessions');
+            const isActiveSession = tab.status === 'connected' || tab.status === 'connecting';
+            if (confirmEnabled && isActiveSession) {
+                const result = await modal.show({
+                    title: 'Close Tab?',
+                    message: `Tab "${tab.title || tabId}" has an active session. Close it anyway?`,
+                    icon: '⚠️',
+                    buttons: [
+                        { text: 'Cancel', style: 'secondary', action: 'cancel' },
+                        { text: 'Close Tab', style: 'danger', action: 'close' }
+                    ]
+                });
+                if (result !== 'close') {
+                    return;
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to read confirm-close setting, proceeding:', error);
+        }
+
         this.closingTabs.add(tabId);
 
         try {
             updateStatus('Closing tab...');
-
-            const tab = this.tabs.get(tabId);
-            if (!tab) {
-                console.warn('Tab not found:', tabId);
-                return;
-            }
 
             // Close backend session first to stop any incoming data
             try {
@@ -1095,9 +1118,19 @@ export class TabsManager {
         try {
             // Load shell formats first
             await this.loadShellFormats();
-            
+
+            // If RestoreTabsOnLaunch is enabled and no tabs exist yet, restore from snapshot
+            try {
+                const restored = await RestoreTabs();
+                if (restored && restored.length > 0) {
+                    console.log(`Restored ${restored.length} tab(s) from previous session`);
+                }
+            } catch (restoreErr) {
+                console.warn('Tab restore skipped:', restoreErr);
+            }
+
             const tabs = await GetTabs();
-            
+
             this.tabs.clear();
             for (const tab of tabs) {
                 // Enhance tab title with formatted shell name if it's a regular shell tab

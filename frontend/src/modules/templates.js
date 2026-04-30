@@ -222,13 +222,67 @@ export function createTerminalSettingsContent() {
                         </div>
                     </div>
                 </div>
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Audible Bell</div>
+                            <div class="setting-item-description">Play a sound when the terminal sends a BEL character</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <label class="modern-toggle">
+                                <input type="checkbox" id="terminal-bell-toggle">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Word Separators</div>
+                            <div class="setting-item-description">Characters that delimit words on double-click selection</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <input type="text" id="terminal-word-separators-input" class="modern-input"
+                                autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
+                        </div>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Confirm on Close</div>
+                            <div class="setting-item-description">Prompt before closing tabs or window with running sessions</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <label class="modern-toggle">
+                                <input type="checkbox" id="confirm-close-active-toggle" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Restore Tabs on Launch</div>
+                            <div class="setting-item-description">Reopen previously open tabs when the app starts</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <label class="modern-toggle">
+                                <input type="checkbox" id="restore-tabs-toggle">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
         <div class="settings-section">
             <div class="settings-section-title">
                 <span class="settings-section-icon"><img src="./icons/document.svg" class="svg-icon" alt="📜"></span>
-                Scrollback
+                Scrolling
             </div>
             <div class="settings-list">
                 <div class="setting-item">
@@ -239,6 +293,28 @@ export function createTerminalSettingsContent() {
                         </div>
                         <div class="setting-item-control">
                             <input type="number" id="scrollback-lines-input" class="modern-input" value="10000" min="100" max="100000">
+                        </div>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Scroll Sensitivity</div>
+                            <div class="setting-item-description">Lines per scroll tick (1-50)</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <input type="number" id="terminal-scroll-sensitivity-input" class="modern-input" value="1" min="1" max="50">
+                        </div>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Fast Scroll Sensitivity</div>
+                            <div class="setting-item-description">Lines per scroll tick when Alt is held (1-100)</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <input type="number" id="terminal-fast-scroll-sensitivity-input" class="modern-input" value="5" min="1" max="100">
                         </div>
                     </div>
                 </div>
@@ -337,14 +413,15 @@ export function createAppearanceSettingsContent() {
                 <div class="setting-item">
                     <div class="setting-item-content">
                         <div class="setting-item-info">
-                            <div class="setting-item-title">Dark Mode</div>
-                            <div class="setting-item-description">Use dark theme for the interface</div>
+                            <div class="setting-item-title">Theme</div>
+                            <div class="setting-item-description">Dark, Light, or follow the system setting</div>
                         </div>
                         <div class="setting-item-control">
-                            <label class="modern-toggle">
-                                <input type="checkbox" id="dark-mode-toggle">
-                                <span class="toggle-slider"></span>
-                            </label>
+                            <select class="modern-select" id="theme-mode-select">
+                                <option value="dark">Dark</option>
+                                <option value="light">Light</option>
+                                <option value="system">System</option>
+                            </select>
                         </div>
                     </div>
                 </div>
@@ -388,6 +465,21 @@ export function createAppearanceSettingsContent() {
                         </div>
                         <div class="setting-item-control">
                             <input type="number" id="terminal-line-height-input" class="modern-input" value="1.0" min="0.8" max="2.0" step="0.1">
+                        </div>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Cursor Style</div>
+                            <div class="setting-item-description">Shape of the terminal cursor</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <select class="modern-select" id="terminal-cursor-style-select">
+                                <option value="block">Block</option>
+                                <option value="bar">Bar</option>
+                                <option value="underline">Underline</option>
+                            </select>
                         </div>
                     </div>
                 </div>
@@ -461,6 +553,60 @@ export function createProfilesSettingsContent() {
 
 export function createAdvancedSettingsContent() {
     return `
+        <div class="settings-section">
+            <div class="settings-section-title">
+                <span class="settings-section-icon"><img src="./icons/laptop.svg" class="svg-icon" alt="💻"></span>
+                Window
+            </div>
+            <div class="settings-list">
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Always on Top</div>
+                            <div class="setting-item-description">Keep Thermic above other windows</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <label class="modern-toggle">
+                                <input type="checkbox" id="always-on-top-toggle">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <div class="settings-section-title">
+                <span class="settings-section-icon"><img src="./icons/lock.svg" class="svg-icon" alt="🔒"></span>
+                SSH Defaults
+            </div>
+            <div class="settings-list">
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Connection Timeout</div>
+                            <div class="setting-item-description">Initial connect timeout in seconds (1-300)</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <input type="number" id="ssh-timeout-input" class="modern-input" value="10" min="1" max="300">
+                        </div>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Keep-Alive Interval</div>
+                            <div class="setting-item-description">Server heartbeat in seconds (0 = disabled, max 600)</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <input type="number" id="ssh-keepalive-input" class="modern-input" value="30" min="0" max="600">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="settings-section">
             <div class="settings-section-title">
                 <span class="settings-section-icon"><img src="./icons/refresh.svg" class="svg-icon" alt="🔄"></span>

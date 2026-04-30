@@ -270,6 +270,30 @@ export function GetMetricsAPI() {
   return window['go']['main']['App']['GetMetricsAPI']();
 }
 
+export function GetHotkeyActions() {
+  return window['go']['main']['App']['GetHotkeyActions']();
+}
+
+export function GetHotkeys() {
+  return window['go']['main']['App']['GetHotkeys']();
+}
+
+export function SetHotkey(arg1, arg2) {
+  return window['go']['main']['App']['SetHotkey'](arg1, arg2);
+}
+
+export function ResetHotkey(arg1) {
+  return window['go']['main']['App']['ResetHotkey'](arg1);
+}
+
+export function ResetAllHotkeys() {
+  return window['go']['main']['App']['ResetAllHotkeys']();
+}
+
+export function FindHotkeyConflicts() {
+  return window['go']['main']['App']['FindHotkeyConflicts']();
+}
+
 export function GetOSInfo() {
   return window['go']['main']['App']['GetOSInfo']();
 }
@@ -536,6 +560,10 @@ export function RestartApplication() {
 
 export function RestartProfileWatcher() {
   return window['go']['main']['App']['RestartProfileWatcher']();
+}
+
+export function RestoreTabs() {
+  return window['go']['main']['App']['RestoreTabs']();
 }
 
 export function SaveAllFolderStates() {
