@@ -105,6 +105,8 @@ export function ExecuteMonitoringCommand(arg1:main.SSHSession,arg2:string):Promi
 
 export function ExportMetrics(arg1:string):Promise<void>;
 
+export function FindHotkeyConflicts():Promise<Array<string>>;
+
 export function ForceDisconnectSSHSession(arg1:string):Promise<void>;
 
 export function ForceDisconnectTab(arg1:string):Promise<void>;
@@ -131,23 +133,15 @@ export function GetFolderByID(arg1:string):Promise<main.ProfileFolder>;
 
 export function GetFolderByIDAPI(arg1:string):Promise<main.ProfileFolder>;
 
+export function GetHotkeyActions():Promise<Array<main.HotkeyAction>>;
+
+export function GetHotkeys():Promise<Record<string, string>>;
+
 export function GetMetricHistory(arg1:string,arg2:string):Promise<Record<string, any>>;
 
 export function GetMetrics():Promise<main.ProfileMetrics>;
 
 export function GetMetricsAPI():Promise<main.ProfileMetrics>;
-
-export function GetHotkeyActions():Promise<Array<main.HotkeyAction>>;
-
-export function GetHotkeys():Promise<Record<string, string>>;
-
-export function SetHotkey(arg1:string,arg2:string):Promise<void>;
-
-export function ResetHotkey(arg1:string):Promise<void>;
-
-export function ResetAllHotkeys():Promise<void>;
-
-export function FindHotkeyConflicts():Promise<Array<string>>;
 
 export function GetOSInfo():Promise<Record<string, any>>;
 
@@ -273,6 +267,10 @@ export function RenameTab(arg1:string,arg2:string):Promise<void>;
 
 export function ReorderTabs(arg1:Array<string>):Promise<void>;
 
+export function ResetAllHotkeys():Promise<void>;
+
+export function ResetHotkey(arg1:string):Promise<void>;
+
 export function ResetMetrics():Promise<void>;
 
 export function ResizeSSHSession(arg1:main.SSHSession,arg2:number,arg3:number):Promise<void>;
@@ -314,6 +312,8 @@ export function SetAIProvider(arg1:string):Promise<void>;
 export function SetActiveTab(arg1:string):Promise<void>;
 
 export function SetFolderExpandedAPI(arg1:string,arg2:boolean):Promise<void>;
+
+export function SetHotkey(arg1:string,arg2:string):Promise<void>;
 
 export function SetUpdateRate(arg1:string,arg2:number):Promise<void>;
 

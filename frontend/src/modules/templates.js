@@ -150,6 +150,7 @@ export function createSettingsPanelTemplate() {
                     <button class="settings-tab" data-tab-target="#settings-tab-appearance"><img src="./icons/palette.svg" class="svg-icon" alt="🎨"> Appearance</button>
                     <button class="settings-tab" data-tab-target="#settings-tab-profiles"><img src="./icons/folder.svg" class="svg-icon" alt="📁"> Profiles</button>
                     <button class="settings-tab" data-tab-target="#settings-tab-advanced"><img src="./icons/settings.svg" class="svg-icon" alt="⚙️"> Advanced</button>
+                    <button class="settings-tab" data-tab-target="#settings-tab-hotkeys"><img src="./icons/keyboard.svg" class="svg-icon" alt="⌨️"> Hotkeys</button>
                     <button class="settings-tab" data-tab-target="#settings-tab-ai"><img src="./icons/ai.svg" class="svg-icon" alt="🤖"> AI</button>
                     <button class="settings-tab" data-tab-target="#settings-tab-about"><img src="./icons/info.svg" class="svg-icon" alt="ℹ️"> About</button>
                 </div>
@@ -166,6 +167,9 @@ export function createSettingsPanelTemplate() {
                 </div>
                 <div class="settings-tab-pane" id="settings-tab-advanced">
                     ${createAdvancedSettingsContent()}
+                </div>
+                <div class="settings-tab-pane" id="settings-tab-hotkeys">
+                    ${createHotkeysSettingsContent()}
                 </div>
                 <div class="settings-tab-pane" id="settings-tab-ai">
                     ${createAISettingsContent()}
@@ -654,6 +658,24 @@ export function createAdvancedSettingsContent() {
     `;
 }
 
+export function createHotkeysSettingsContent() {
+    return `
+        <div class="settings-section" id="hotkeys-settings-root">
+            <div class="settings-section-title">
+                <span class="settings-section-icon"><img src="./icons/keyboard.svg" class="svg-icon" alt="⌨️"></span>
+                Keyboard Shortcuts
+            </div>
+            <div class="hotkeys-toolbar">
+                <span class="hotkeys-help">Click a binding and press the new key combination. Conflicts are highlighted.</span>
+                <button class="modern-button secondary" id="hotkeys-reset-all-btn">Reset All to Defaults</button>
+            </div>
+            <div class="hotkeys-list" id="hotkeys-list">
+                <div class="hotkeys-loading">Loading shortcuts…</div>
+            </div>
+        </div>
+    `;
+}
+
 export function createAISettingsContent() {
     return `
         <div class="settings-section">
@@ -737,29 +759,6 @@ export function createAISettingsContent() {
                                     <img src="./assets/icons/warning.svg" class="svg-icon small" alt="⚠️">
                                     <span>Not configured</span>
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="settings-section">
-            <div class="settings-section-title">
-                <span class="settings-section-icon"><img src="./assets/icons/keyboard.svg" class="svg-icon" alt="⌨️"></span>
-                Hotkeys & Interaction
-            </div>
-            <div class="settings-list">
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Activation Hotkey</div>
-                            <div class="setting-item-description">Keyboard shortcut to open AI assistant</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <div class="hotkey-display">
-                                <input type="text" id="ai-hotkey-input" class="modern-input hotkey-input" placeholder="Click and press a key combo" readonly>
-                                <button type="button" class="modern-button secondary" id="ai-hotkey-clear-btn" title="Clear">Clear</button>
                             </div>
                         </div>
                     </div>

@@ -2,6 +2,8 @@
 import { showNotification } from './utils.js';
 import { updateAllIconsToInline, updateThemeToggleIcon } from '../utils/icons.js';
 import { BrowserOpenURL } from '../../wailsjs/runtime/runtime.js';
+import { GetHotkeyActions, GetHotkeys, SetHotkey, ResetHotkey, ResetAllHotkeys } from '../../wailsjs/go/main/App';
+import { hotkeyManager } from './hotkey-manager.js';
 
 const REPO_URL = 'https://github.com/yzhelezko/thermic';
 const RELEASES_URL = 'https://github.com/yzhelezko/thermic/releases';
@@ -426,6 +428,11 @@ export class SettingsManager {
         // --- SSH Defaults ---
         this.setupSSHDefaultsSettings().catch(error => {
             console.error('Error setting up SSH defaults settings:', error);
+        });
+
+        // --- Hotkeys ---
+        this.setupHotkeysSettings().catch(error => {
+            console.error('Error setting up hotkeys settings:', error);
         });
 
         // --- UI Zoom Setting Logic ---
@@ -878,7 +885,6 @@ export class SettingsManager {
             const aiApiKeyToggle = document.getElementById('ai-api-key-toggle');
             const aiApiUrlInput = document.getElementById('ai-api-url-input');
 
-            const aiHotkeyInput = document.getElementById('ai-hotkey-input');
             const aiTestConnectionBtn = document.getElementById('ai-test-connection-btn');
             const aiConnectionStatus = document.getElementById('ai-connection-status');
 
@@ -894,19 +900,12 @@ export class SettingsManager {
             const aiAPIKey = await window.go.main.App.ConfigGet("AIAPIKey");
             const aiAPIURL = await window.go.main.App.ConfigGet("AIURL");
 
-            const aiHotkey = await window.go.main.App.ConfigGet("AIHotkey");
-            
             // Set initial values
             aiEnabledToggle.checked = aiEnabled || false;
             aiProviderSelect.value = aiProvider || 'openai';
             aiModelInput.value = aiModelID || 'gpt-4o-mini';
             if (aiApiKeyInput) aiApiKeyInput.value = aiAPIKey || '';
             if (aiApiUrlInput) aiApiUrlInput.value = aiAPIURL || '';
-
-            if (aiHotkeyInput) {
-                aiHotkeyInput.value = aiHotkey || 'ctrl+k';
-                this.setupAIHotkeyCapture(aiHotkeyInput);
-            }
 
             // AI enabled toggle
             aiEnabledToggle.addEventListener('change', async (event) => {
@@ -1092,60 +1091,142 @@ export class SettingsManager {
         }
     }
 
-    setupAIHotkeyCapture(input) {
-        const clearBtn = document.getElementById('ai-hotkey-clear-btn');
+    async setupHotkeysSettings() {
+        const root = document.getElementById('hotkeys-list');
+        const resetAllBtn = document.getElementById('hotkeys-reset-all-btn');
+        if (!root) return;
 
-        const formatCombo = (event) => {
-            const parts = [];
-            if (event.ctrlKey) parts.push('ctrl');
-            if (event.metaKey) parts.push('cmd');
-            if (event.altKey) parts.push('alt');
-            if (event.shiftKey) parts.push('shift');
-            const key = event.key;
-            // Skip pure modifier presses
-            if (['Control', 'Meta', 'Alt', 'Shift'].includes(key)) return null;
-            // Normalize the key
-            const normalized = key.length === 1 ? key.toLowerCase() : key.toLowerCase();
-            parts.push(normalized);
-            return parts.join('+');
+        const render = async () => {
+            try {
+                const [actions, bindings] = await Promise.all([GetHotkeyActions(), GetHotkeys()]);
+                this.renderHotkeysList(root, actions || [], bindings || {});
+            } catch (error) {
+                console.error('Failed to load hotkeys:', error);
+                root.innerHTML = '<div class="hotkeys-loading">Failed to load shortcuts</div>';
+            }
         };
 
-        input.addEventListener('focus', () => {
-            input.classList.add('capturing');
-            input.placeholder = 'Press a key combination…';
-        });
-        input.addEventListener('blur', () => {
-            input.classList.remove('capturing');
-            input.placeholder = 'Click and press a key combo';
-        });
-
-        input.addEventListener('keydown', async (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            const combo = formatCombo(event);
-            if (!combo) return;
-            input.value = combo;
-            try {
-                await window.go.main.App.ConfigSet('AIHotkey', combo);
-                showNotification(`AI hotkey set to ${combo}`, 'info');
-            } catch (error) {
-                console.error('Error updating AI hotkey:', error);
-                showNotification(`Failed to update hotkey: ${error.message}`, 'error');
-            }
-            input.blur();
-        });
-
-        if (clearBtn) {
-            clearBtn.addEventListener('click', async () => {
-                input.value = 'ctrl+k';
+        if (resetAllBtn) {
+            resetAllBtn.addEventListener('click', async () => {
                 try {
-                    await window.go.main.App.ConfigSet('AIHotkey', 'ctrl+k');
-                    showNotification('AI hotkey reset to ctrl+k', 'info');
+                    await ResetAllHotkeys();
+                    showNotification('All shortcuts restored to defaults', 'info');
+                    await render();
                 } catch (error) {
-                    console.error('Error resetting AI hotkey:', error);
+                    console.error('Failed to reset all hotkeys:', error);
+                    showNotification(`Reset failed: ${error.message}`, 'error');
                 }
             });
         }
+
+        await render();
+    }
+
+    renderHotkeysList(root, actions, bindings) {
+        // Group by category
+        const byCategory = new Map();
+        for (const action of actions) {
+            const cat = action.category || 'Other';
+            if (!byCategory.has(cat)) byCategory.set(cat, []);
+            byCategory.get(cat).push(action);
+        }
+
+        // Detect conflicts (combos used by more than one action)
+        const counts = new Map();
+        for (const combo of Object.values(bindings)) {
+            counts.set(combo, (counts.get(combo) || 0) + 1);
+        }
+        const conflicting = new Set([...counts.entries()].filter(([, n]) => n > 1).map(([c]) => c));
+
+        const html = [];
+        for (const [category, items] of byCategory) {
+            html.push(`<div class="hotkey-category"><div class="hotkey-category-label">${this.escapeHtml(category)}</div>`);
+            for (const action of items) {
+                const combo = bindings[action.id] || action.default;
+                const isOverride = combo !== action.default;
+                const conflict = conflicting.has(combo);
+                html.push(`
+                    <div class="setting-item hotkey-row ${conflict ? 'has-conflict' : ''}" data-action-id="${this.escapeHtml(action.id)}">
+                        <div class="setting-item-content">
+                            <div class="setting-item-info">
+                                <div class="setting-item-title">${this.escapeHtml(action.label)}</div>
+                                <div class="setting-item-description">
+                                    ${isOverride ? `Default: ${this.escapeHtml(action.default)}` : '&nbsp;'}
+                                    ${conflict ? '<span class="hotkey-conflict-tag">conflict</span>' : ''}
+                                </div>
+                            </div>
+                            <div class="setting-item-control hotkey-controls">
+                                <input type="text" class="modern-input hotkey-input" data-hotkey-input="${this.escapeHtml(action.id)}"
+                                    value="${this.escapeHtml(combo)}" readonly placeholder="Click & press">
+                                <button type="button" class="modern-button secondary hotkey-reset-btn" data-hotkey-reset="${this.escapeHtml(action.id)}" title="Reset to default">↺</button>
+                            </div>
+                        </div>
+                    </div>
+                `);
+            }
+            html.push(`</div>`);
+        }
+
+        root.innerHTML = html.join('');
+
+        // Wire capture inputs
+        root.querySelectorAll('input[data-hotkey-input]').forEach(input => {
+            const actionID = input.getAttribute('data-hotkey-input');
+            input.addEventListener('focus', () => {
+                input.dataset.previous = input.value;
+                input.value = '';
+                input.placeholder = 'Press combination…';
+                input.classList.add('capturing');
+            });
+            input.addEventListener('blur', () => {
+                input.classList.remove('capturing');
+                if (!input.value) input.value = input.dataset.previous || '';
+                input.placeholder = 'Click & press';
+            });
+            input.addEventListener('keydown', async (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (event.key === 'Escape') {
+                    input.value = input.dataset.previous || '';
+                    input.blur();
+                    return;
+                }
+                const combo = hotkeyManager.eventToCombo(event);
+                if (!combo) return;
+                input.value = combo;
+                try {
+                    await SetHotkey(actionID, combo);
+                    showNotification(`${actionID} → ${combo}`, 'info');
+                } catch (error) {
+                    console.error(`Failed to set hotkey ${actionID}:`, error);
+                    showNotification(`Failed: ${error.message}`, 'error');
+                    input.value = input.dataset.previous || '';
+                }
+                input.blur();
+                // Re-render to refresh conflict highlights and override-indicator text
+                await this.setupHotkeysSettings();
+            });
+        });
+
+        // Wire per-row reset buttons
+        root.querySelectorAll('button[data-hotkey-reset]').forEach(btn => {
+            const actionID = btn.getAttribute('data-hotkey-reset');
+            btn.addEventListener('click', async () => {
+                try {
+                    await ResetHotkey(actionID);
+                    await this.setupHotkeysSettings();
+                } catch (error) {
+                    console.error(`Failed to reset hotkey ${actionID}:`, error);
+                    showNotification(`Failed: ${error.message}`, 'error');
+                }
+            });
+        });
+    }
+
+    escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, ch => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[ch]));
     }
 
     async setupTypographySettings() {

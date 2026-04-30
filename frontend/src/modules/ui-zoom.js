@@ -1,6 +1,7 @@
 // UI zoom manager — scales the whole interface using CSS `zoom`.
 // Persists scale via the universal config system as setting `UIScale` (percent).
-// VSCode-style hotkeys: Ctrl/Cmd +, Ctrl/Cmd -, Ctrl/Cmd 0.
+// Hotkeys are routed through the central hotkey manager (rebindable in settings).
+import { hotkeyManager } from './hotkey-manager.js';
 
 const DEFAULT_SCALE = 100;
 const MIN_SCALE = 50;
@@ -100,38 +101,9 @@ export class UIZoomManager {
     }
 
     bindHotkeys() {
-        document.addEventListener('keydown', (e) => {
-            const mod = e.ctrlKey || e.metaKey;
-            if (!mod || e.altKey) return;
-
-            // Don't intercept zoom shortcuts while typing in inputs/textareas, but DO accept them
-            // from terminal canvases — xterm.js is the main target for users.
-            const target = e.target;
-            const isEditable = target instanceof HTMLElement && (
-                target.tagName === 'INPUT' ||
-                target.tagName === 'TEXTAREA' ||
-                target.isContentEditable
-            );
-            // Allow on the UI scale input itself? Skip — the input handles its own value.
-            if (isEditable && target.id !== 'ui-scale-input') return;
-
-            // VSCode bindings:
-            //   Ctrl/Cmd =      → zoom in (this is what `Ctrl +` produces on US layouts without Shift)
-            //   Ctrl/Cmd Shift =→ also zoom in (the literal `+` key)
-            //   Ctrl/Cmd -      → zoom out
-            //   Ctrl/Cmd 0      → reset
-            // We match by `e.key` rather than `code` so layout shifts don't break it.
-            if (e.key === '+' || e.key === '=') {
-                e.preventDefault();
-                this.zoomIn();
-            } else if (e.key === '-' || e.key === '_') {
-                e.preventDefault();
-                this.zoomOut();
-            } else if (e.key === '0') {
-                e.preventDefault();
-                this.reset();
-            }
-        });
+        hotkeyManager.register('ui.zoom-in', () => this.zoomIn());
+        hotkeyManager.register('ui.zoom-out', () => this.zoomOut());
+        hotkeyManager.register('ui.zoom-reset', () => this.reset());
     }
 
     bindIndicator() {

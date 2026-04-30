@@ -3,6 +3,7 @@ import { updateStatus, showNotification } from './utils.js';
 import { modal } from '../components/Modal.js';
 import { LiveSearch } from '../components/LiveSearch.js';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
+import { hotkeyManager } from './hotkey-manager.js';
 
 export class SidebarManager {
     constructor() {
@@ -173,14 +174,8 @@ export class SidebarManager {
         // Drag and drop
         this.setupDragAndDrop();
 
-        // Search functionality (can be triggered through context menu or other means)
-        document.addEventListener('keydown', (e) => {
-            // Ctrl+F or Cmd+F to open search
-            if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
-                e.preventDefault();
-                this.showSearchPanel();
-            }
-        });
+        // Search functionality (registered with the central hotkey manager so users can rebind)
+        hotkeyManager.register('sidebar.search', () => this.showSearchPanel());
 
         // The profile panel button clicks are now handled in the main document click listener above.
     }

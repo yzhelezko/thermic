@@ -122,6 +122,24 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class HotkeyAction {
+	    id: string;
+	    label: string;
+	    default: string;
+	    category: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new HotkeyAction(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.label = source["label"];
+	        this.default = source["default"];
+	        this.category = source["category"];
+	    }
+	}
 	export class SSHConfig {
 	    host: string;
 	    port: number;

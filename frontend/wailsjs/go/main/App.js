@@ -206,6 +206,10 @@ export function ExportMetrics(arg1) {
   return window['go']['main']['App']['ExportMetrics'](arg1);
 }
 
+export function FindHotkeyConflicts() {
+  return window['go']['main']['App']['FindHotkeyConflicts']();
+}
+
 export function ForceDisconnectSSHSession(arg1) {
   return window['go']['main']['App']['ForceDisconnectSSHSession'](arg1);
 }
@@ -258,6 +262,14 @@ export function GetFolderByIDAPI(arg1) {
   return window['go']['main']['App']['GetFolderByIDAPI'](arg1);
 }
 
+export function GetHotkeyActions() {
+  return window['go']['main']['App']['GetHotkeyActions']();
+}
+
+export function GetHotkeys() {
+  return window['go']['main']['App']['GetHotkeys']();
+}
+
 export function GetMetricHistory(arg1, arg2) {
   return window['go']['main']['App']['GetMetricHistory'](arg1, arg2);
 }
@@ -268,30 +280,6 @@ export function GetMetrics() {
 
 export function GetMetricsAPI() {
   return window['go']['main']['App']['GetMetricsAPI']();
-}
-
-export function GetHotkeyActions() {
-  return window['go']['main']['App']['GetHotkeyActions']();
-}
-
-export function GetHotkeys() {
-  return window['go']['main']['App']['GetHotkeys']();
-}
-
-export function SetHotkey(arg1, arg2) {
-  return window['go']['main']['App']['SetHotkey'](arg1, arg2);
-}
-
-export function ResetHotkey(arg1) {
-  return window['go']['main']['App']['ResetHotkey'](arg1);
-}
-
-export function ResetAllHotkeys() {
-  return window['go']['main']['App']['ResetAllHotkeys']();
-}
-
-export function FindHotkeyConflicts() {
-  return window['go']['main']['App']['FindHotkeyConflicts']();
 }
 
 export function GetOSInfo() {
@@ -542,6 +530,14 @@ export function ReorderTabs(arg1) {
   return window['go']['main']['App']['ReorderTabs'](arg1);
 }
 
+export function ResetAllHotkeys() {
+  return window['go']['main']['App']['ResetAllHotkeys']();
+}
+
+export function ResetHotkey(arg1) {
+  return window['go']['main']['App']['ResetHotkey'](arg1);
+}
+
 export function ResetMetrics() {
   return window['go']['main']['App']['ResetMetrics']();
 }
@@ -624,6 +620,10 @@ export function SetActiveTab(arg1) {
 
 export function SetFolderExpandedAPI(arg1, arg2) {
   return window['go']['main']['App']['SetFolderExpandedAPI'](arg1, arg2);
+}
+
+export function SetHotkey(arg1, arg2) {
+  return window['go']['main']['App']['SetHotkey'](arg1, arg2);
 }
 
 export function SetUpdateRate(arg1, arg2) {

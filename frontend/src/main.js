@@ -14,6 +14,7 @@ import { ActivityBarManager } from './modules/activity-bar.js';
 import { StatusManager } from './modules/status.js';
 import { UIZoomManager } from './modules/ui-zoom.js';
 import { RemoteExplorerManager } from './modules/remote-explorer.js';
+import { hotkeyManager } from './modules/hotkey-manager.js';
 import { updateStatus } from './modules/utils.js';
 import VersionManager from './components/VersionManager.js';
 import { modal } from './components/Modal.js';
@@ -84,7 +85,12 @@ class ThermicTerminal {
             // Initialize all components
             console.log('Initializing components...');
             await this.initializeComponents();
-            
+
+            // Hotkey manager — load bindings before any module registers handlers
+            console.log('Initializing hotkey manager...');
+            await hotkeyManager.init();
+            window.hotkeyManager = hotkeyManager;
+
             // Set up inter-module communication
             console.log('Setting up module communication...');
             this.setupModuleCommunication();
@@ -350,17 +356,12 @@ class ThermicTerminal {
             }
         });
 
-        // Global keyboard shortcuts
-        document.addEventListener('keydown', (e) => {
-            // Ctrl+Shift+T - New tab
-            if (e.ctrlKey && e.shiftKey && e.code === 'KeyT') {
-                e.preventDefault();
-                this.tabsManager.createNewTab();
-            }
-            // Ctrl+Shift+N - New SSH tab
-            else if (e.ctrlKey && e.shiftKey && e.code === 'KeyN') {
-                e.preventDefault();
-                this.tabsManager.showSSHDialog();
+        // Global keyboard shortcuts via the hotkey manager
+        hotkeyManager.register('tab.new', () => this.tabsManager.createNewTab());
+        hotkeyManager.register('tab.new-ssh', () => this.tabsManager.showSSHDialog());
+        hotkeyManager.register('tab.close', () => {
+            if (this.tabsManager.activeTabId) {
+                this.tabsManager.closeTab(this.tabsManager.activeTabId);
             }
         });
     }

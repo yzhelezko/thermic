@@ -15,6 +15,7 @@ import {
     ApproveHostKeyUpdate,
 } from "../../wailsjs/go/main/App";
 import { EventsOn, EventsEmit, BrowserOpenURL } from "../../wailsjs/runtime/runtime";
+import { hotkeyManager } from "./hotkey-manager.js";
 import {
     THEMES,
     DEFAULT_TERMINAL_OPTIONS,
@@ -588,70 +589,45 @@ export class TerminalManager {
             }
         });
 
-        // Add keyboard shortcuts for terminal functions
+        // Route customizable hotkeys through the central manager so the user can rebind them.
+        // `attachCustomKeyEventHandler` returns false to swallow the event before xterm forwards
+        // it to the shell.
         terminal.attachCustomKeyEventHandler((event) => {
-            // Ctrl+Home - scroll to top
-            if (event.ctrlKey && event.code === "Home") {
+            if (event.type !== 'keydown') return true;
+
+            if (hotkeyManager.match(event, 'terminal.scroll-top')) {
                 terminal.scrollToTop();
                 return false;
             }
-            // Ctrl+End - scroll to bottom
-            if (event.ctrlKey && event.code === "End") {
+            if (hotkeyManager.match(event, 'terminal.scroll-bottom')) {
                 terminal.scrollToBottom();
                 return false;
             }
-            // Ctrl+L - clear terminal (common shell shortcut)
-            if (event.ctrlKey && event.code === "KeyL") {
-                const terminalSession = this.terminals.get(sessionId);
-                if (terminalSession && terminalSession.isConnected) {
-                    // Use frontend terminal clearing that respects clearScrollback setting
+            if (hotkeyManager.match(event, 'terminal.clear')) {
+                const session = this.terminals.get(sessionId);
+                if (session && session.isConnected) {
                     this.clearTerminal(sessionId);
                 }
                 return false;
             }
-            // Ctrl+T - new tab
-            if (event.ctrlKey && event.code === "KeyT") {
-                // Emit event for new tab
-                document.dispatchEvent(new CustomEvent("terminal:new-tab"));
+            if (hotkeyManager.match(event, 'tab.new')) {
+                document.dispatchEvent(new CustomEvent('terminal:new-tab'));
                 return false;
             }
-            // Ctrl+W - close tab
-            if (event.ctrlKey && event.code === "KeyW") {
-                // Emit event for close tab
-                document.dispatchEvent(
-                    new CustomEvent("terminal:close-tab", {
-                        detail: { sessionId },
-                    }),
-                );
+            if (hotkeyManager.match(event, 'tab.close')) {
+                document.dispatchEvent(new CustomEvent('terminal:close-tab', { detail: { sessionId } }));
                 return false;
             }
-            // Ctrl+K - AI Assistant
-            if (
-                event.ctrlKey &&
-                event.code === "KeyK" &&
-                !event.shiftKey &&
-                !event.altKey
-            ) {
-                console.log(
-                    "Ctrl+K pressed in terminal, AI window:",
-                    this.aiFloatWindow,
-                );
+            if (hotkeyManager.match(event, 'ai.toggle')) {
                 if (this.aiFloatWindow) {
                     if (this.aiFloatWindow.isVisible) {
-                        // Window is already open - add selected text as context
                         const selectedText = this.getSelectedText();
                         if (selectedText.trim()) {
                             this.aiFloatWindow.addContext(selectedText);
-                            console.log(
-                                "Added selected text as context:",
-                                selectedText,
-                            );
                         }
                     } else {
                         this.aiFloatWindow.show();
                     }
-                } else {
-                    console.error("AI window not initialized in terminal!");
                 }
                 return false;
             }

@@ -988,3 +988,72 @@ textarea.form-input {
     }
 }
 
+/* Hotkeys settings tab */
+.hotkeys-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0 16px;
+    border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08));
+    margin-bottom: 12px;
+}
+.hotkeys-help {
+    color: var(--text-secondary, #888);
+    font-size: 12px;
+}
+.hotkeys-loading {
+    padding: 24px;
+    text-align: center;
+    color: var(--text-secondary, #888);
+    font-size: 13px;
+}
+.hotkey-category {
+    margin-bottom: 16px;
+}
+.hotkey-category-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary, #888);
+    padding: 4px 0 6px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.06));
+}
+.hotkey-row .setting-item-content {
+    align-items: center;
+}
+.hotkey-controls {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+.hotkey-input {
+    min-width: 180px;
+    text-align: center;
+    font-family: monospace;
+    cursor: pointer;
+}
+.hotkey-input.capturing {
+    border-color: var(--accent-color, #007acc);
+    box-shadow: 0 0 0 2px rgba(0,122,204,0.25);
+}
+.hotkey-reset-btn {
+    min-width: 32px;
+    padding: 4px 10px;
+}
+.hotkey-row.has-conflict .hotkey-input {
+    border-color: #f44747;
+}
+.hotkey-conflict-tag {
+    display: inline-block;
+    background: #f44747;
+    color: #fff;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-left: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
