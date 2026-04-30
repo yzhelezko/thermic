@@ -1,7 +1,7 @@
 // Terminal-specific command registry
 import { ContextMenuCommand, CommandRegistry } from '../base/ContextMenuCommand.js';
 import { WriteToShell } from '../../../../wailsjs/go/main/App.js';
-import { showNotification } from '../../utils.js';
+import { showNotification, getUnwrappedSelection } from '../../utils.js';
 
 export class TerminalCommandRegistry extends CommandRegistry {
     constructor(terminalManager) {
@@ -73,13 +73,23 @@ export class TerminalCommandRegistry extends CommandRegistry {
     }
 
     async handleCopy() {
-        if (!this.terminalManager.terminal || !this.terminalManager.terminal.hasSelection()) {
+        // Always read selection from the active session's terminal — the
+        // command-registry's `terminalManager.terminal` reference can be stale
+        // after tab switches, while activeSessionId is authoritative.
+        const activeSession = this.terminalManager.activeSessionId
+            ? this.terminalManager.terminals.get(this.terminalManager.activeSessionId)
+            : null;
+        const term = activeSession && activeSession.terminal
+            ? activeSession.terminal
+            : this.terminalManager.terminal;
+
+        if (!term || !term.hasSelection || !term.hasSelection()) {
             return;
         }
 
         try {
-            const selectedText = this.terminalManager.terminal.getSelection();
-            if (selectedText && selectedText.trim().length > 0) {
+            const selectedText = getUnwrappedSelection(term);
+            if (selectedText && selectedText.length > 0) {
                 await navigator.clipboard.writeText(selectedText);
                 console.log('Copied text:', selectedText.substring(0, 50) + '...');
             }

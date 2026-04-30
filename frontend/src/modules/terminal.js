@@ -22,6 +22,7 @@ import {
     generateSessionId,
     formatShellName,
     updateStatus,
+    getUnwrappedSelection,
 } from "./utils.js";
 import { AIFloatWindow } from "../components/AIFloatWindow.js";
 
@@ -1856,14 +1857,15 @@ export class TerminalManager {
     }
 
     getSelectedText() {
-        // Get selected text from the active terminal
+        // Use the wrap-aware unwrap helper so wrapped lines don't get spurious
+        // '\n's injected when the text is later sent to the clipboard or AI.
         if (this.activeSessionId) {
             const terminalSession = this.terminals.get(this.activeSessionId);
             if (terminalSession && terminalSession.terminal) {
-                return terminalSession.terminal.getSelection();
+                return getUnwrappedSelection(terminalSession.terminal);
             }
         } else if (this.terminal) {
-            return this.terminal.getSelection();
+            return getUnwrappedSelection(this.terminal);
         }
         return "";
     }

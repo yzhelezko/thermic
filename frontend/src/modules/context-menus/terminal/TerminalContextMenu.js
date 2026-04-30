@@ -2,6 +2,7 @@
 import { ContextMenuBase } from '../base/ContextMenuBase.js';
 import { ContextMenuBuilder } from '../base/ContextMenuBuilder.js';
 import { TerminalCommandRegistry } from './TerminalCommandRegistry.js';
+import { getUnwrappedSelection } from '../../utils.js';
 
 export class TerminalContextMenu extends ContextMenuBase {
     constructor(terminalManager) {
@@ -105,8 +106,8 @@ export class TerminalContextMenu extends ContextMenuBase {
                 
                 // Check if active session has terminal and selection
                 if (activeSession && activeSession.terminal && activeSession.terminal.hasSelection()) {
-                    const selectedText = activeSession.terminal.getSelection();
-                    if (selectedText && selectedText.trim().length > 0) {
+                    const selectedText = getUnwrappedSelection(activeSession.terminal);
+                    if (selectedText && selectedText.length > 0) {
                         try {
                             await navigator.clipboard.writeText(selectedText);
                             console.log('Auto-copied:', selectedText.substring(0, 50) + '...');

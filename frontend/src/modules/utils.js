@@ -125,4 +125,70 @@ export function clearPermanentStatus() {
             statusInfo.style.color = '';
         }
     }
+}
+
+// Returns the current xterm.js selection with wrapped logical lines re-joined.
+//
+// xterm.js's terminal.getSelection() inserts '\n' between every visual row,
+// including rows that are wrap-continuations of the same logical line. When the
+// user copies a long command that wrapped across two visual rows and pastes it
+// elsewhere, those spurious '\n's land in the clipboard. Pasting them into
+// another terminal — especially one without bracketed-paste support — makes the
+// shell execute each fragment as its own command. The Wayland/XWayland
+// clipboard bridge makes the symptom more visible across apps, but the root
+// cause is here on the producer side.
+//
+// We walk the selection range, read each row from the buffer, and only insert
+// '\n' between rows where the next row is NOT a wrap continuation.
+export function getUnwrappedSelection(terminal) {
+    if (!terminal || !terminal.hasSelection || !terminal.hasSelection()) {
+        return '';
+    }
+
+    // Older xterm.js versions / unusual states may not expose the position API.
+    // Fall back to the default selection in that case.
+    const pos = typeof terminal.getSelectionPosition === 'function'
+        ? terminal.getSelectionPosition()
+        : null;
+    const buffer = terminal.buffer && terminal.buffer.active;
+    if (!pos || !buffer) {
+        return terminal.getSelection();
+    }
+
+    const startRow = pos.start.y;
+    const endRow = pos.end.y;
+    const startCol = pos.start.x;
+    const endCol = pos.end.x;
+
+    let out = '';
+    for (let row = startRow; row <= endRow; row++) {
+        const line = buffer.getLine(row);
+        if (!line) continue;
+
+        const colStart = (row === startRow) ? startCol : 0;
+        const colEnd = (row === endRow) ? endCol : line.length;
+
+        const nextLine = buffer.getLine(row + 1);
+        const nextIsWrapped = !!(nextLine && nextLine.isWrapped);
+        const isLastRow = (row === endRow);
+
+        // For rows that wrap into the next, don't trim trailing whitespace —
+        // every cell up to line.length is real content. For terminating rows
+        // we trim so paddings don't bleed into the clipboard.
+        const trimRight = !nextIsWrapped;
+
+        out += line.translateToString(trimRight, colStart, colEnd);
+
+        if (!isLastRow && !nextIsWrapped) {
+            out += '\n';
+        }
+    }
+
+    // Normalize line endings to LF. Some sources (e.g. legacy CRLF content
+    // pulled from a remote shell) can land in the buffer with stray '\r's
+    // before the '\n'; passing those to the clipboard makes paste targets
+    // double-up on Enter on Wayland/XWayland. xterm.js's paste() converts
+    // '\r\n'|'\n' both to '\r' on the receiving side, so collapsing here is
+    // safe.
+    return out.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 } 

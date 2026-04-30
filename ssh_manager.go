@@ -25,10 +25,14 @@ type SSHSession struct {
 	stdout  io.Reader
 	stderr  io.Reader
 
-	// Channel management
+	// Channel management. done/closed are closed exactly once via closeOnce
+	// because multiple termination paths (keepalive watchdog, session.Wait
+	// returning, explicit Close) can all race to finalize the session and a
+	// double close() on a Go channel panics.
 	done       chan bool
 	closed     chan bool
 	forceClose chan bool
+	closeOnce  sync.Once
 
 	// Terminal dimensions
 	cols int
@@ -97,6 +101,26 @@ func (s *SSHSession) IsHanging() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.isHanging
+}
+
+// dialSSHWithKeepalive establishes an SSH connection over a TCP socket with
+// SO_KEEPALIVE enabled. Kernel-level TCP keepalive is a backstop for detecting
+// dead peers even when application-level keepalive goroutines wedge.
+func dialSSHWithKeepalive(address string, sshConfig *ssh.ClientConfig) (*ssh.Client, error) {
+	dialer := &net.Dialer{
+		Timeout:   sshConfig.Timeout,
+		KeepAlive: 15 * time.Second,
+	}
+	tcpConn, err := dialer.Dial("tcp", address)
+	if err != nil {
+		return nil, err
+	}
+	c, chans, reqs, err := ssh.NewClientConn(tcpConn, address, sshConfig)
+	if err != nil {
+		tcpConn.Close()
+		return nil, err
+	}
+	return ssh.NewClient(c, chans, reqs), nil
 }
 
 // createHostKeyCallback creates a sophisticated host key callback with user interaction
@@ -470,7 +494,7 @@ func (a *App) CreateSSHSessionWithSize(sessionID string, config *SSHConfig, cols
 	address := fmt.Sprintf("%s:%d", config.Host, config.Port)
 	// Don't emit "Connecting to..." here - it's already shown by StartConnectionFlow()
 
-	client, err := ssh.Dial("tcp", address, sshConfig)
+	client, err := dialSSHWithKeepalive(address, sshConfig)
 	if err != nil {
 		// Provide more specific error messages based on error type
 		if netErr, ok := err.(net.Error); ok {
@@ -558,8 +582,11 @@ func (a *App) CreateSSHSessionWithSize(sessionID string, config *SSHConfig, cols
 }
 
 // startKeepAlive spawns a goroutine that pings the SSH server periodically while the
-// session is open, keeping NAT/firewall mappings alive on idle connections.
-// Stops when the session's done/closed/forceClose channel fires.
+// session is open, keeping NAT/firewall mappings alive AND actively detecting dead
+// connections. Each ping has a bounded reply timeout: if the server doesn't reply
+// within keepAliveReplyTimeout, the connection is considered dead and we trigger
+// cleanup so the user sees the failure immediately instead of waiting for kernel
+// TCP_RTO (~13 minutes) or the next keystroke. Stops when done/closed/forceClose fires.
 func (a *App) startKeepAlive(s *SSHSession) {
 	intervalSec := 0
 	if a.config != nil && a.config.config != nil {
@@ -569,6 +596,16 @@ func (a *App) startKeepAlive(s *SSHSession) {
 		return // Disabled
 	}
 	interval := time.Duration(intervalSec) * time.Second
+	// Reply must arrive within ~half the interval (capped) so two consecutive
+	// failures still surface well before the user notices a hung terminal.
+	replyTimeout := interval / 2
+	if replyTimeout > 10*time.Second {
+		replyTimeout = 10 * time.Second
+	}
+	if replyTimeout < 3*time.Second {
+		replyTimeout = 3 * time.Second
+	}
+
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -581,19 +618,73 @@ func (a *App) startKeepAlive(s *SSHSession) {
 			case <-s.forceClose:
 				return
 			case <-ticker.C:
-				s.mu.RLock()
+				// s.client is assigned once at construction in
+				// CreateSSHSessionWithSize and never reassigned; safe to read
+				// without a lock. handleDeadConnection / CloseSSHSession close
+				// the client but don't nil it.
 				client := s.client
-				s.mu.RUnlock()
 				if client == nil {
 					return
 				}
-				if _, _, err := client.SendRequest("keepalive@openssh.com", true, nil); err != nil {
-					fmt.Printf("SSH keep-alive failed for %s: %v\n", s.sessionID, err)
+
+				// SendRequest with wantReply=true blocks until the server replies
+				// or the underlying TCP connection errors out. On a silently-dead
+				// socket (sleep, NAT drop, network change) it can block for ~13
+				// minutes, so we wrap it in our own timeout.
+				type ka struct {
+					err error
+				}
+				resultCh := make(chan ka, 1)
+				go func() {
+					_, _, err := client.SendRequest("keepalive@openssh.com", true, nil)
+					resultCh <- ka{err: err}
+				}()
+
+				select {
+				case r := <-resultCh:
+					if r.err != nil {
+						a.handleDeadConnection(s, fmt.Sprintf("keepalive failed: %v", r.err))
+						return
+					}
+				case <-time.After(replyTimeout):
+					a.handleDeadConnection(s, fmt.Sprintf("keepalive timeout (no reply in %s)", replyTimeout))
+					return
+				case <-s.done:
+					return
+				case <-s.closed:
+					return
+				case <-s.forceClose:
 					return
 				}
 			}
 		}
 	}()
+}
+
+// handleDeadConnection is called when the keepalive watchdog determines the SSH
+// connection is dead (failed ping or no reply within the timeout). It surfaces the
+// failure to the user via a visible terminal message + status update, then closes
+// the underlying client so blocked reads in handleSSHOutput unblock and
+// waitForSSHSessionEnd fires the normal cleanup path.
+func (a *App) handleDeadConnection(s *SSHSession, reason string) {
+	if s.IsCleaning() {
+		return
+	}
+	fmt.Printf("SSH connection lost for %s: %s\n", s.sessionID, reason)
+
+	// Print a visible message in the terminal body so the user sees something
+	// changed without having to inspect the tab status icon.
+	a.messages.EmitMessage(s.sessionID, fmt.Sprintf("Connection lost: %s", reason), MessageError)
+	a.messages.EmitMessage(s.sessionID, "Press Enter to reconnect", MessageInfo)
+
+	// Flip status so the frontend's Enter-to-reconnect path activates.
+	a.messages.UpdateConnectionStatus(s.sessionID, StatusFailed.String(), reason)
+
+	// Closing the underlying TCP connection unblocks any reads on stdin/stdout
+	// and lets waitForSSHSessionEnd run the rest of cleanup (SFTP, monitoring).
+	if client := s.client; client != nil {
+		_ = client.Close()
+	}
 }
 
 // StartSSHShell starts a shell on the SSH session
@@ -655,24 +746,12 @@ func (a *App) handleSSHOutput(sshSession *SSHSession) {
 		default:
 		}
 
-		// Set read timeout to detect hanging connections
-		if conn, ok := sshSession.client.Conn.(net.Conn); ok {
-			conn.SetReadDeadline(time.Now().Add(30 * time.Second))
-		}
-
+		// stdout is read directly from an SSH channel, not the raw TCP socket.
+		// Hang detection lives in the keepalive watchdog (startKeepAlive); it will
+		// close the client on a dead connection, which unblocks this Read with
+		// EOF/ErrClosed and lets us exit cleanly.
 		n, err := sshSession.stdout.Read(buffer)
 		if err != nil {
-			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-				// Check if session has been inactive too long
-				if time.Since(sshSession.GetLastActivity()) > 60*time.Second {
-					fmt.Printf("SSH session %s appears to be hanging (no activity for %v)\n",
-						sshSession.sessionID, time.Since(sshSession.GetLastActivity()))
-					sshSession.SetHanging(true)
-					a.handleHangingSession(sshSession)
-					return
-				}
-				continue // Continue reading after timeout
-			}
 			if err == io.EOF {
 				break
 			}
@@ -741,6 +820,10 @@ func (a *App) waitForSSHSessionEnd(sshSession *SSHSession) {
 
 	if err != nil && !sshSession.IsCleaning() {
 		fmt.Printf("SSH session ended with error: %v\n", err)
+		// Print visible terminal message so the user notices without needing to
+		// inspect the tab status icon.
+		a.messages.EmitMessage(sshSession.sessionID, fmt.Sprintf("Connection lost: %v", err), MessageError)
+		a.messages.EmitMessage(sshSession.sessionID, "Press Enter to reconnect", MessageInfo)
 		a.messages.UpdateConnectionStatus(sshSession.sessionID, StatusFailed.String(), fmt.Sprintf("SSH connection lost: %v", err))
 
 		// Auto-cleanup SFTP client when connection fails
@@ -751,6 +834,8 @@ func (a *App) waitForSSHSessionEnd(sshSession *SSHSession) {
 		a.CloseMonitoringSession(sshSession)
 	} else if !sshSession.IsCleaning() {
 		// Clean disconnection
+		a.messages.EmitMessage(sshSession.sessionID, "Connection closed", MessageInfo)
+		a.messages.EmitMessage(sshSession.sessionID, "Press Enter to reconnect", MessageInfo)
 		a.messages.UpdateConnectionStatus(sshSession.sessionID, StatusDisconnected.String(), "")
 
 		// Auto-cleanup SFTP client when connection disconnects
@@ -761,34 +846,66 @@ func (a *App) waitForSSHSessionEnd(sshSession *SSHSession) {
 		a.CloseMonitoringSession(sshSession)
 	}
 
-	close(sshSession.done)
-	close(sshSession.closed)
+	sshSession.closeOnce.Do(func() {
+		close(sshSession.done)
+		close(sshSession.closed)
+	})
 }
 
-// WriteToSSHSession writes data to SSH session
+// WriteToSSHSession writes data to SSH session. Bounded so a silently-dead
+// connection can't park large pastes indefinitely; the keepalive watchdog will
+// catch the underlying death in parallel.
 func (a *App) WriteToSSHSession(sshSession *SSHSession, data string) error {
 	if sshSession.IsCleaning() {
 		return fmt.Errorf("SSH session is being cleaned up")
 	}
 
-	_, err := sshSession.stdin.Write([]byte(data))
-	return err
+	type wr struct {
+		err error
+	}
+	resultCh := make(chan wr, 1)
+	go func() {
+		_, err := sshSession.stdin.Write([]byte(data))
+		resultCh <- wr{err: err}
+	}()
+
+	select {
+	case r := <-resultCh:
+		return r.err
+	case <-time.After(10 * time.Second):
+		return fmt.Errorf("SSH write timed out (connection may be dead)")
+	case <-sshSession.forceClose:
+		return fmt.Errorf("SSH session force-closed")
+	case <-sshSession.closed:
+		return fmt.Errorf("SSH session closed")
+	}
 }
 
-// ResizeSSHSession resizes the SSH session terminal
+// ResizeSSHSession resizes the SSH session terminal. Cols/rows are guarded by
+// the session mutex to keep concurrent resizes (rapid window dragging +
+// frontend size-request replies) from racing.
 func (a *App) ResizeSSHSession(sshSession *SSHSession, cols, rows int) error {
 	if sshSession.IsCleaning() {
 		return fmt.Errorf("SSH session is being cleaned up")
 	}
 
+	sshSession.mu.Lock()
 	sshSession.cols = cols
 	sshSession.rows = rows
+	sess := sshSession.session
+	sshSession.mu.Unlock()
 
-	// Send window change signal
-	return sshSession.session.WindowChange(rows, cols)
+	if sess == nil {
+		return fmt.Errorf("SSH session not initialized")
+	}
+	return sess.WindowChange(rows, cols)
 }
 
-// CloseSSHSession closes an SSH session
+// CloseSSHSession closes an SSH session. Synchronous: callers (e.g. ReconnectTab,
+// shutdown) need the session and client actually closed before they reuse the
+// SessionID or terminate the process. The previous implementation deferred the
+// closes to a fresh goroutine, which could be killed before running and leak
+// FDs/sockets on quick app exit.
 func (a *App) CloseSSHSession(sshSession *SSHSession) error {
 	if sshSession.IsCleaning() {
 		return nil
@@ -802,15 +919,12 @@ func (a *App) CloseSSHSession(sshSession *SSHSession) error {
 	// Close monitoring session first
 	a.CloseMonitoringSession(sshSession)
 
-	// Close session and client
-	go func() {
-		if sshSession.session != nil {
-			sshSession.session.Close()
-		}
-		if sshSession.client != nil {
-			sshSession.client.Close()
-		}
-	}()
+	if sshSession.session != nil {
+		_ = sshSession.session.Close()
+	}
+	if sshSession.client != nil {
+		_ = sshSession.client.Close()
+	}
 
 	return nil
 }
@@ -851,6 +965,8 @@ func (a *App) getSSHAgentAuth() (ssh.AuthMethod, error) {
 
 // handleHangingSession handles SSH sessions that appear to be hanging
 func (a *App) handleHangingSession(sshSession *SSHSession) {
+	a.messages.EmitMessage(sshSession.sessionID, "Connection appears to be hanging - no response from server", MessageWarning)
+	a.messages.EmitMessage(sshSession.sessionID, "Press Enter to reconnect", MessageInfo)
 	a.messages.UpdateConnectionStatus(sshSession.sessionID, StatusHanging, "Connection appears to be hanging - no response from server")
 
 	// Auto-cleanup SFTP client when connection is hanging
@@ -933,7 +1049,7 @@ func (a *App) CreateMonitoringSession(sshSession *SSHSession, config *SSHConfig)
 
 	// Connect monitoring client
 	address := fmt.Sprintf("%s:%d", config.Host, config.Port)
-	monitoringClient, err := ssh.Dial("tcp", address, sshConfig)
+	monitoringClient, err := dialSSHWithKeepalive(address, sshConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create monitoring SSH connection: %w", err)
 	}
@@ -967,33 +1083,44 @@ func (a *App) ExecuteMonitoringCommand(sshSession *SSHSession, command string) (
 	}
 	defer session.Close()
 
-	// Set timeout for command execution
-	done := make(chan bool)
+	// Wrap command to prevent history logging. Use POSIX single-quote escaping
+	// (replace ' with '\''); fmt.Sprintf("%q", ...) is Go's syntax, NOT shell's,
+	// so it mishandles backslashes/newlines/single quotes when passed to bash -c.
+	wrappedCommand := fmt.Sprintf("HISTFILE=/dev/null bash -c %s", shellSingleQuote(command))
+
+	// Run CombinedOutput in a goroutine so we can enforce a hard timeout. Closing
+	// the session from another goroutine while CombinedOutput is mid-flight is
+	// racy in x/crypto/ssh; instead we let the deferred session.Close() run when
+	// we return, and signal completion via a channel.
+	type result struct {
+		out []byte
+		err error
+	}
+	resultCh := make(chan result, 1)
 	go func() {
-		time.Sleep(5 * time.Second) // 5 second timeout
-		select {
-		case <-done:
-			return
-		default:
-			session.Close() // Force close on timeout
-		}
+		out, err := session.CombinedOutput(wrappedCommand)
+		resultCh <- result{out: out, err: err}
 	}()
 
-	// Wrap command to prevent history logging
-	// Method 1: Use HISTFILE=/dev/null for bash/zsh
-	// Method 2: Prefix with space (works if HISTCONTROL=ignorespace)
-	// Method 3: Use a subshell with disabled history
-	wrappedCommand := fmt.Sprintf("HISTFILE=/dev/null bash -c %q", command)
-
-	// Execute command and get output
-	output, err := session.CombinedOutput(wrappedCommand)
-	close(done)
-
-	if err != nil {
-		return "", fmt.Errorf("command execution failed: %w", err)
+	select {
+	case r := <-resultCh:
+		if r.err != nil {
+			return "", fmt.Errorf("command execution failed: %w", r.err)
+		}
+		return string(r.out), nil
+	case <-time.After(5 * time.Second):
+		// Returning will run the deferred session.Close() and unblock the
+		// goroutine above (CombinedOutput will fail with a closed-channel
+		// error). The result that arrives later is dropped because resultCh is
+		// buffered.
+		return "", fmt.Errorf("monitoring command timed out after 5s")
 	}
+}
 
-	return string(output), nil
+// shellSingleQuote wraps s in POSIX single quotes, escaping any embedded single
+// quotes. Safe for any byte sequence: 'foo'\”bar' yields literal foo'bar in sh.
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // CacheMonitoringResult caches a monitoring result

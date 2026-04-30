@@ -396,16 +396,33 @@ func (a *App) ReconnectTab(tabId string) error {
 	// Close SFTP client for old session
 	a.CloseFileExplorerSession(sessionID)
 
-	// Close and remove old SSH session if it exists
+	// Close and remove old SSH session if it exists. We MUST wait for the old
+	// session's waitForSSHSessionEnd goroutine to finish before reusing this
+	// SessionID — otherwise its trailing UpdateConnectionStatus(StatusFailed) +
+	// "Press Enter to reconnect" message will fire against the same SessionID
+	// that's now bound to the *new* session and overwrite its "connecting"
+	// status. SetCleaning(true) tells those handlers to short-circuit.
 	a.ssh.sshSessionsMutex.Lock()
-	if oldSession, exists := a.ssh.sshSessions[sessionID]; exists {
+	oldSession, hadOld := a.ssh.sshSessions[sessionID]
+	if hadOld {
 		fmt.Printf("Removing old SSH session: %s\n", sessionID)
-		// Mark as cleaning and close
-		a.CloseSSHSession(oldSession)
-		// Remove from map
+		oldSession.SetCleaning(true)
 		delete(a.ssh.sshSessions, sessionID)
 	}
 	a.ssh.sshSessionsMutex.Unlock()
+
+	if hadOld {
+		// Initiate close (synchronous now, see CloseSSHSession). Then wait for
+		// the session-end handler to finish so no stale events race the new
+		// session's startup. Bound the wait so a wedged remote peer can't block
+		// reconnect indefinitely.
+		_ = a.CloseSSHSession(oldSession)
+		select {
+		case <-oldSession.done:
+		case <-time.After(3 * time.Second):
+			fmt.Printf("Timed out waiting for old SSH session %s to finish; proceeding\n", sessionID)
+		}
+	}
 
 	// Start unified connection flow
 	target := fmt.Sprintf("%s@%s:%d", tab.SSHConfig.Username, tab.SSHConfig.Host, tab.SSHConfig.Port)
