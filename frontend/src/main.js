@@ -12,6 +12,7 @@ import { SettingsManager } from './modules/settings.js';
 import { SidebarManager } from './modules/sidebar.js';
 import { ActivityBarManager } from './modules/activity-bar.js';
 import { StatusManager } from './modules/status.js';
+import { UIZoomManager } from './modules/ui-zoom.js';
 import { RemoteExplorerManager } from './modules/remote-explorer.js';
 import { updateStatus } from './modules/utils.js';
 import VersionManager from './components/VersionManager.js';
@@ -64,6 +65,7 @@ class ThermicTerminal {
         this.sidebarManager = new SidebarManager();
         this.activityBarManager = new ActivityBarManager(this.sidebarManager, this.uiManager);
         this.statusManager = new StatusManager();
+        this.uiZoomManager = new UIZoomManager(this.terminalManager);
         this.versionManager = null; // Initialize later after DOM is ready
         this.platform = detectPlatform();
         
@@ -209,6 +211,11 @@ class ThermicTerminal {
                 console.log('Skipping window controls manager on ' + this.windowControlsManager.platform + ' (using native controls)');
             }
             
+            // Initialize UI zoom manager (binds hotkeys + applies stored scale)
+            console.log('Initializing UI zoom manager...');
+            await this.uiZoomManager.init();
+            window.uiZoomManager = this.uiZoomManager;
+
             // Initialize version manager AFTER DOM is fully ready
             console.log('Initializing version manager...');
             this.versionManager = new VersionManager();

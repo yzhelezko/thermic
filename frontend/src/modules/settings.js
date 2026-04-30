@@ -340,6 +340,14 @@ export class SettingsManager {
         this.setupAISettings().catch(error => {
             console.error('Error setting up AI settings:', error);
         });
+
+        // --- UI Zoom Setting Logic ---
+        // The settings panel HTML is rendered lazily, so we attach the input here every time
+        // the tabs are initialized. UIZoomManager.attachSettingsInput is idempotent.
+        const uiScaleInput = document.getElementById('ui-scale-input');
+        if (uiScaleInput && window.uiZoomManager) {
+            window.uiZoomManager.attachSettingsInput(uiScaleInput);
+        }
     }
 
     async setupContextMenuSettings() {
