@@ -18,18 +18,64 @@ type HotkeyAction struct {
 
 // HotkeyActions is the canonical list of rebindable shortcuts.
 // Ordering controls how they appear in the settings UI.
+//
+// `mod` is a platform-neutral modifier that maps to Cmd on macOS and Ctrl on
+// Windows/Linux. Storing combos in this canonical form lets a single config
+// work across all three platforms.
 var HotkeyActions = []HotkeyAction{
-	{ID: "tab.new", Label: "New Tab", Default: "ctrl+t", Category: "Tabs"},
-	{ID: "tab.new-ssh", Label: "New SSH Tab", Default: "ctrl+shift+n", Category: "Tabs"},
-	{ID: "tab.close", Label: "Close Tab", Default: "ctrl+w", Category: "Tabs"},
-	{ID: "terminal.clear", Label: "Clear Terminal", Default: "ctrl+l", Category: "Terminal"},
-	{ID: "terminal.scroll-top", Label: "Scroll to Top", Default: "ctrl+home", Category: "Terminal"},
-	{ID: "terminal.scroll-bottom", Label: "Scroll to Bottom", Default: "ctrl+end", Category: "Terminal"},
-	{ID: "sidebar.search", Label: "Search Profiles", Default: "ctrl+f", Category: "Sidebar"},
-	{ID: "ai.toggle", Label: "Toggle AI Assistant", Default: "ctrl+k", Category: "AI"},
-	{ID: "ui.zoom-in", Label: "Zoom In", Default: "ctrl+=", Category: "Interface"},
-	{ID: "ui.zoom-out", Label: "Zoom Out", Default: "ctrl+-", Category: "Interface"},
-	{ID: "ui.zoom-reset", Label: "Reset Zoom", Default: "ctrl+0", Category: "Interface"},
+	{ID: "tab.new", Label: "New Tab", Default: "mod+t", Category: "Tabs"},
+	{ID: "tab.new-ssh", Label: "New SSH Tab", Default: "mod+shift+n", Category: "Tabs"},
+	{ID: "tab.close", Label: "Close Tab", Default: "mod+w", Category: "Tabs"},
+	{ID: "terminal.clear", Label: "Clear Terminal", Default: "mod+l", Category: "Terminal"},
+	{ID: "terminal.scroll-top", Label: "Scroll to Top", Default: "mod+home", Category: "Terminal"},
+	{ID: "terminal.scroll-bottom", Label: "Scroll to Bottom", Default: "mod+end", Category: "Terminal"},
+	{ID: "sidebar.search", Label: "Search Profiles", Default: "mod+f", Category: "Sidebar"},
+	{ID: "ai.toggle", Label: "Toggle AI Assistant", Default: "mod+k", Category: "AI"},
+	{ID: "ui.zoom-in", Label: "Zoom In", Default: "mod+=", Category: "Interface"},
+	{ID: "ui.zoom-out", Label: "Zoom Out", Default: "mod+-", Category: "Interface"},
+	{ID: "ui.zoom-reset", Label: "Reset Zoom", Default: "mod+0", Category: "Interface"},
+}
+
+// canonicalizeCombo collapses ctrl and cmd into the platform-neutral `mod` token,
+// trims and lower-cases each segment, and emits modifiers in canonical order
+// (mod, alt, shift, key). Empty strings are returned unchanged.
+func canonicalizeCombo(combo string) string {
+	if strings.TrimSpace(combo) == "" {
+		return ""
+	}
+	tokens := strings.Split(strings.ToLower(combo), "+")
+	hasMod, hasAlt, hasShift := false, false, false
+	key := ""
+	for _, raw := range tokens {
+		t := strings.TrimSpace(raw)
+		if t == "" {
+			continue
+		}
+		switch t {
+		case "ctrl", "control", "cmd", "command", "meta", "super", "mod":
+			hasMod = true
+		case "alt", "option":
+			hasAlt = true
+		case "shift":
+			hasShift = true
+		default:
+			key = t
+		}
+	}
+	parts := []string{}
+	if hasMod {
+		parts = append(parts, "mod")
+	}
+	if hasAlt {
+		parts = append(parts, "alt")
+	}
+	if hasShift {
+		parts = append(parts, "shift")
+	}
+	if key != "" {
+		parts = append(parts, key)
+	}
+	return strings.Join(parts, "+")
 }
 
 // hotkeyDefaults returns a map of action ID to default combo for fast lookups.
@@ -49,25 +95,28 @@ func (a *App) GetHotkeyActions() []HotkeyAction {
 }
 
 // GetHotkeys returns the merged action-to-keystroke map (defaults + user overrides).
-// Includes a backwards-compat migration: if AIConfig.Hotkey was customized in an older
-// config but the new map has no override for ai.toggle, surface it here.
+// Values are canonicalized so legacy `ctrl+...` overrides are surfaced as `mod+...`
+// transparently. Includes a backwards-compat migration: if AIConfig.Hotkey was
+// customized in an older config but the new map has no override for ai.toggle,
+// surface it here.
 func (a *App) GetHotkeys() map[string]string {
 	merged := hotkeyDefaults()
 	if a.config == nil || a.config.config == nil {
 		return merged
 	}
 
-	// Apply explicit overrides
+	// Apply explicit overrides (canonicalized for cross-platform consistency)
 	for id, combo := range a.config.config.Hotkeys {
-		if combo == "" {
+		canon := canonicalizeCombo(combo)
+		if canon == "" {
 			continue
 		}
-		merged[id] = combo
+		merged[id] = canon
 	}
 
 	// Backwards compat: legacy AIHotkey field still wins for ai.toggle if no explicit override
 	if _, hasOverride := a.config.config.Hotkeys["ai.toggle"]; !hasOverride {
-		legacy := strings.TrimSpace(a.config.config.AI.Hotkey)
+		legacy := canonicalizeCombo(a.config.config.AI.Hotkey)
 		if legacy != "" && legacy != merged["ai.toggle"] {
 			merged["ai.toggle"] = legacy
 		}
@@ -78,6 +127,7 @@ func (a *App) GetHotkeys() map[string]string {
 
 // SetHotkey persists a user override for the given action.
 // Pass an empty combo to clear the override (same as ResetHotkey).
+// The combo is canonicalized: ctrl/cmd are collapsed to the cross-platform `mod`.
 func (a *App) SetHotkey(actionID, combo string) error {
 	if a.config == nil || a.config.config == nil {
 		return fmt.Errorf("config not initialized")
@@ -88,7 +138,7 @@ func (a *App) SetHotkey(actionID, combo string) error {
 		return fmt.Errorf("unknown hotkey action: %s", actionID)
 	}
 
-	combo = strings.TrimSpace(combo)
+	combo = canonicalizeCombo(combo)
 	if combo == "" {
 		return a.ResetHotkey(actionID)
 	}

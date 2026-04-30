@@ -3,6 +3,10 @@
 // to test a specific keystroke during their own listener (xterm's attachCustomKeyEventHandler).
 // The user-customised key map is loaded from the backend and refreshed when the
 // `config:hotkeys-changed` event fires.
+//
+// Combos are stored in a canonical, platform-neutral form using a `mod` token that maps
+// to Cmd on macOS and Ctrl on Windows/Linux — that way a single config works on every
+// platform. Display strings translate `mod` back to the native modifier name.
 import { GetHotkeys } from '../../wailsjs/go/main/App';
 import { EventsOn } from '../../wailsjs/runtime/runtime.js';
 
@@ -14,11 +18,24 @@ const SPECIAL_KEY_NAMES = new Set([
     'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9', 'f10', 'f11', 'f12'
 ]);
 
+// Best-effort platform detection. We can't ask the backend synchronously, but
+// navigator.platform / userAgentData are reliable enough to drive UI labels and
+// modifier matching on the renderer side.
+function detectIsMac() {
+    try {
+        const platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
+        return /mac/i.test(platform);
+    } catch (_) {
+        return false;
+    }
+}
+
 class HotkeyManagerImpl {
     constructor() {
-        this.bindings = new Map(); // actionID -> combo string
+        this.bindings = new Map(); // actionID -> combo string (canonical, with `mod` token)
         this.handlers = new Map(); // actionID -> handler fn
         this.initialized = false;
+        this.isMac = detectIsMac();
     }
 
     async init() {
@@ -59,13 +76,15 @@ class HotkeyManagerImpl {
     }
 
     /**
-     * Normalize a KeyboardEvent into a canonical combo string like "ctrl+shift+t".
+     * Normalize a KeyboardEvent into a canonical combo string like "mod+shift+t".
+     * `mod` represents the platform's primary modifier — Cmd on macOS, Ctrl elsewhere.
      * Returns null for pure-modifier events (Shift alone, etc.).
      */
     eventToCombo(event) {
         const parts = [];
-        if (event.ctrlKey) parts.push('ctrl');
-        if (event.metaKey) parts.push('cmd');
+        // Treat ctrl OR meta as the same canonical modifier so users get the same combo
+        // regardless of which platform they're on.
+        if (event.ctrlKey || event.metaKey) parts.push('mod');
         if (event.altKey) parts.push('alt');
         if (event.shiftKey) parts.push('shift');
 
@@ -83,25 +102,47 @@ class HotkeyManagerImpl {
     }
 
     /**
-     * Normalize a stored combo string (in case user-saved values came from a different
-     * shape). Lower-case, drop whitespace, sort modifiers in canonical order.
+     * Normalize a stored combo string. ctrl/cmd/meta all collapse to the canonical
+     * `mod` token so a single config works across platforms.
      */
     normalizeCombo(combo) {
         if (!combo) return '';
         const tokens = combo.toLowerCase().split('+').map(t => t.trim()).filter(Boolean);
-        const modifiers = [];
+        let hasMod = false, hasAlt = false, hasShift = false;
         let key = '';
         for (const tok of tokens) {
-            if (tok === 'ctrl' || tok === 'control') modifiers.push('ctrl');
-            else if (tok === 'cmd' || tok === 'meta' || tok === 'super') modifiers.push('cmd');
-            else if (tok === 'alt' || tok === 'option') modifiers.push('alt');
-            else if (tok === 'shift') modifiers.push('shift');
-            else key = tok;
+            if (tok === 'mod' || tok === 'ctrl' || tok === 'control' || tok === 'cmd' || tok === 'command' || tok === 'meta' || tok === 'super') {
+                hasMod = true;
+            } else if (tok === 'alt' || tok === 'option') {
+                hasAlt = true;
+            } else if (tok === 'shift') {
+                hasShift = true;
+            } else {
+                key = tok;
+            }
         }
-        // Canonical order: ctrl, cmd, alt, shift, key
-        const order = ['ctrl', 'cmd', 'alt', 'shift'];
-        const sortedMods = order.filter(m => modifiers.includes(m));
-        return [...sortedMods, key].filter(Boolean).join('+');
+        const parts = [];
+        if (hasMod) parts.push('mod');
+        if (hasAlt) parts.push('alt');
+        if (hasShift) parts.push('shift');
+        if (key) parts.push(key);
+        return parts.join('+');
+    }
+
+    /**
+     * Replace the `mod` token in a stored combo with the platform-appropriate name
+     * (and capitalize segments) for display in the UI.
+     */
+    formatComboForDisplay(combo) {
+        if (!combo) return '';
+        return combo.split('+').map(seg => {
+            if (seg === 'mod') return this.isMac ? 'Cmd' : 'Ctrl';
+            if (seg === 'alt') return this.isMac ? 'Option' : 'Alt';
+            if (seg === 'shift') return 'Shift';
+            if (seg.length === 1) return seg.toUpperCase();
+            // Capitalize multi-letter keys (home, end, pageup, etc.)
+            return seg.charAt(0).toUpperCase() + seg.slice(1);
+        }).join('+');
     }
 
     /** True if the event matches the binding stored for actionID. */

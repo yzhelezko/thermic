@@ -1138,6 +1138,8 @@ export class SettingsManager {
         }
         const conflicting = new Set([...counts.entries()].filter(([, n]) => n > 1).map(([c]) => c));
 
+        const fmt = (combo) => hotkeyManager.formatComboForDisplay(combo);
+
         const html = [];
         for (const [category, items] of byCategory) {
             html.push(`<div class="hotkey-category"><div class="hotkey-category-label">${this.escapeHtml(category)}</div>`);
@@ -1151,13 +1153,14 @@ export class SettingsManager {
                             <div class="setting-item-info">
                                 <div class="setting-item-title">${this.escapeHtml(action.label)}</div>
                                 <div class="setting-item-description">
-                                    ${isOverride ? `Default: ${this.escapeHtml(action.default)}` : '&nbsp;'}
+                                    ${isOverride ? `Default: ${this.escapeHtml(fmt(action.default))}` : '&nbsp;'}
                                     ${conflict ? '<span class="hotkey-conflict-tag">conflict</span>' : ''}
                                 </div>
                             </div>
                             <div class="setting-item-control hotkey-controls">
                                 <input type="text" class="modern-input hotkey-input" data-hotkey-input="${this.escapeHtml(action.id)}"
-                                    value="${this.escapeHtml(combo)}" readonly placeholder="Click & press">
+                                    data-canonical="${this.escapeHtml(combo)}"
+                                    value="${this.escapeHtml(fmt(combo))}" readonly placeholder="Click & press">
                                 <button type="button" class="modern-button secondary hotkey-reset-btn" data-hotkey-reset="${this.escapeHtml(action.id)}" title="Reset to default">↺</button>
                             </div>
                         </div>
@@ -1174,13 +1177,17 @@ export class SettingsManager {
             const actionID = input.getAttribute('data-hotkey-input');
             input.addEventListener('focus', () => {
                 input.dataset.previous = input.value;
+                input.dataset.previousCanonical = input.dataset.canonical || '';
                 input.value = '';
                 input.placeholder = 'Press combination…';
                 input.classList.add('capturing');
             });
             input.addEventListener('blur', () => {
                 input.classList.remove('capturing');
-                if (!input.value) input.value = input.dataset.previous || '';
+                if (!input.value) {
+                    input.value = input.dataset.previous || '';
+                    input.dataset.canonical = input.dataset.previousCanonical || '';
+                }
                 input.placeholder = 'Click & press';
             });
             input.addEventListener('keydown', async (event) => {
@@ -1188,19 +1195,23 @@ export class SettingsManager {
                 event.stopPropagation();
                 if (event.key === 'Escape') {
                     input.value = input.dataset.previous || '';
+                    input.dataset.canonical = input.dataset.previousCanonical || '';
                     input.blur();
                     return;
                 }
                 const combo = hotkeyManager.eventToCombo(event);
                 if (!combo) return;
-                input.value = combo;
+                const display = fmt(combo);
+                input.value = display;
+                input.dataset.canonical = combo;
                 try {
                     await SetHotkey(actionID, combo);
-                    showNotification(`${actionID} → ${combo}`, 'info');
+                    showNotification(`${actionID} → ${display}`, 'info');
                 } catch (error) {
                     console.error(`Failed to set hotkey ${actionID}:`, error);
                     showNotification(`Failed: ${error.message}`, 'error');
                     input.value = input.dataset.previous || '';
+                    input.dataset.canonical = input.dataset.previousCanonical || '';
                 }
                 input.blur();
                 // Re-render to refresh conflict highlights and override-indicator text
