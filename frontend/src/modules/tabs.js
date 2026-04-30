@@ -886,12 +886,11 @@ export class TabsManager {
 
     async handleSSHKeyBrowse() {
         try {
-            const selectedPath = await window.go.main.App.SelectSSHPrivateKey();
-            if (selectedPath) {
-                const sshKeyInput = document.getElementById('ssh-keypath');
-                if (sshKeyInput) {
-                    sshKeyInput.value = selectedPath;
-                }
+            const sshKeyInput = document.getElementById('ssh-keypath');
+            const currentPath = (sshKeyInput?.value || '').trim();
+            const selectedPath = await window.go.main.App.SelectSSHPrivateKey(currentPath);
+            if (selectedPath && sshKeyInput) {
+                sshKeyInput.value = selectedPath;
             }
         } catch (error) {
             console.error('Error selecting SSH private key:', error);

@@ -2,11 +2,32 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+// sshKeyBrowseDefaultDir picks where the SSH key browse dialog should open.
+// Preference: parent directory of currentPath if it exists → ~/.ssh → ~ → "".
+func sshKeyBrowseDefaultDir(currentPath string) string {
+	if p := strings.TrimSpace(currentPath); p != "" {
+		if dir := filepath.Dir(p); dir != "" && dir != "." {
+			if info, err := os.Stat(dir); err == nil && info.IsDir() {
+				return dir
+			}
+		}
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		sshDir := filepath.Join(home, ".ssh")
+		if info, err := os.Stat(sshDir); err == nil && info.IsDir() {
+			return sshDir
+		}
+		return home
+	}
+	return ""
+}
 
 // Dialog configuration constants
 const (
@@ -102,8 +123,9 @@ func (a *App) SelectDirectory() (string, error) {
 	return selectedPath, nil
 }
 
-// SelectFile opens a file selection dialog and returns the selected file path
-func (a *App) SelectFile(title string, filters []wailsRuntime.FileFilter) (string, error) {
+// SelectFile opens a file selection dialog and returns the selected file path.
+// If defaultDir is non-empty and exists, the dialog opens there.
+func (a *App) SelectFile(title string, filters []wailsRuntime.FileFilter, defaultDir string) (string, error) {
 	if err := a.validateContext(); err != nil {
 		return "", err
 	}
@@ -115,8 +137,9 @@ func (a *App) SelectFile(title string, filters []wailsRuntime.FileFilter) (strin
 
 	// Use Wails runtime to open file selection dialog
 	selectedPath, err := wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
-		Title:   title,
-		Filters: filters,
+		Title:            title,
+		Filters:          filters,
+		DefaultDirectory: defaultDir,
 	})
 
 	if err != nil {
@@ -142,8 +165,11 @@ func (a *App) SelectFile(title string, filters []wailsRuntime.FileFilter) (strin
 	return selectedPath, nil
 }
 
-// SelectSSHPrivateKey opens a file selection dialog specifically for SSH private keys
-func (a *App) SelectSSHPrivateKey() (string, error) {
+// SelectSSHPrivateKey opens a file selection dialog specifically for SSH private keys.
+// If currentPath is set, the dialog opens at that file's directory; otherwise it
+// falls back to the user's ~/.ssh directory (or home), so repeated browses don't
+// reset back to the working directory.
+func (a *App) SelectSSHPrivateKey(currentPath string) (string, error) {
 	filters := []wailsRuntime.FileFilter{
 		{
 			DisplayName: "SSH Private Keys",
@@ -155,7 +181,9 @@ func (a *App) SelectSSHPrivateKey() (string, error) {
 		},
 	}
 
-	selectedPath, err := a.SelectFile("Select SSH Private Key", filters)
+	defaultDir := sshKeyBrowseDefaultDir(currentPath)
+
+	selectedPath, err := a.SelectFile("Select SSH Private Key", filters, defaultDir)
 	if err != nil {
 		return "", fmt.Errorf("SSH private key selection failed: %w", err)
 	}

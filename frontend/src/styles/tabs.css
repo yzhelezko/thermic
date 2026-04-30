@@ -63,8 +63,6 @@
     left: 50%;
     transform: translateX(-50%);
     text-align: center;
-    /* Add subtle orange accent for thermic branding */
-    text-shadow: 0 0 8px rgba(var(--thermic-orange-rgb), 0.1);
     /* Inherit draggable from parent */
 }
 
@@ -262,10 +260,11 @@
     background: var(--bg-secondary);
     color: var(--text-tertiary);
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background-color var(--t-base) ease, color var(--t-base) ease;
     position: relative;
-    margin-right: 2px;
-    border: 1px solid transparent;
+    margin-right: 0;
+    border: none;
+    border-right: 1px solid var(--border-color);
     border-bottom: 1px solid var(--border-color);
     z-index: 1;
     /* Tabs themselves should not be draggable - they need to be clickable */
@@ -275,23 +274,20 @@
 /* Drag and drop styles */
 .tab.dragging {
     opacity: 0.5;
-    transform: scale(0.95);
     z-index: 1000;
     pointer-events: none;
     cursor: grabbing;
 }
 
 .tab.drag-over {
-    border-left: 3px solid var(--thermic-orange);
+    border-left: 2px solid var(--thermic-orange);
     background: var(--bg-quaternary);
-    box-shadow: 0 2px 8px rgba(var(--thermic-orange-rgb), 0.3);
     z-index: 50;
 }
 
 .tab.drag-over-right {
-    border-right: 3px solid var(--thermic-orange);
+    border-right: 2px solid var(--thermic-orange);
     background: var(--bg-quaternary);
-    box-shadow: 0 2px 8px rgba(var(--thermic-orange-rgb), 0.3);
     z-index: 50;
 }
 
@@ -312,19 +308,26 @@
 .tab.active {
     background: var(--bg-primary);
     color: var(--text-primary);
-    border: 1px solid var(--border-color);
-    border-bottom: 3px solid var(--thermic-orange);
-    box-shadow: 0 2px 8px rgba(var(--thermic-orange-rgb), 0.2);
-    transform: translateY(-1px);
+    border-right: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--bg-primary);
     z-index: 100;
-    margin-bottom: -1px;
+}
+
+/* VS Code style: thin top accent on the active tab. */
+.tab.active::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--thermic-orange);
+    pointer-events: none;
 }
 
 .tab:hover:not(.active):not(.dragging) {
     background: var(--bg-tertiary);
     color: var(--text-secondary);
-    border-color: var(--border-color);
-    transform: translateY(-0.5px);
     z-index: 10;
 }
 
@@ -356,7 +359,7 @@
 }
 
 .tab.active .tab-title {
-    font-weight: 600;
+    font-weight: 500;
     color: var(--text-primary);
 }
 
@@ -391,12 +394,6 @@
 .tab.has-activity:not(.active) .tab-status-indicator {
     background: var(--thermic-orange);
     animation: activity-blink 2.5s ease-in-out infinite;
-    box-shadow: 0 0 6px rgba(var(--thermic-orange-rgb), 0.5);
-}
-
-/* Add a subtle glow effect to tabs with activity */
-.tab.has-activity:not(.active) {
-    border-color: rgba(var(--thermic-orange-rgb), 0.3);
 }
 
 /* Override activity blinking for SSH connections with specific status */
@@ -412,7 +409,6 @@
 .tab.has-activity:not(.active):not(.ssh-tab) .tab-status-indicator {
     background: var(--thermic-orange);
     animation: activity-blink 2.5s ease-in-out infinite;
-    box-shadow: 0 0 6px rgba(var(--thermic-orange-rgb), 0.5);
 }
 
 /* Status-based styling */
@@ -575,8 +571,6 @@
     background: var(--thermic-orange);
     color: white;
     border-color: var(--thermic-orange);
-    transform: scale(1.05);
-    box-shadow: 0 2px 8px rgba(var(--thermic-orange-rgb), 0.3);
 }
 
 /* Tooltip for truncated tab names */

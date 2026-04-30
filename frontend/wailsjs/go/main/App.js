@@ -558,16 +558,16 @@ export function SelectDirectory() {
   return window['go']['main']['App']['SelectDirectory']();
 }
 
-export function SelectFile(arg1, arg2) {
-  return window['go']['main']['App']['SelectFile'](arg1, arg2);
+export function SelectFile(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SelectFile'](arg1, arg2, arg3);
 }
 
 export function SelectFilesToUpload() {
   return window['go']['main']['App']['SelectFilesToUpload']();
 }
 
-export function SelectSSHPrivateKey() {
-  return window['go']['main']['App']['SelectSSHPrivateKey']();
+export function SelectSSHPrivateKey(arg1) {
+  return window['go']['main']['App']['SelectSSHPrivateKey'](arg1);
 }
 
 export function SelectSaveLocation(arg1) {

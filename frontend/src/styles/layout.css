@@ -52,37 +52,35 @@
     width: 40px;
     height: 40px;
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     background: transparent;
-    color: var(--text-tertiary);
+    color: var(--text-secondary);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background-color 0.15s ease, color 0.15s ease;
+    transition: background-color var(--t-base) ease, color var(--t-base) ease;
     position: relative;
 }
 
 .activity-btn:hover {
     background: var(--bg-quaternary);
-    color: var(--text-secondary);
+    color: var(--text-primary);
 }
 
 .activity-btn.active {
-    background: var(--bg-primary);
-    color: var(--thermic-orange);
+    background: transparent;
+    color: var(--text-primary);
 }
 
 .activity-btn.active::before {
     content: '';
     position: absolute;
-    left: -1px;
-    top: 50%;
-    transform: translateY(-50%);
+    left: 0;
+    top: 0;
+    bottom: 0;
     width: 2px;
-    height: 16px;
     background: var(--thermic-orange);
-    border-radius: 0 2px 2px 0;
 }
 
 .activity-btn svg {
@@ -117,12 +115,12 @@
 /* Ensure theme toggle never gets active background styling */
 #theme-toggle.active {
     background: transparent !important;
-    color: var(--text-tertiary) !important;
+    color: var(--text-secondary) !important;
 }
 
 #theme-toggle:hover {
     background: var(--bg-quaternary) !important;
-    color: var(--text-secondary) !important;
+    color: var(--text-primary) !important;
 }
 
 /* Sidebar */

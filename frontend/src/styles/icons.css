@@ -1,44 +1,37 @@
-/* SVG Icon Styling with CSS Custom Properties */
+/* SVG Icon Styling — VS Code-like soft icons via currentColor.
+   Inline SVGs (the default) inherit color from --icon-color; img-based SVGs
+   fall back to filter-based theming for legacy assets. */
 :root {
-    /* Default dark theme icon filter */
-    --icon-filter: invert(1) brightness(1);
-    --icon-hover-filter: invert(1) brightness(1.2);
-    --icon-active-filter: invert(1) sepia(1) saturate(2) hue-rotate(200deg) brightness(1);
-    
-    /* Status icon colors for dark theme */
-    --success-icon-filter: invert(1) sepia(1) saturate(2) hue-rotate(90deg) brightness(0.9);
-    --warning-icon-filter: invert(1) sepia(1) saturate(3) hue-rotate(25deg) brightness(1.1);
-    --error-icon-filter: invert(1) sepia(1) saturate(3) hue-rotate(320deg) brightness(1);
-    --info-icon-filter: invert(1) sepia(1) saturate(2) hue-rotate(200deg) brightness(1);
-    
-    /* Text colors for inline SVG icons */
-    --icon-color: #ffffff;
-    --icon-hover-color: #ffffff;
-    --icon-active-color: #007acc;
-    
-    /* Additional color variables for inline SVG status icons */
-    --info-color: #007acc;
+    /* Inline SVG colors (preferred path) — drive from theme tokens. */
+    --icon-color: var(--text-secondary);          /* default — softer than text-primary */
+    --icon-hover-color: var(--text-primary);      /* full contrast on hover */
+    --icon-active-color: var(--thermic-orange);   /* selected/active — brand accent */
+    --info-color: var(--accent-color);
+
+    /* Legacy img-based SVG filters — assume source SVG is dark on transparent. */
+    --icon-filter: invert(0.85);                  /* light-grey, not pure white */
+    --icon-hover-filter: invert(1);
+    --icon-active-filter: invert(0.55) sepia(1) saturate(5) hue-rotate(345deg) brightness(1.05);
+
+    /* Status icon filters — kept only as fallback for img-based status icons. */
+    --success-icon-filter: invert(0.7) sepia(1) saturate(3) hue-rotate(110deg) brightness(0.9);
+    --warning-icon-filter: invert(0.85) sepia(1) saturate(4) hue-rotate(15deg) brightness(1);
+    --error-icon-filter: invert(0.55) sepia(1) saturate(5) hue-rotate(320deg) brightness(0.95);
+    --info-icon-filter: invert(0.55) sepia(1) saturate(4) hue-rotate(180deg) brightness(0.9);
 }
 
 [data-theme="light"] {
-    /* Light theme icon filter */
-    --icon-filter: invert(0) brightness(1);
-    --icon-hover-filter: invert(0) brightness(0.8);
-    --icon-active-filter: invert(0.3) sepia(1) saturate(2) hue-rotate(200deg) brightness(0.8);
-    
-    /* Status icon colors for light theme */
-    --success-icon-filter: invert(0.3) sepia(1) saturate(3) hue-rotate(90deg) brightness(0.7);
-    --warning-icon-filter: invert(0.4) sepia(1) saturate(4) hue-rotate(25deg) brightness(0.8);
-    --error-icon-filter: invert(0.2) sepia(1) saturate(4) hue-rotate(320deg) brightness(0.8);
-    --info-icon-filter: invert(0.3) sepia(1) saturate(3) hue-rotate(200deg) brightness(0.8);
-    
-    /* Text colors for inline SVG icons */
-    --icon-color: #333333;
-    --icon-hover-color: #333333;
-    --icon-active-color: #0078d4;
-    
-    /* Additional color variables for inline SVG status icons */
-    --info-color: #0078d4;
+    /* Inline tokens already follow text-secondary/primary, so no overrides needed. */
+
+    /* Light theme img filters — source SVGs are dark, so don't invert. */
+    --icon-filter: invert(0.4);                   /* mid-grey */
+    --icon-hover-filter: invert(0);               /* full black on hover */
+    --icon-active-filter: invert(0.45) sepia(1) saturate(5) hue-rotate(345deg) brightness(0.95);
+
+    --success-icon-filter: invert(0.4) sepia(1) saturate(4) hue-rotate(95deg) brightness(0.7);
+    --warning-icon-filter: invert(0.5) sepia(1) saturate(5) hue-rotate(15deg) brightness(0.85);
+    --error-icon-filter: invert(0.3) sepia(1) saturate(5) hue-rotate(335deg) brightness(0.85);
+    --info-icon-filter: invert(0.4) sepia(1) saturate(4) hue-rotate(195deg) brightness(0.85);
 }
 
 /* Base styling for all SVG icons */
@@ -111,71 +104,6 @@
     width: 16px;
     height: 16px;
     margin-right: 8px;
-}
-
-/* Icon selector in profile forms */
-.icon-selector-button {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 6px 8px;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    background: var(--bg-secondary);
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.icon-selector-button:hover {
-    background: var(--bg-tertiary);
-    border-color: var(--thermic-orange);
-}
-
-.icon-dropdown {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    background: var(--bg-primary);
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    z-index: 1000;
-    max-height: 200px;
-    overflow-y: auto;
-    display: none;
-}
-
-.icon-dropdown.show {
-    display: block;
-}
-
-.icon-grid-compact {
-    display: grid;
-    grid-template-columns: repeat(8, 1fr);
-    gap: 2px;
-    padding: 8px;
-}
-
-.icon-option {
-    width: 24px;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    border-radius: 4px;
-    transition: background-color 0.2s ease;
-    font-size: 14px;
-}
-
-.icon-option:hover {
-    background: var(--bg-tertiary);
-}
-
-.icon-option.selected {
-    background: var(--accent-color);
-    color: white;
 }
 
 /* Theme toggle icon */
@@ -351,11 +279,7 @@
 /* Day/Night Mode Theme Toggle */
 .theme-toggle {
     position: relative;
-    transition: transform 0.3s ease;
-}
-
-.theme-toggle:hover {
-    transform: scale(1.1);
+    transition: color var(--t-base) ease;
 }
 
 .theme-toggle .svg-icon {
@@ -373,15 +297,9 @@
     color: var(--text-primary);
 }
 
-/* Smooth icon transitions for theme changes */
-[data-theme="dark"] .theme-toggle .svg-icon,
-.dark-mode .theme-toggle .svg-icon {
-    filter: none; /* Keep original theme toggle images */
-}
-
-[data-theme="light"] .theme-toggle .svg-icon,
-.light-mode .theme-toggle .svg-icon {
-    filter: none; /* Keep original theme toggle images */
+/* Theme toggle keeps original SVG colors regardless of mode. */
+.theme-toggle .svg-icon {
+    filter: none;
 }
 
 /* Context-specific color overrides and hover states */
@@ -421,18 +339,9 @@
     color: var(--icon-active-color);
 }
 
-/* Profile icon grid enhancements */
+/* Profile icon grid — make the option box itself the relative parent */
 .icon-grid-compact .icon-option {
     position: relative;
-}
-
-.icon-grid-compact .icon-option:hover::after {
-    content: '';
-    position: absolute;
-    inset: -2px;
-    border: 2px solid var(--thermic-orange);
-    border-radius: 6px;
-    pointer-events: none;
 }
 
 /* Better SVG rendering for high-DPI displays */

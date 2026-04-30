@@ -1,9 +1,9 @@
 /* Status Bar Component Styles - VSCode Style */
 
 .status-bar {
-    background-color: #007ACC;
-    color: #FFFFFF;
-    padding: 0 12px;
+    background-color: var(--bg-tertiary);
+    color: var(--text-secondary);
+    padding: 0 8px;
     font-size: 12px;
     display: flex;
     align-items: center;
@@ -11,7 +11,7 @@
     height: 22px;
     user-select: none;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    border-top: 1px solid var(--border-color);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     white-space: nowrap;
@@ -68,11 +68,13 @@
 }
 
 .ui-scale-indicator:hover {
-    background-color: rgba(255, 255, 255, 0.18);
+    background-color: var(--bg-quaternary);
+    color: var(--text-primary);
 }
 
 .ui-scale-indicator:active {
-    background-color: rgba(255, 255, 255, 0.28);
+    background-color: var(--bg-quaternary);
+    color: var(--text-primary);
 }
 
 .ui-scale-indicator .ui-scale-value {
@@ -96,33 +98,33 @@
 }
 
 #status-info.status-connected {
-    color: #FFFFFF;
+    color: var(--success-color);
 }
 
 #status-info.status-connecting {
-    color: #FFE066;
+    color: var(--warning-color);
     animation: pulse 2s ease-in-out infinite;
 }
 
 #status-info.status-disconnected {
-    color: #FFA0A0;
+    color: var(--text-tertiary);
 }
 
 #status-info.status-failed {
-    color: #FF6B6B;
+    color: var(--error-color);
 }
 
 #status-info.status-hanging {
-    color: #FFB84A;
+    color: var(--warning-color);
     animation: blink 1.5s ease-in-out infinite;
 }
 
 #status-info.status-error {
-    color: #FF6B6B;
+    color: var(--error-color);
 }
 
 #status-info.status-unknown {
-    color: #FFB84A;
+    color: var(--warning-color);
 }
 
 /* System stats styling - VSCode Style */
@@ -144,7 +146,8 @@
 }
 
 .status-monitoring span[data-stat]:hover {
-    background-color: rgba(255, 255, 255, 0.12);
+    background-color: var(--bg-quaternary);
+    color: var(--text-primary);
 }
 
 /* Loading state styling - system resources remain white */

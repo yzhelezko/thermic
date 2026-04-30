@@ -16,8 +16,7 @@
 
 /* 3. UI components */
 @import 'settings.css';
-@import 'forms.css';
-@import 'context-menu.css'; 
+@import 'context-menu.css';
 @import 'version-manager.css'; 
 @import 'remote-explorer.css';
 @import 'ai-float-window.css';
@@ -36,8 +35,8 @@
     right: 0;
     background: var(--bg-primary);
     border: 1px solid var(--border-color);
-    border-radius: 6px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border-radius: var(--radius-md);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
     z-index: 1000;
     display: none;
     max-height: 120px;
@@ -62,7 +61,7 @@
 }
 
 .suggestion-item:hover {
-    background: var(--bg-hover);
+    background: var(--bg-tertiary);
 }
 
 .suggestion-item.selected {
@@ -72,14 +71,14 @@
 
 /* AI Settings Status Indicators */
 .setting-status {
-    padding: 6px 12px;
-    border-radius: 6px;
+    padding: 4px 10px;
+    border-radius: var(--radius-md);
     font-size: 12px;
     font-weight: 500;
     display: flex;
     align-items: center;
     gap: 6px;
-    transition: all 0.2s ease;
+    transition: background-color var(--t-base) ease, color var(--t-base) ease;
 }
 
 .setting-status.testing {
@@ -146,7 +145,7 @@
 }
 
 .api-key-toggle-btn:hover {
-    background: var(--bg-hover);
+    background: var(--bg-tertiary);
     color: var(--text-primary);
 }
 
@@ -226,7 +225,7 @@
 }
 
 .suggestion-item:hover {
-    background: var(--bg-hover);
+    background: var(--bg-tertiary);
 }
 
 .suggestion-item.selected {
