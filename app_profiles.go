@@ -124,32 +124,22 @@ func (a *App) GetProfileFolder(id string) (*ProfileFolder, error) {
 	return folder, nil
 }
 
-// MoveProfile moves a profile to a different folder
+// MoveProfile moves a profile to a different folder, looked up by display path.
+// Kept as a thin wrapper around MoveProfileByID so all moves share one code path.
 func (a *App) MoveProfile(profileID, newFolderPath string) error {
-	a.profiles.mutex.Lock()
-	defer a.profiles.mutex.Unlock()
-
-	profile, exists := a.profiles.profiles[profileID]
-	if !exists {
-		return fmt.Errorf("profile not found: %s", profileID)
-	}
-
-	// Update both path and ID references
-	profile.LastModified = time.Now()
-
-	// If newFolderPath is provided, try to find the corresponding folder ID
+	var targetFolderID string
 	if newFolderPath != "" {
-		folderID := a.findFolderByPathLockFree(newFolderPath)
-		profile.FolderID = folderID
-	} else {
-		// Root level
-		profile.FolderID = ""
+		a.profiles.mutex.RLock()
+		targetFolderID = a.findFolderByPathLockFree(newFolderPath)
+		a.profiles.mutex.RUnlock()
 	}
-
-	return a.saveProfileInternal(profile)
+	return a.MoveProfileByID(profileID, targetFolderID)
 }
 
-// MoveProfileByID moves a profile to a different folder using folder ID
+// MoveProfileByID moves a profile to a different folder using folder ID.
+// Empty targetFolderID means root level. Rejects moves into virtual folders
+// (they aren't in profileFolders) and into a sibling that already has a profile
+// with the same name.
 func (a *App) MoveProfileByID(profileID, targetFolderID string) error {
 	a.profiles.mutex.Lock()
 	defer a.profiles.mutex.Unlock()
@@ -159,26 +149,37 @@ func (a *App) MoveProfileByID(profileID, targetFolderID string) error {
 		return fmt.Errorf("profile with ID %s not found", profileID)
 	}
 
-	// Validate target folder exists (empty string means root level)
 	if targetFolderID != "" {
-		if _, exists := a.profiles.profileFolders[targetFolderID]; !exists {
+		if _, ok := a.profiles.profileFolders[targetFolderID]; !ok {
 			return fmt.Errorf("target folder with ID %s not found", targetFolderID)
 		}
 	}
 
-	// Update profile's folder reference
+	// No-op if already there
+	if profile.FolderID == targetFolderID {
+		return nil
+	}
+
+	// Reject if a different profile in the destination already uses this name
+	for _, p := range a.profiles.profiles {
+		if p.ID == profile.ID {
+			continue
+		}
+		if p.FolderID == targetFolderID && strings.EqualFold(p.Name, profile.Name) {
+			return fmt.Errorf("a profile named %q already exists in the target folder", profile.Name)
+		}
+	}
+
+	previousFolderID := profile.FolderID
+	previousModified := profile.LastModified
+
 	profile.FolderID = targetFolderID
 	profile.LastModified = time.Now()
 
-	// Update legacy path for backward compatibility
-	if targetFolderID != "" {
-		profile.FolderID = targetFolderID
-	} else {
-		profile.FolderID = ""
-	}
-
-	// Save the updated profile using internal function to avoid deadlock
 	if err := a.saveProfileInternal(profile); err != nil {
+		// Roll back in-memory state so it stays consistent with disk
+		profile.FolderID = previousFolderID
+		profile.LastModified = previousModified
 		return fmt.Errorf("failed to save moved profile: %w", err)
 	}
 

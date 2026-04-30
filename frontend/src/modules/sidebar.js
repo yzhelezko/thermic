@@ -386,10 +386,24 @@ export class SidebarManager {
 
     handleDragStart(e) {
         const item = e.target.closest('.tree-item');
+        if (!item || item.closest('.virtual-folder, .virtual-profile, .search-result')) {
+            // Not a draggable tree item; abort to avoid stale state
+            e.preventDefault();
+            return;
+        }
+
+        const id = item.dataset.id;
+        const type = item.dataset.type;
+        const currentParent = type === 'folder'
+            ? (item.dataset.parentFolderId || '')
+            : (item.dataset.folderId || '');
+
         this.draggedItem = {
-            id: item.dataset.id,
-            type: item.dataset.type,
-            element: item
+            id,
+            type,
+            element: item,
+            currentParent,
+            descendants: type === 'folder' ? this.collectFolderDescendants(id) : new Set(),
         };
 
         item.classList.add('dragging');
@@ -397,63 +411,137 @@ export class SidebarManager {
         e.dataTransfer.setData('text/plain', ''); // Required for Firefox
     }
 
-    handleDragOver(e) {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
+    // Walk this.profileTree to gather IDs of the folder and all its descendant folders.
+    collectFolderDescendants(folderID) {
+        const out = new Set([folderID]);
+        const findAndCollect = (nodes) => {
+            for (const node of nodes || []) {
+                if (node.type !== 'folder') continue;
+                if (node.id === folderID) {
+                    this._collectFolderIDs(node, out);
+                    return true;
+                }
+                if (findAndCollect(node.children)) return true;
+            }
+            return false;
+        };
+        findAndCollect(this.profileTree || []);
+        return out;
+    }
 
-        // Remove 'drop-target' from all items first
-        document.querySelectorAll('.tree-item.drop-target').forEach(el => {
-            el.classList.remove('drop-target');
+    _collectFolderIDs(node, out) {
+        if (node.type !== 'folder') return;
+        out.add(node.id);
+        for (const child of node.children || []) {
+            this._collectFolderIDs(child, out);
+        }
+    }
+
+    // Resolve where a drag-over/drop event would land.
+    // Returns { folderID, anchor, blocked, reason }
+    //   folderID: target parent folder ID ('' = root)
+    //   anchor:   element to highlight (folder row, or null for root)
+    //   blocked:  true if invalid (descendant, virtual, no-op)
+    resolveDropTarget(e) {
+        if (!this.draggedItem) return { folderID: '', anchor: null, blocked: true };
+
+        // Reject virtual folders / virtual profiles / search results outright
+        if (e.target.closest('.virtual-folder, .virtual-profile, .search-result')) {
+            return { folderID: '', anchor: null, blocked: true, reason: 'virtual' };
+        }
+
+        const hover = e.target.closest('.tree-item');
+        let folderID = '';
+        let anchor = null;
+
+        if (hover && hover.dataset.type === 'folder') {
+            folderID = hover.dataset.id;
+            anchor = hover;
+        } else if (hover && hover.dataset.type === 'profile') {
+            folderID = hover.dataset.folderId || '';
+            // Highlight the containing folder row if any, otherwise the root section
+            if (folderID) {
+                anchor = document.querySelector(`.tree-item[data-type="folder"][data-id="${folderID}"]`);
+            }
+        } else if (e.target.closest('.profile-tree') || e.target.closest('.sidebar-content')) {
+            folderID = '';
+            anchor = null;
+        } else {
+            return { folderID: '', anchor: null, blocked: true };
+        }
+
+        // Folder dragged into itself or any of its descendants
+        if (this.draggedItem.type === 'folder' && this.draggedItem.descendants.has(folderID)) {
+            return { folderID, anchor, blocked: true, reason: 'descendant' };
+        }
+
+        // No-op: dropping into the parent it already lives in
+        if (folderID === this.draggedItem.currentParent) {
+            return { folderID, anchor, blocked: true, reason: 'noop' };
+        }
+
+        return { folderID, anchor, blocked: false };
+    }
+
+    clearDropHighlights() {
+        document.querySelectorAll('.tree-item.drop-target, .tree-item.drop-blocked').forEach(el => {
+            el.classList.remove('drop-target', 'drop-blocked');
         });
+        document.querySelectorAll('.profile-tree.drop-target-root').forEach(el => {
+            el.classList.remove('drop-target-root');
+        });
+    }
 
-        // Highlight current valid drop target
-        const item = e.target.closest('.tree-item');
-        if (item && item.dataset.type === 'folder' && item !== this.draggedItem?.element) {
-            item.classList.add('drop-target');
+    handleDragOver(e) {
+        if (!this.draggedItem) return;
+        e.preventDefault();
+
+        const { folderID, anchor, blocked } = this.resolveDropTarget(e);
+        e.dataTransfer.dropEffect = blocked ? 'none' : 'move';
+
+        this.clearDropHighlights();
+
+        if (blocked) {
+            // Light up the would-be target as blocked, but only when we have one
+            // and the reason isn't "noop" (no-op shouldn't visually scream).
+            if (anchor) anchor.classList.add('drop-blocked');
+            return;
+        }
+
+        if (anchor) {
+            anchor.classList.add('drop-target');
+        } else if (folderID === '') {
+            const root = document.querySelector('.profile-tree');
+            if (root) root.classList.add('drop-target-root');
         }
     }
 
     async handleDrop(e) {
         e.preventDefault();
-        
-        const dropTarget = e.target.closest('.tree-item');
-        const isRootDrop = e.target.closest('.sidebar-content') && !dropTarget;
-
         if (!this.draggedItem) return;
 
-        let targetFolderID = '';
-        
-        if (dropTarget && dropTarget.dataset.type === 'folder') {
-            // Dropped on a folder - use the folder's ID
-            targetFolderID = dropTarget.dataset.id;
-        } else if (isRootDrop) {
-            // Dropped on root - empty string means root level
-            targetFolderID = '';
-        } else {
-            return; // Invalid drop target
-        }
+        const { folderID, blocked, reason } = this.resolveDropTarget(e);
+        this.clearDropHighlights();
 
-        // Prevent dropping folder into itself or its descendants
-        if (this.draggedItem.type === 'folder' && this.draggedItem.id === targetFolderID) {
-            showNotification('Cannot move folder into itself', 'error');
+        if (blocked) {
+            if (reason === 'descendant') {
+                showNotification('Cannot move a folder into itself or its descendants', 'error');
+            }
+            // 'noop' and 'virtual' are silently ignored
             return;
         }
 
         try {
             if (this.draggedItem.type === 'profile') {
-                // Use new ID-based profile move API
-                await window.go.main.App.MoveProfileByIDAPI(this.draggedItem.id, targetFolderID);
+                await window.go.main.App.MoveProfileByIDAPI(this.draggedItem.id, folderID);
                 showNotification('Profile moved successfully', 'success');
             } else if (this.draggedItem.type === 'folder') {
-                // Use new ID-based folder move API
-                await window.go.main.App.MoveFolderAPI(this.draggedItem.id, targetFolderID);
+                await window.go.main.App.MoveFolderAPI(this.draggedItem.id, folderID);
                 showNotification('Folder moved successfully', 'success');
             }
 
-            // Reload and re-render the tree
             await this.loadProfileTree();
             this.renderProfileTree();
-            
         } catch (error) {
             console.error('Failed to move item:', error);
             showNotification(`Failed to move item: ${error.message || error}`, 'error');
@@ -466,10 +554,7 @@ export class SidebarManager {
             this.draggedItem = null;
         }
 
-        // Remove all drop target highlights
-        document.querySelectorAll('.drop-target').forEach(el => {
-            el.classList.remove('drop-target');
-        });
+        this.clearDropHighlights();
     }
 
     getFolderPath(folderId) {
@@ -845,23 +930,23 @@ export class SidebarManager {
         }
     }
 
-    renderTreeNodes(nodes, level = 0) {
+    renderTreeNodes(nodes, level = 0, parentFolderID = '') {
         return nodes.map(node => {
             if (node.type === 'folder') {
-                return this.renderFolderNode(node, level);
+                return this.renderFolderNode(node, level, parentFolderID);
             } else {
-                return this.renderProfileNode(node, level);
+                return this.renderProfileNode(node, level, parentFolderID);
             }
         }).join('');
     }
 
-    renderFolderNode(folder, level) {
+    renderFolderNode(folder, level, parentFolderID = '') {
         const isExpanded = this.expandedFolders.has(folder.id) || folder.expanded;
         const children = folder.children || [];
-        
+
         return `
             <div class="tree-folder ${isExpanded ? 'expanded' : ''}" data-level="${level}">
-                <div class="tree-item" data-id="${folder.id}" data-type="folder" draggable="true">
+                <div class="tree-item" data-id="${folder.id}" data-type="folder" data-parent-folder-id="${parentFolderID}" draggable="true">
                 <div class="tree-item-content" style="padding-left: ${(level * 16) + 8}px">
                         <span class="tree-folder-toggle" data-folder-id="${folder.id}">
                             ${isExpanded ? '▼' : '▶'}
@@ -871,32 +956,33 @@ export class SidebarManager {
                     </div>
                 </div>
                 <div class="tree-folder-children" style="display: ${isExpanded ? 'block' : 'none'}">
-                    ${this.renderTreeNodes(children, level + 1)}
+                    ${this.renderTreeNodes(children, level + 1, folder.id)}
                 </div>
             </div>
         `;
     }
 
-    renderProfileNode(profile, level) {
+    renderProfileNode(profile, level, parentFolderID = '') {
         const favoriteIcon = profile.profile?.isFavorite ? '<span class="favorite-indicator">⭐</span>' : '';
         const profileType = profile.profile?.type || 'local';
         const tooltipText = `Click or double-click to connect to ${profile.name} (${profileType})`;
-        
+
         // Extract searchable data for live search
         const sshConfig = profile.profile?.sshConfig || {};
         const host = sshConfig.host || '';
         const username = sshConfig.username || '';
         const tags = profile.profile?.tags?.join(' ') || '';
-        
+
         return `
-            <div class="tree-item" 
-                 data-id="${profile.id}" 
-                 data-type="profile" 
-                 data-name="${profile.name}" 
-                 data-host="${host}" 
-                 data-username="${username}" 
-                 data-tags="${tags}" 
-                 draggable="true" 
+            <div class="tree-item"
+                 data-id="${profile.id}"
+                 data-type="profile"
+                 data-folder-id="${parentFolderID}"
+                 data-name="${profile.name}"
+                 data-host="${host}"
+                 data-username="${username}"
+                 data-tags="${tags}"
+                 draggable="true"
                  title="${tooltipText}">
                 <div class="tree-item-content" style="padding-left: ${(level + 1) * 16}px">
                     <span class="tree-item-icon">${profile.icon}</span>
@@ -1297,12 +1383,11 @@ export class SidebarManager {
         if (browseSSHKeyBtn) {
             browseSSHKeyBtn.addEventListener('click', async () => {
                 try {
-                    const selectedPath = await window.go.main.App.SelectSSHPrivateKey();
-                    if (selectedPath) {
-                        const sshKeyInput = document.getElementById('ssh-keypath');
-                        if (sshKeyInput) {
-                            sshKeyInput.value = selectedPath;
-                        }
+                    const sshKeyInput = document.getElementById('ssh-keypath');
+                    const currentPath = (sshKeyInput?.value || '').trim();
+                    const selectedPath = await window.go.main.App.SelectSSHPrivateKey(currentPath);
+                    if (selectedPath && sshKeyInput) {
+                        sshKeyInput.value = selectedPath;
                     }
                 } catch (error) {
                     console.error('Error selecting SSH private key:', error);

@@ -174,7 +174,10 @@ func (a *App) sortTreeNodes(nodes []*ProfileTreeNode) {
 	})
 }
 
-// MoveFolder moves a folder to a different parent folder by ID with validation
+// MoveFolder moves a folder to a different parent folder by ID with validation.
+// Empty targetParentFolderID means root level. Validates: target exists,
+// target is not the folder itself or any of its descendants, and no sibling
+// folder in the target parent already has the same name.
 func (a *App) MoveFolder(folderID, targetParentFolderID string) error {
 	a.profiles.mutex.Lock()
 	defer a.profiles.mutex.Unlock()
@@ -188,7 +191,6 @@ func (a *App) MoveFolder(folderID, targetParentFolderID string) error {
 		}
 	}
 
-	// Validate target parent folder exists (empty string means root level)
 	if targetParentFolderID != "" {
 		if _, exists := a.profiles.profileFolders[targetParentFolderID]; !exists {
 			return &ProfileError{
@@ -198,7 +200,6 @@ func (a *App) MoveFolder(folderID, targetParentFolderID string) error {
 			}
 		}
 
-		// Prevent moving folder into itself or its descendants
 		if a.isFolderDescendant(targetParentFolderID, folderID) {
 			return &ProfileError{
 				Op:        "move",
@@ -208,12 +209,35 @@ func (a *App) MoveFolder(folderID, targetParentFolderID string) error {
 		}
 	}
 
-	// Update folder's parent reference
+	// No-op if already in the target parent
+	if folder.ParentFolderID == targetParentFolderID {
+		return nil
+	}
+
+	// Reject if a sibling folder in the target already uses this name
+	for _, sibling := range a.profiles.profileFolders {
+		if sibling.ID == folder.ID {
+			continue
+		}
+		if sibling.ParentFolderID == targetParentFolderID && strings.EqualFold(sibling.Name, folder.Name) {
+			return &ProfileError{
+				Op:        "move",
+				ProfileID: folderID,
+				Err:       fmt.Errorf("a folder named %q already exists in the target parent", folder.Name),
+			}
+		}
+	}
+
+	previousParent := folder.ParentFolderID
+	previousModified := folder.LastModified
+
 	folder.ParentFolderID = targetParentFolderID
 	folder.LastModified = time.Now()
 
-	// Save the updated folder using internal function to avoid deadlock
 	if err := a.saveProfileFolderInternal(folder); err != nil {
+		// Roll back so in-memory state stays consistent with disk
+		folder.ParentFolderID = previousParent
+		folder.LastModified = previousModified
 		return &ProfileError{
 			Op:        "move",
 			ProfileID: folderID,
@@ -221,8 +245,9 @@ func (a *App) MoveFolder(folderID, targetParentFolderID string) error {
 		}
 	}
 
-	// Update all child profiles and folders to maintain path consistency
-	a.updateChildrenPaths(folderID)
+	// Bump LastModified on descendants and re-persist; failures here don't
+	// invalidate the move itself (parent reference is already correct on disk).
+	a.touchFolderDescendants(folderID)
 
 	return nil
 }
@@ -246,23 +271,28 @@ func (a *App) isFolderDescendant(candidateParentID, folderID string) bool {
 	return false
 }
 
-// updateChildrenPaths updates paths for all children of a moved folder
-func (a *App) updateChildrenPaths(folderID string) {
-	// Update child folders
+// touchFolderDescendants bumps LastModified on every descendant folder and
+// profile and re-persists them. Save failures are logged but not propagated
+// since the move itself has already succeeded.
+func (a *App) touchFolderDescendants(folderID string) {
+	now := time.Now()
+
 	for _, childFolder := range a.profiles.profileFolders {
 		if childFolder.ParentFolderID == folderID {
-			childFolder.LastModified = time.Now()
-			a.saveProfileFolderInternal(childFolder)
-			// Recursively update grandchildren
-			a.updateChildrenPaths(childFolder.ID)
+			childFolder.LastModified = now
+			if err := a.saveProfileFolderInternal(childFolder); err != nil {
+				fmt.Printf("warning: failed to persist descendant folder %s after move: %v\n", childFolder.ID, err)
+			}
+			a.touchFolderDescendants(childFolder.ID)
 		}
 	}
 
-	// Update child profiles
 	for _, profile := range a.profiles.profiles {
 		if profile.FolderID == folderID {
-			profile.LastModified = time.Now()
-			a.saveProfileInternal(profile)
+			profile.LastModified = now
+			if err := a.saveProfileInternal(profile); err != nil {
+				fmt.Printf("warning: failed to persist descendant profile %s after move: %v\n", profile.ID, err)
+			}
 		}
 	}
 }

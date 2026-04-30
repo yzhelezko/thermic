@@ -1,22 +1,26 @@
 /* CSS Variables and Theme Definitions */
 
 :root {
+    /* Tell the engine our default UI is dark so native widgets
+       (select dropdowns, scrollbars, form controls) match. */
+    color-scheme: dark;
+
     /* Layout dimensions */
     --tabs-height: 64px; /* Titlebar (32) + tabs (32) — Windows default */
     --status-bar-height: 24px;
     --sidebar-width: 250px;
     --activity-bar-width: 48px;
-}
 
-/* Platform-specific tabs-height overrides so right/left slide-out panels
-   anchor immediately below the tabs row on every platform. */
-.platform-darwin {
-    --tabs-height: 60px; /* 28px native-style titlebar + 32px tabs */
-}
+    /* Border radii — VS Code style: small, sharp */
+    --radius-sm: 2px;   /* badges, indicators, status pills */
+    --radius-md: 3px;   /* inputs, buttons, controls */
+    --radius-lg: 4px;   /* panels, dropdowns */
 
-.platform-linux {
-    --tabs-height: 32px; /* native GTK titlebar (collapsed) + 32px tabs */
-    
+    /* Transition durations */
+    --t-fast: 0.1s;
+    --t-base: 0.15s;
+    --t-slow: 0.25s;
+
     /* Thermic Brand Colors */
     --thermic-orange: #ff6b35;
     --thermic-orange-rgb: 255, 107, 53;
@@ -25,13 +29,14 @@
     --thermic-orange-muted: #d4552a;
     --thermic-orange-muted-rgb: 212, 85, 42;
     --thermic-gradient: linear-gradient(135deg, #ff6b35 0%, #f7931e 100%);
-    
+
     /* Dark theme (default) */
     --bg-primary: #1e1e1e;
     --bg-secondary: #2d2d30;
     --bg-tertiary: #383838;
     --bg-quaternary: #3c3c3c;
     --text-primary: #ffffff;
+    --text-primary-rgb: 255, 255, 255;
     --text-secondary: #cccccc;
     --text-tertiary: #999999;
     --border-color: #3e3e42;
@@ -41,27 +46,21 @@
     --success-color: #4ec9b0;
     --warning-color: #ffcc02;
     --error-color: #f44747;
+    --error-color-rgb: 244, 71, 71;
     --tree-hover: #2a2d2e;
     --tree-selected: #37373d;
     --shadow: rgba(0, 0, 0, 0.3);
 }
 
 [data-theme="light"] {
-    /* Thermic Brand Colors (same for both themes) */
-    --thermic-orange: #ff6b35;
-    --thermic-orange-rgb: 255, 107, 53;
-    --thermic-orange-light: #ff8259;
-    --thermic-orange-dark: #e55a2b;
-    --thermic-orange-muted: #d4552a;
-    --thermic-orange-muted-rgb: 212, 85, 42;
-    --thermic-gradient: linear-gradient(135deg, #ff6b35 0%, #f7931e 100%);
-    
+    color-scheme: light;
     /* Light theme */
     --bg-primary: #ffffff;
     --bg-secondary: #f3f3f3;
     --bg-tertiary: #e8e8e8;
     --bg-quaternary: #d4d4d4;
     --text-primary: #333333;
+    --text-primary-rgb: 51, 51, 51;
     --text-secondary: #616161;
     --text-tertiary: #888888;
     --border-color: #e0e0e0;
@@ -71,7 +70,18 @@
     --success-color: #107c10;
     --warning-color: #ff8c00;
     --error-color: #e81123;
+    --error-color-rgb: 232, 17, 35;
     --tree-hover: #f0f0f0;
     --tree-selected: #e3f2fd;
     --shadow: rgba(0, 0, 0, 0.1);
-} 
+}
+
+/* Platform-specific overrides — ONLY layout dimensions, never colors,
+   so they don't shadow the theme cascade through body descendants. */
+.platform-darwin {
+    --tabs-height: 60px; /* 28px native-style titlebar + 32px tabs */
+}
+
+.platform-linux {
+    --tabs-height: 32px; /* native GTK titlebar (collapsed) + 32px tabs */
+}

@@ -132,26 +132,24 @@
 }
 
 .tree-item.selected {
-    background-color: var(--thermic-orange-muted) !important; 
-    color: #ffffff !important; 
+    background-color: var(--tree-selected) !important;
+    color: var(--text-primary) !important;
 }
 
 .tree-item.selected:hover {
-    background-color: var(--thermic-orange-muted) !important; /* Keep selected background on hover */
-    color: #ffffff !important; /* Keep selected text color on hover */
+    background-color: var(--tree-selected) !important;
+    color: var(--text-primary) !important;
 }
 
-/* Ensure that the hover effect on tree-item-content does not override the selected item's background */
 .tree-item.selected .tree-item-content {
-    background-color: transparent !important; /* Make content background transparent when item is selected */
+    background-color: transparent !important;
 }
 
-/* Ensure that the hover effect on tree-item-content does not override the selected item's text color */
 .tree-item.selected .tree-item-content .tree-item-text,
 .tree-item.selected .tree-item-content .tree-item-icon,
 .tree-item.selected .tree-item-content .tree-item-type,
 .tree-item.selected .tree-item-content .favorite-indicator {
-    color: #ffffff !important;
+    color: var(--text-primary) !important;
 }
 
 .tree-item-icon {
@@ -301,9 +299,8 @@
 .tree-item[data-type="profile"]:active .tree-item-content,
 .virtual-profile:active .tree-item-content,
 .search-result:active .tree-item-content {
-    background: var(--thermic-orange-muted);
-    color: white;
-    transform: scale(0.98);
+    background: var(--tree-selected);
+    color: var(--text-primary);
 }
 
 .tree-item-type {
@@ -326,12 +323,10 @@
 /* Drag and Drop Styles */
 .tree-item.dragging {
     opacity: 0.5;
-    transform: scale(0.95);
 }
 
 .tree-item.drop-target {
-    background-color: var(--thermic-orange-muted) !important;
-    color: white !important;
+    background-color: rgba(var(--thermic-orange-rgb), 0.18) !important;
 }
 
 .tree-item.drop-target::after {
@@ -341,9 +336,23 @@
     left: 0;
     right: 0;
     bottom: 0;
-    border: 2px dashed var(--thermic-orange-muted);
-    border-radius: 3px;
+    border: 1px dashed var(--thermic-orange);
+    border-radius: var(--radius-md);
     pointer-events: none;
+}
+
+/* Invalid drop: descendant target, virtual folder, etc. */
+.tree-item.drop-blocked {
+    background-color: rgba(var(--error-color-rgb), 0.12) !important;
+    cursor: not-allowed;
+}
+
+/* Root-level drop indicator: highlight the profile-tree container */
+.profile-tree.drop-target-root {
+    position: relative;
+    background-color: rgba(var(--thermic-orange-rgb), 0.06);
+    box-shadow: inset 0 0 0 1px var(--thermic-orange);
+    border-radius: var(--radius-md);
 }
 
 /* Context menu styles are handled in context-menu.css */
@@ -367,7 +376,7 @@
     padding: 8px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
-    border-radius: 4px;
+    border-radius: var(--radius-md);
 }
 
 .icon-option {
@@ -377,14 +386,13 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    border-radius: 3px;
-    transition: all 0.15s ease;
+    border-radius: var(--radius-md);
+    transition: background-color var(--t-base) ease;
     font-size: 14px;
 }
 
 .icon-option:hover {
     background: var(--bg-tertiary);
-    transform: scale(1.1);
 }
 
 /* Form Group Styles for Profile Panel */
@@ -407,29 +415,28 @@
 .profile-form .form-input,
 .profile-form .form-select {
     width: 100%;
-    padding: 8px 12px;
+    padding: 6px 10px;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     font-size: 13px;
     color: var(--text-primary);
-    transition: all 0.15s ease;
+    transition: border-color var(--t-base) ease;
 }
 
 .profile-form .form-input:focus,
 .profile-form .form-select:focus {
     outline: none;
-    border-color: var(--accent-color);
-    box-shadow: 0 0 0 2px rgba(var(--accent-color-rgb), 0.2);
+    border-color: var(--thermic-orange);
 }
 
 .profile-form .btn {
-    padding: 8px 16px;
-    border-radius: 4px;
+    padding: 6px 16px;
+    border-radius: var(--radius-md);
     font-size: 12px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color var(--t-base) ease;
     border: 1px solid transparent;
 }
 
@@ -439,7 +446,7 @@
 }
 
 .profile-form .btn-primary:hover {
-    background: var(--accent-color-hover);
+    background: var(--accent-hover);
 }
 
 .profile-form .btn-secondary {
@@ -473,9 +480,9 @@
 .virtual-folder {
     padding: 4px 8px;
     margin: 2px 0;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     cursor: pointer;
-    transition: background-color 0.15s ease;
+    transition: background-color var(--t-base) ease;
 }
 
 .virtual-folder:hover {
@@ -494,8 +501,8 @@
     font-size: 10px;
     color: var(--text-tertiary);
     background: var(--bg-quaternary);
-    padding: 2px 6px;
-    border-radius: 10px;
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
 }
 
 .virtual-folder-header {
@@ -512,10 +519,10 @@
     border: 1px solid var(--border-color);
     color: var(--text-primary);
     padding: 4px 8px;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     cursor: pointer;
     font-size: 12px;
-    transition: all 0.15s ease;
+    transition: background-color var(--t-base) ease;
 }
 
 .back-btn:hover {
@@ -527,8 +534,8 @@
     cursor: pointer;
     /* Padding is now handled by .tree-item-content */
     margin: 2px 0;
-    border-radius: 4px;
-    transition: background-color 0.15s ease;
+    border-radius: var(--radius-md);
+    transition: background-color var(--t-base) ease;
 }
 
 .virtual-profile:hover {
@@ -549,9 +556,9 @@
     font-size: 10px;
     color: var(--text-tertiary);
     background: var(--bg-quaternary);
-    padding: 2px 4px;
-    border-radius: 8px;
-    margin-left: 4px; /* Add some space from favorite star or text */
+    padding: 1px 5px;
+    border-radius: var(--radius-sm);
+    margin-left: 4px;
     flex-shrink: 0;
 }
 
@@ -593,19 +600,17 @@
 .history-item.tree-item.virtual-profile {
     background: var(--bg-tertiary) !important;
     border: 1px solid var(--border-color) !important;
-    border-radius: 6px !important;
+    border-radius: var(--radius-md) !important;
     margin: 4px 8px !important;
     padding: 0 !important;
-    transition: all 0.15s ease !important;
+    transition: background-color var(--t-base) ease, border-color var(--t-base) ease !important;
     overflow: hidden !important;
     position: static !important;
 }
 
 .history-item.tree-item.virtual-profile:hover {
     background: var(--bg-quaternary) !important;
-    border-color: var(--thermic-orange-muted) !important;
-    transform: translateY(-1px) !important;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+    border-color: var(--thermic-orange) !important;
     outline: none !important;
 }
 
@@ -669,7 +674,6 @@
 .action-btn:hover {
     background: var(--bg-primary);
     color: var(--text-primary);
-    transform: scale(1.05);
 }
 
 .remove-btn:hover {
@@ -716,19 +720,18 @@
 .history-actions .btn {
     width: 100%;
     font-size: 12px;
-    padding: 8px 16px;
+    padding: 6px 16px;
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     color: var(--text-primary);
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color var(--t-base) ease, border-color var(--t-base) ease;
 }
 
 .history-actions .btn:hover {
     background: var(--bg-quaternary);
-    border-color: var(--thermic-orange-muted);
-    transform: translateY(-1px);
+    border-color: var(--thermic-orange);
 }
 
 /* Empty state styling */
@@ -776,10 +779,10 @@
 
 .search-input {
     width: 100%;
-    padding: 8px 12px;
+    padding: 6px 10px;
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     color: var(--text-primary);
     font-size: 12px;
     margin-bottom: 12px;
@@ -787,8 +790,7 @@
 
 .search-input:focus {
     outline: none;
-    border-color: var(--thermic-orange-muted);
-    box-shadow: 0 0 0 2px rgba(var(--thermic-orange-muted-rgb), 0.2);
+    border-color: var(--thermic-orange);
 }
 
 .tag-filter label {
@@ -808,11 +810,11 @@
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
     color: var(--text-secondary);
-    padding: 4px 8px;
-    border-radius: 12px;
+    padding: 2px 8px;
+    border-radius: var(--radius-md);
     font-size: 10px;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color var(--t-base) ease, color var(--t-base) ease;
 }
 
 .tag-btn:hover {
@@ -821,9 +823,9 @@
 }
 
 .tag-btn.selected {
-    background: var(--thermic-orange-muted);
+    background: var(--thermic-orange);
     color: white;
-    border-color: var(--thermic-orange-muted);
+    border-color: var(--thermic-orange);
 }
 
 .search-results {
@@ -835,9 +837,9 @@
     margin-bottom: 8px;
     /* Padding is now handled by .tree-item-content */
     background: var(--bg-tertiary);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     border: 1px solid transparent;
-    transition: all 0.15s ease;
+    transition: background-color var(--t-base) ease, border-color var(--t-base) ease;
 }
 
 .search-result:hover {
@@ -864,8 +866,8 @@
     font-size: 10px;
     color: var(--text-tertiary);
     background: var(--bg-quaternary);
-    padding: 4px 8px;
-    border-radius: 10px;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
 }
 
 .error-state {
@@ -876,11 +878,11 @@
 .file-search-indicator {
     background: var(--bg-secondary);
     border: 1px solid var(--accent-color);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     margin: 8px;
     padding: 0;
     display: none;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .search-info {
@@ -933,18 +935,17 @@
     background: #ff4757;
     color: white;
     border-color: #ff4757;
-    transform: scale(1.05);
 }
 
 /* Profile Live Search Styles */
 .profile-search-indicator {
     background: var(--bg-secondary);
     border: 1px solid var(--accent-color);
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     margin: 8px;
     padding: 0;
     display: none;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
     position: relative;
     z-index: 10;
 }
@@ -999,5 +1000,4 @@
     background: #ff4757;
     color: white;
     border-color: #ff4757;
-    transform: scale(1.05);
 }

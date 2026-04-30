@@ -281,11 +281,11 @@ export function SearchProfilesAPI(arg1:string,arg2:Array<string>):Promise<Array<
 
 export function SelectDirectory():Promise<string>;
 
-export function SelectFile(arg1:string,arg2:Array<frontend.FileFilter>):Promise<string>;
+export function SelectFile(arg1:string,arg2:Array<frontend.FileFilter>,arg3:string):Promise<string>;
 
 export function SelectFilesToUpload():Promise<Array<string>>;
 
-export function SelectSSHPrivateKey():Promise<string>;
+export function SelectSSHPrivateKey(arg1:string):Promise<string>;
 
 export function SelectSaveLocation(arg1:string):Promise<string>;
 

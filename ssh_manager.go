@@ -407,43 +407,46 @@ func (a *App) CreateSSHSessionWithSize(sessionID string, config *SSHConfig, cols
 		authMethodsAdded++
 	}
 
+	explicitKeyAbs := ""
 	if config.KeyPath != "" {
 		a.messages.EmitMessage(sessionID, fmt.Sprintf("Loading key: %s", filepath.Base(config.KeyPath)), MessageProgress)
 		key, err := a.loadSSHKey(config.KeyPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load SSH key from %s: %w", config.KeyPath, err)
-		} else {
-			authMethods = append(authMethods, "private key")
-			sshConfig.Auth = append(sshConfig.Auth, ssh.PublicKeys(key))
-			authMethodsAdded++
+		}
+		authMethods = append(authMethods, "private key")
+		sshConfig.Auth = append(sshConfig.Auth, ssh.PublicKeys(key))
+		authMethodsAdded++
+		if abs, absErr := filepath.Abs(config.KeyPath); absErr == nil {
+			explicitKeyAbs = abs
 		}
 	}
 
-	// If no auth methods, try ssh-agent or default keys
-	if authMethodsAdded == 0 {
-		a.messages.EmitMessage(sessionID, "Discovering authentication methods...", MessageProgress)
+	// SSH agent is always additive — try it whenever available so users with
+	// agent-forwarded sessions don't have to disable other auth.
+	if agentAuth, err := a.getSSHAgentAuth(); err == nil {
+		authMethods = append(authMethods, "SSH agent")
+		sshConfig.Auth = append(sshConfig.Auth, agentAuth)
+		authMethodsAdded++
+	}
 
-		// Try to add default authentication methods
-		if agentAuth, err := a.getSSHAgentAuth(); err == nil {
-			authMethods = append(authMethods, "SSH agent")
-			sshConfig.Auth = append(sshConfig.Auth, agentAuth)
-			authMethodsAdded++
-		}
-
-		// Try default key locations using platform-specific paths (only if allowed)
+	// Auto-discovered keys are additive too: an explicit key + auto-discovery
+	// means "try this one first, then the standard ~/.ssh keys". De-dupe against
+	// the explicit key path so we don't load it twice.
+	if config.AllowKeyAutoDiscovery {
 		var validKeys []ssh.Signer
-		if config.AllowKeyAutoDiscovery {
-			defaultKeys := a.getDefaultSSHKeyPaths()
-			for _, keyPath := range defaultKeys {
-				if key, err := a.loadSSHKey(keyPath); err == nil {
-					validKeys = append(validKeys, key)
+		for _, keyPath := range a.getDefaultSSHKeyPaths() {
+			if explicitKeyAbs != "" {
+				if abs, absErr := filepath.Abs(keyPath); absErr == nil && abs == explicitKeyAbs {
+					continue
 				}
 			}
+			if key, err := a.loadSSHKey(keyPath); err == nil {
+				validKeys = append(validKeys, key)
+			}
 		}
-
-		// Add all valid keys to authentication methods
 		if len(validKeys) > 0 {
-			authMethods = append(authMethods, fmt.Sprintf("%d local keys", len(validKeys)))
+			authMethods = append(authMethods, fmt.Sprintf("%d discovered keys", len(validKeys)))
 			sshConfig.Auth = append(sshConfig.Auth, ssh.PublicKeys(validKeys...))
 			authMethodsAdded++
 		}
@@ -848,31 +851,35 @@ func (a *App) CreateMonitoringSession(sshSession *SSHSession, config *SSHConfig)
 		sshConfig.Auth = append(sshConfig.Auth, ssh.Password(config.Password))
 	}
 
+	explicitKeyAbs := ""
 	if config.KeyPath != "" {
 		key, err := a.loadSSHKey(config.KeyPath)
 		if err == nil {
 			sshConfig.Auth = append(sshConfig.Auth, ssh.PublicKeys(key))
 		}
+		if abs, absErr := filepath.Abs(config.KeyPath); absErr == nil {
+			explicitKeyAbs = abs
+		}
 	}
 
-	// Try SSH agent if no other auth
-	if len(sshConfig.Auth) == 0 {
-		if agentAuth, err := a.getSSHAgentAuth(); err == nil {
-			sshConfig.Auth = append(sshConfig.Auth, agentAuth)
-		}
+	// SSH agent is additive (best-effort).
+	if agentAuth, err := a.getSSHAgentAuth(); err == nil {
+		sshConfig.Auth = append(sshConfig.Auth, agentAuth)
+	}
 
-		// Try default key locations using platform-specific paths (only if allowed)
+	// Auto-discovery, additive, de-duped against the explicit key.
+	if config.AllowKeyAutoDiscovery {
 		var validKeys []ssh.Signer
-		if config.AllowKeyAutoDiscovery {
-			defaultKeys := a.getDefaultSSHKeyPaths()
-			for _, keyPath := range defaultKeys {
-				if key, err := a.loadSSHKey(keyPath); err == nil {
-					validKeys = append(validKeys, key)
+		for _, keyPath := range a.getDefaultSSHKeyPaths() {
+			if explicitKeyAbs != "" {
+				if abs, absErr := filepath.Abs(keyPath); absErr == nil && abs == explicitKeyAbs {
+					continue
 				}
 			}
+			if key, err := a.loadSSHKey(keyPath); err == nil {
+				validKeys = append(validKeys, key)
+			}
 		}
-
-		// Add all valid keys to authentication methods
 		if len(validKeys) > 0 {
 			sshConfig.Auth = append(sshConfig.Auth, ssh.PublicKeys(validKeys...))
 		}

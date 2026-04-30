@@ -42,6 +42,21 @@ body {
     flex-direction: column;
 }
 
+/* Native select dropdown options — WebKit2GTK / WebView2 / WKWebView
+   render <option> with system colors unless we explicitly paint them. */
+select,
+option,
+optgroup {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+option:checked,
+option:hover {
+    background-color: var(--bg-quaternary);
+    color: var(--text-primary);
+}
+
 /* Scrollbars */
 ::-webkit-scrollbar {
     width: 8px;

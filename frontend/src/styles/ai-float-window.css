@@ -195,7 +195,7 @@
 }
 
 .ai-send-btn:hover:not(:disabled) {
-    background: var(--accent-color-hover);
+    background: var(--accent-hover);
 }
 
 .ai-send-btn:disabled {
