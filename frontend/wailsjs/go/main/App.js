@@ -626,6 +626,14 @@ export function SetHotkey(arg1, arg2) {
   return window['go']['main']['App']['SetHotkey'](arg1, arg2);
 }
 
+export function SetTabFileManagerPath(arg1, arg2) {
+  return window['go']['main']['App']['SetTabFileManagerPath'](arg1, arg2);
+}
+
+export function SetTabSidebarView(arg1, arg2) {
+  return window['go']['main']['App']['SetTabSidebarView'](arg1, arg2);
+}
+
 export function SetUpdateRate(arg1, arg2) {
   return window['go']['main']['App']['SetUpdateRate'](arg1, arg2);
 }

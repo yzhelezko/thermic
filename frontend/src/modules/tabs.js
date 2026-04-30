@@ -554,6 +554,23 @@ export class TabsManager {
             });
             document.dispatchEvent(tabChangedEvent);
 
+            // Per-tab sidebar memory: if this tab has a recorded preference
+            // for which sidebar panel was last open while it was active,
+            // restore that panel. Skip when there's no preference (first
+            // visit after launch / clean state) so we don't yank the user
+            // out of whichever panel they opened manually.
+            if (tab.lastSidebarView && window.activityBarManager) {
+                const am = window.activityBarManager;
+                const currentView = am.getCurrentView?.();
+                if (currentView && currentView !== tab.lastSidebarView) {
+                    try {
+                        am.switchView(tab.lastSidebarView);
+                    } catch (e) {
+                        console.warn('Per-tab sidebar restore failed:', e);
+                    }
+                }
+            }
+
             // Set active on backend asynchronously (don't block UI)
             SetActiveTab(tabId).catch((error) => {
                 console.warn('Backend SetActiveTab failed:', error);
@@ -637,14 +654,25 @@ export class TabsManager {
             // Now safely disconnect the terminal session
             this.terminalManager.disconnectSession(tab.sessionId);
 
+            // Capture identity before deletion so listeners can prune state.
+            const closedSessionId = tab.sessionId;
+
             // Remove from local tabs (after all cleanup)
             this.tabs.delete(tabId);
-            
+
             // Clear any activity tracking for this tab
             this.clearTabActivity(tabId);
-            
+
+            // Notify panels (e.g. remote file explorer) so they can drop any
+            // per-tab state. tab-status-update doesn't fire for clean closes
+            // because the SSH session is marked "cleaning" before Wait()
+            // returns, so we need an explicit signal here.
+            document.dispatchEvent(new CustomEvent('tab-closed', {
+                detail: { tabId, sessionId: closedSessionId }
+            }));
+
             this.renderTabs();
-            
+
             updateStatus('Tab closed');
         } catch (error) {
             console.error('Failed to close tab:', error);
@@ -1133,20 +1161,30 @@ export class TabsManager {
 
             this.tabs.clear();
             for (const tab of tabs) {
-                // Enhance tab title with formatted shell name if it's a regular shell tab
+                // Enhance tab title with formatted shell name if it's a regular shell tab.
+                // We only auto-name when no custom title is set — tabs restored from a
+                // previous session already carry their renamed title (lastFileManagerPath
+                // and lastSidebarView are also preserved on the tab object).
                 if (tab.shell && tab.connectionType !== 'ssh') {
                     const formattedShellName = this.getFormattedShellName(tab.shell);
                     tab.formattedShellName = formattedShellName;
-                    // Update title to show formatted shell name instead of generic "Terminal X"
                     if (!tab.title || tab.title.startsWith('Terminal ')) {
                         tab.title = formattedShellName;
                     }
                 }
-                
+
                 this.tabs.set(tab.id, tab);
                 if (tab.isActive) {
                     this.activeTabId = tab.id;
                 }
+            }
+
+            // Seed the file manager's per-session state map from restored tabs
+            // so opening the panel for a restored SSH tab returns to the
+            // exact directory the user was in last session — without an
+            // extra remote round-trip.
+            if (window.remoteExplorerManager?.seedFromTabs) {
+                window.remoteExplorerManager.seedFromTabs(Array.from(this.tabs.values()));
             }
 
             this.renderTabs();
@@ -1222,6 +1260,22 @@ export class TabsManager {
             return this.tabs.get(this.activeTabId);
         }
         return null;
+    }
+
+    // Lookup a tab by its tabId. Returns the tab object or undefined.
+    // Used by listeners that receive tabId in events (e.g. tab-status-update)
+    // and need the corresponding sessionId / metadata.
+    getTabById(tabId) {
+        return this.tabs.get(tabId);
+    }
+
+    // Lookup a tab by its sessionId. Linear scan but the tab map is small
+    // (handful of entries) so this is fine. Returns undefined if no match.
+    getTabBySessionId(sessionId) {
+        for (const tab of this.tabs.values()) {
+            if (tab.sessionId === sessionId) return tab;
+        }
+        return undefined;
     }
 
     createNewTabButtons() {

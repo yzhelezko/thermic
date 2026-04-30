@@ -447,6 +447,8 @@ export namespace main {
 	    created: any;
 	    status: string;
 	    errorMessage?: string;
+	    lastFileManagerPath?: string;
+	    lastSidebarView?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Tab(source);
@@ -465,6 +467,8 @@ export namespace main {
 	        this.created = this.convertValues(source["created"], null);
 	        this.status = source["status"];
 	        this.errorMessage = source["errorMessage"];
+	        this.lastFileManagerPath = source["lastFileManagerPath"];
+	        this.lastSidebarView = source["lastSidebarView"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

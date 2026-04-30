@@ -13,9 +13,14 @@ export class RemoteExplorerManager {
         this.currentFileList = [];
         this.loadingIndicator = null;
         this.breadcrumbs = [];
-        this.fileCache = new Map(); // Cache directory listings for performance
-        this.backgroundSessionID = null; // Track session in background
-        this.backgroundRemotePath = null; // Track path in background
+        this.fileCache = new Map(); // sessionID:path → file listing
+
+        // Per-session file-manager state. Keyed by SSH sessionID. Persists across
+        // panel hide/show and tab switches; pruned only on tab close or session
+        // disconnect/failure. Replaces the old single-slot foreground/background
+        // model which lost path state with 3+ SSH tabs.
+        this.sessionStates = new Map(); // sessionID → { remotePath: string }
+
         this.maxHistoryItems = 50; // Maximum files to keep in history
         this.isInitialized = false;
         this.retryHandler = null;
@@ -175,6 +180,19 @@ export class RemoteExplorerManager {
             } else {
                 console.log("Ignoring tab change (panel is not active)");
             }
+        });
+
+        // Listen for tab close so we can prune per-session state. Clean closes
+        // don't surface as tab-status-update (the SSH session is marked
+        // cleaning before it terminates), so this is the only reliable signal.
+        document.addEventListener("tab-closed", (e) => {
+            const sessionId = e?.detail?.sessionId;
+            if (!sessionId) return;
+            this._dropSessionState(sessionId);
+            // If the closed tab was foreground, the active-tab-changed event
+            // that follows the close will pick a new tab and we'll switch into
+            // it via the normal handler. If it wasn't foreground, nothing else
+            // to do.
         });
 
         // Note: tab-status-update and sftp-reconnected events are handled by global listeners
@@ -576,288 +594,217 @@ export class RemoteExplorerManager {
         }
     }
 
-    // Called when the Files sidebar panel becomes active
-    async handlePanelBecameActive() {
-        console.log("Remote Explorer: Panel became active");
-        console.log("Current session ID:", this.currentSessionID);
-        console.log("Background session ID:", this.backgroundSessionID);
-        console.log("Background path:", this.backgroundRemotePath);
-        console.log("isActivePanel before:", this.isActivePanel);
+    // ---- Per-session state helpers ---------------------------------------
+    //
+    // sessionStates is the source of truth for "the file manager was at path
+    // P inside session S". It survives panel hide/show, tab switches, even
+    // briefly visiting a non-SSH tab. Entries are removed only on tab close,
+    // disconnect/failure, or forceCleanup. Combined with fileCache (which is
+    // already keyed by sessionID:path), this gives correct multi-tab behavior:
+    // jumping between any number of SSH tabs always restores the right path.
 
-        this.isActivePanel = true;
-        console.log("isActivePanel set to:", this.isActivePanel);
-
-        // Enable live search for files
-        this.initializeLiveSearch();
-
-        // Get current active tab
-        const activeTab = this.tabsManager.getActiveTab();
-        console.log("Active tab:", activeTab);
-
-        // Check if we have a valid SSH tab
-        if (
-            !activeTab ||
-            activeTab.connectionType !== "ssh" ||
-            activeTab.status !== "connected"
-        ) {
-            console.log(
-                "No SSH tab or not connected - showing select SSH message",
-            );
-            this.showSelectSSHMessage();
-            return;
+    // Persist the currently-displayed (sessionID, path) into sessionStates.
+    // Safe to call when nothing is active — it no-ops.
+    _persistCurrentSession() {
+        if (this.currentSessionID && this.currentRemotePath) {
+            this.sessionStates.set(this.currentSessionID, {
+                remotePath: this.currentRemotePath,
+            });
         }
+    }
 
-        console.log("SSH tab is valid, processing...");
+    // Push the foreground session's path to the backend Tab record so it
+    // gets captured into LastOpenTabs on shutdown. Async fire-and-forget;
+    // failures are non-fatal (worst case the tab restores to remote home).
+    _pushSessionStateToBackend() {
+        if (!this.currentSessionID || !this.currentRemotePath) return;
+        const tab = this.tabsManager.getTabBySessionId?.(this.currentSessionID);
+        if (!tab) return;
+        const fn = window.go?.main?.App?.SetTabFileManagerPath;
+        if (typeof fn !== "function") return;
+        fn(tab.id, this.currentRemotePath).catch((err) => {
+            console.warn("SetTabFileManagerPath failed:", err);
+        });
+    }
 
-        // Check if we have a background session for this same tab
-        if (this.backgroundSessionID === activeTab.sessionId) {
-            console.log(
-                "Restoring background SFTP session:",
-                this.backgroundSessionID,
-            );
-            console.log("Restoring path:", this.backgroundRemotePath);
-
-            // Restore from background
-            this.currentSessionID = this.backgroundSessionID;
-            this.currentRemotePath = this.backgroundRemotePath || ".";
-
-            console.log("Restored current path:", this.currentRemotePath);
-
-            // Always render the UI first to ensure proper structure
-            console.log("Rendering file explorer UI");
-            this.renderFileExplorerUI();
-
-            // Check if we have cached content for this path
-            const cacheKey = `${this.currentSessionID}:${this.currentRemotePath}`;
-            console.log("Checking cache key:", cacheKey);
-            console.log("Cache has key:", this.fileCache.has(cacheKey));
-
-            if (this.fileCache.has(cacheKey)) {
-                console.log(
-                    "Using cached content for path:",
-                    this.currentRemotePath,
-                );
-                const cachedFiles = this.fileCache.get(cacheKey);
-                console.log("Cached files count:", cachedFiles.length);
-
-                // Add parent directory if needed
-                const processedFiles = [...cachedFiles];
-                if (this.currentRemotePath !== "/") {
-                    const parentPath = this.getParentPath(
-                        this.currentRemotePath,
-                    );
-                    console.log(
-                        "Adding parent directory with path:",
-                        parentPath,
-                    );
-                    processedFiles.unshift({
-                        name: "..",
-                        path: parentPath,
-                        isDir: true,
-                        isParent: true,
-                        size: 0,
-                        mode: "drwxr-xr-x",
-                        modifiedTime: new Date(),
-                    });
-                }
-
-                // Sort files
-                processedFiles.sort((a, b) => {
-                    if (a.isParent) return -1;
-                    if (b.isParent) return 1;
-                    if (a.isDir !== b.isDir) {
-                        return b.isDir - a.isDir;
-                    }
-                    return a.name.localeCompare(b.name);
+    // Pre-populate sessionStates from a list of tabs. Called once at startup
+    // so restored tabs immediately have their last paths available; the file
+    // manager will use them next time the user activates the panel for that
+    // tab without re-fetching from remote home.
+    seedFromTabs(tabs) {
+        if (!tabs) return;
+        for (const tab of tabs) {
+            if (tab.lastFileManagerPath && tab.sessionId) {
+                this.sessionStates.set(tab.sessionId, {
+                    remotePath: tab.lastFileManagerPath,
                 });
-
-                console.log(
-                    "About to render cached files - count:",
-                    processedFiles.length,
-                );
-
-                this.updateBreadcrumbs(this.currentRemotePath); // Rebuild breadcrumbs from path
-                console.log(
-                    "Breadcrumbs updated for path:",
-                    this.currentRemotePath,
-                );
-
-                this.renderFileList(processedFiles);
-                console.log("File list rendered from cache");
-            } else {
-                console.log(
-                    "No cache, reloading directory:",
-                    this.currentRemotePath,
-                );
-                // No cache, reload the directory
-                try {
-                    await this.loadDirectoryContent(this.currentRemotePath);
-                } catch (error) {
-                    console.error("Failed to load directory content:", error);
-                    this.showErrorState(
-                        `Failed to load directory: ${error.message}`,
-                    );
-                }
-            }
-
-            updateStatus(`File Explorer restored for ${activeTab.title}`);
-        } else {
-            console.log(
-                "Different tab or no background session - initializing new",
-            );
-            // Different tab or no background session - initialize new
-            try {
-                await this.initializeForSSHSession(activeTab);
-
-                // Update history count for the new tab
-                await this.updateHistoryButtonCount();
-            } catch (error) {
-                console.error(
-                    "Failed to initialize for new SSH session:",
-                    error,
-                );
-                this.showErrorState(`Failed to initialize: ${error.message}`);
             }
         }
     }
 
-    // Called when the Files sidebar panel becomes hidden (switching to Profiles, etc.)
-    async handlePanelBecameHidden() {
-        console.log("Remote Explorer: Panel became hidden");
-        console.log(
-            "Current session ID before hiding:",
-            this.currentSessionID,
-        );
-        console.log("Current path before hiding:", this.currentRemotePath);
+    // Forget per-session state and prune any cached directory listings keyed
+    // by that session. Called on tab close, disconnect, or fail.
+    _dropSessionState(sessionID) {
+        if (!sessionID) return;
+        this.sessionStates.delete(sessionID);
+        // fileCache keys are formatted "<sessionID>:<path>"; prune the slice.
+        const prefix = `${sessionID}:`;
+        for (const key of this.fileCache.keys()) {
+            if (key.startsWith(prefix)) {
+                this.fileCache.delete(key);
+            }
+        }
+    }
 
-        this.isActivePanel = false;
+    // True if the given tab object represents a connected SSH session that
+    // the file manager can talk to.
+    _isUsableSSHTab(tab) {
+        return !!(tab && tab.connectionType === "ssh" && tab.status === "connected");
+    }
 
-        // Disable live search
-        if (this.liveSearch) {
-            this.liveSearch.disable();
+    // Render a directory either from cache (instant) or by loading from the
+    // backend (network round-trip). Always re-renders the shell UI first so
+    // tab switches feel snappy even when we end up reloading.
+    async _showDirectory(remotePath) {
+        this.renderFileExplorerUI();
+
+        const cacheKey = `${this.currentSessionID}:${remotePath}`;
+        if (this.fileCache.has(cacheKey)) {
+            const cached = this.fileCache.get(cacheKey);
+            const processed = [...cached];
+            if (remotePath !== "/") {
+                processed.unshift({
+                    name: "..",
+                    path: this.getParentPath(remotePath),
+                    isDir: true,
+                    isParent: true,
+                    size: 0,
+                    mode: "drwxr-xr-x",
+                    modifiedTime: new Date(),
+                });
+            }
+            processed.sort((a, b) => {
+                if (a.isParent) return -1;
+                if (b.isParent) return 1;
+                if (a.isDir !== b.isDir) return b.isDir - a.isDir;
+                return a.name.localeCompare(b.name);
+            });
+            this.updateBreadcrumbs(remotePath);
+            this.renderFileList(processed);
+            return;
         }
 
-        // Move current session to background instead of disconnecting
-        if (this.currentSessionID) {
-            console.log(
-                "Moving SFTP session to background:",
-                this.currentSessionID,
-            );
-            console.log("Saving current path:", this.currentRemotePath);
+        await this.loadDirectoryContent(remotePath);
+    }
 
-            this.backgroundSessionID = this.currentSessionID;
-            this.backgroundRemotePath = this.currentRemotePath;
-            // Note: We don't need to save breadcrumbs since we rebuild them from path
+    // Switch the file panel to display a given SSH tab. Persists outgoing
+    // state, restores incoming state if known, otherwise initializes from the
+    // remote home directory. This is the single transition point used by both
+    // panel-activation and tab-switch flows so the rules stay in one place.
+    async _switchToSession(tab) {
+        // 1) Persist whatever we were showing.
+        if (this.currentSessionID && this.currentSessionID !== tab.sessionId) {
+            this._persistCurrentSession();
+        }
 
-            console.log(
-                "Background session saved:",
-                this.backgroundSessionID,
-            );
-            console.log("Background path saved:", this.backgroundRemotePath);
+        // 2) If we're already on this session, nothing to do.
+        if (this.currentSessionID === tab.sessionId && this.currentRemotePath) {
+            return;
+        }
 
-            // Clear active session but keep background
+        // 3) Look up saved state for the target.
+        const saved = this.sessionStates.get(tab.sessionId);
+        this.currentSessionID = tab.sessionId;
+
+        if (saved && saved.remotePath) {
+            this.currentRemotePath = saved.remotePath;
+            try {
+                await this._showDirectory(this.currentRemotePath);
+                await this.updateHistoryButtonCount();
+                updateStatus(`File Explorer restored for ${tab.title}`);
+                return;
+            } catch (error) {
+                console.warn(
+                    "Failed to restore saved path, falling back to initialize:",
+                    error,
+                );
+                // Fall through to initialize from home.
+            }
+        }
+
+        // 4) No saved state (or restore failed) — initialize fresh from
+        // remote home.
+        try {
+            await this.initializeForSSHSession(tab);
+            await this.updateHistoryButtonCount();
+        } catch (error) {
+            console.error("Failed to initialize for SSH session:", error);
+            this.showErrorState(`Failed to initialize: ${error.message}`);
+        }
+    }
+
+    // Called when the Files sidebar panel becomes active
+    async handlePanelBecameActive() {
+        this.isActivePanel = true;
+        this.initializeLiveSearch();
+
+        const activeTab = this.tabsManager.getActiveTab();
+        if (!this._isUsableSSHTab(activeTab)) {
+            // Don't lose currentRemotePath here — it's already null when the
+            // panel was hidden cleanly via handlePanelBecameHidden. If somehow
+            // it's set, it'll be persisted on the next _switchToSession.
             this.currentSessionID = null;
             this.currentRemotePath = null;
-
-            console.log("Active session cleared");
+            this.showSelectSSHMessage();
+            return;
         }
 
-        // Clear any search state
+        await this._switchToSession(activeTab);
+    }
+
+    // Called when the Files sidebar panel becomes hidden (switching to
+    // Profiles, etc.). Persist current path into sessionStates so it
+    // survives until the panel is shown again.
+    async handlePanelBecameHidden() {
+        this.isActivePanel = false;
+
         if (this.liveSearch) {
+            this.liveSearch.disable();
             this.liveSearch.clearSearch();
         }
 
-        // Clear any UI classes that might interfere with other views
+        this._persistCurrentSession();
+
+        // Clear active reference so any stray events arriving while hidden
+        // don't operate on stale UI. Per-session state lives in sessionStates.
+        this.currentSessionID = null;
+        this.currentRemotePath = null;
+
+        // Reset sidebar content classes so other panels render cleanly.
         const sidebarContent = document.getElementById("sidebar-content");
         if (sidebarContent) {
             sidebarContent.className = "";
-            console.log("Cleared sidebar content classes");
         }
-
-        // DON'T clear the view - keep the UI intact for faster restoration
-        console.log("NOT calling clearView() - keeping UI intact");
-        // this.clearView();
-        console.log("handlePanelBecameHidden completed");
+        // Intentionally don't clearView() — keeping the DOM lets us restore
+        // instantly when the user comes back.
     }
 
     // Handle active tab changes when panel is visible
     async handleActiveTabChanged(tabDetails) {
+        if (!this.isActivePanel) return;
+
         const { tab } = tabDetails;
-
-        console.log("handleActiveTabChanged called with tab:", tab);
-
-        // Only process if the panel is currently active
-        if (!this.isActivePanel) {
-            console.log("Panel not active, skipping tab change processing");
-            return;
-        }
-
-        console.log("Processing tab change for active panel");
-        console.log("New tab:", tab);
-        console.log("Tab type:", tab?.connectionType);
-        console.log("Tab status:", tab?.status);
-
-        // Check if we have a valid SSH tab
-        if (
-            !tab ||
-            tab.connectionType !== "ssh" ||
-            tab.status !== "connected"
-        ) {
-            console.log("No SSH tab or not connected");
-
-            // Clean up current session but keep background intact
+        if (!this._isUsableSSHTab(tab)) {
+            // Save where we were before showing the placeholder so the user
+            // can return to that exact path by switching back to the SSH tab.
+            this._persistCurrentSession();
             this.currentSessionID = null;
             this.currentRemotePath = null;
-
             this.showSelectSSHMessage();
             return;
         }
 
-        // If this is the same session as our current or background, don't reinitialize
-        if (
-            this.currentSessionID === tab.sessionId ||
-            this.backgroundSessionID === tab.sessionId
-        ) {
-            console.log("Same session, no reinitialization needed");
-
-            // If we have a background session for this tab, restore it
-            if (this.backgroundSessionID === tab.sessionId) {
-                console.log("Restoring from background session");
-                this.currentSessionID = this.backgroundSessionID;
-                this.currentRemotePath = this.backgroundRemotePath || ".";
-
-                // Re-render if needed
-                await this.loadDirectoryContent(this.currentRemotePath);
-
-                // Update history count for the new tab
-                await this.updateHistoryButtonCount();
-            }
-
-            return;
-        }
-
-        console.log("Different session, initializing new connection");
-
-        // Move current session to background if it exists and is different
-        if (this.currentSessionID && this.currentSessionID !== tab.sessionId) {
-            console.log("Moving current session to background");
-            this.backgroundSessionID = this.currentSessionID;
-            this.backgroundRemotePath = this.currentRemotePath;
-        }
-
-        // Initialize for the new SSH session
-        try {
-            await this.initializeForSSHSession(tab);
-
-            // Update history count for the new tab
-            await this.updateHistoryButtonCount();
-        } catch (error) {
-            console.error(
-                "Failed to initialize for new SSH session:",
-                error,
-            );
-            this.showErrorState(`Failed to initialize: ${error.message}`);
-        }
+        await this._switchToSession(tab);
     }
 
     async initializeForSSHSession(tab) {
@@ -1107,6 +1054,12 @@ export class RemoteExplorerManager {
             this.updateBreadcrumbs(remotePath);
             this.renderFileList(processedFiles);
             console.log("Fresh content rendered successfully");
+
+            // Push the new path to the backend tab record so it survives a
+            // restart. We only push for the foreground tab — background
+            // sessions reload via _switchToSession which handles their state
+            // through sessionStates.
+            this._pushSessionStateToBackend();
         } catch (error) {
             console.error("Failed to load directory:", error);
             console.error("Error details:", {
@@ -1464,32 +1417,44 @@ export class RemoteExplorerManager {
     }
 
     handleTabStatusUpdate(data) {
-        if (!data || !data.tabId) {
-            return;
-        }
+        if (!data || !data.tabId) return;
 
         const status = data.status;
+        const tab = this.tabsManager?.getTabById?.(data.tabId);
+        if (!tab) return;
 
-        // If a tab disconnects/fails and it's our current session, clear the view
+        // On disconnect/fail/hang: drop the per-session state so a fresh
+        // reconnect starts at the remote home (the old path may not exist
+        // anymore on the new connection). If this was the foreground tab,
+        // also clear the view.
         if (
             status === "disconnected" ||
             status === "failed" ||
             status === "hanging"
         ) {
-            // Get the session ID for this tab
-            const tab = this.tabsManager?.getTabById?.(data.tabId);
-            if (tab && tab.sessionId === this.currentSessionID) {
-                console.log(
-                    "Remote Explorer: Session disconnected, clearing view",
-                );
-                // Clear the current session so reconnection will trigger refresh
+            this._dropSessionState(tab.sessionId);
+            if (tab.sessionId === this.currentSessionID) {
                 this.currentSessionID = null;
                 this.currentRemotePath = null;
-
-                // Show the placeholder message
                 if (this.isActivePanel) {
                     this.showSelectSSHMessage();
                 }
+            }
+            return;
+        }
+
+        // On connect: if the panel is active and the tab whose status just
+        // flipped is the active tab, switch to it now. Without this, a tab
+        // whose connection completes while the file panel is showing the
+        // "select an SSH tab" placeholder stays on the placeholder until the
+        // user manually switches tabs away and back. Covers initial-launch
+        // restore-while-connecting and reconnect flows.
+        if (status === "connected" && this.isActivePanel) {
+            const activeTab = this.tabsManager?.getActiveTab?.();
+            if (activeTab && activeTab.id === tab.id && this.currentSessionID !== tab.sessionId) {
+                this._switchToSession(tab).catch((err) => {
+                    console.warn("Auto-switch on connected status failed:", err);
+                });
             }
         }
     }
@@ -1500,113 +1465,39 @@ export class RemoteExplorerManager {
             return;
         }
 
-        console.log(
-            "Remote Explorer: SFTP reconnected for session:",
-            data.sessionId,
-        );
+        // Reconnect always means "this session's old SFTP client is gone and
+        // the path it was at may not be valid anymore" — drop saved state so
+        // the next switch-in starts fresh from remote home. (Don't unconditionally
+        // overwrite a sibling tab's state, which the old code did.)
+        this._dropSessionState(data.sessionId);
 
-        // Update background session if this is a reconnection
-        this.backgroundSessionID = data.sessionId;
+        // If the panel is hidden or we're showing a different session, do
+        // nothing — the next time the user switches to this session,
+        // _switchToSession will initialize it freshly via the home path.
+        if (!this.isActivePanel) return;
+        if (this.currentSessionID && this.currentSessionID !== data.sessionId) return;
 
-        // If the file manager panel is not active, we're done (will load when panel activates)
-        if (!this.isActivePanel) {
-            return;
-        }
-
-        // If the reconnected session is the currently displayed one OR we don't have a session, refresh
-        if (
-            this.currentSessionID === data.sessionId ||
-            !this.currentSessionID
-        ) {
-            // Set this as the current session
+        // Reconnect for the foreground session: re-init from remote home.
+        try {
             this.currentSessionID = data.sessionId;
-
-            // Refresh the current directory to show files again
-            if (this.currentRemotePath && this.currentRemotePath !== ".") {
-                try {
-                    console.log(
-                        "Refreshing current path:",
-                        this.currentRemotePath,
+            let startPath = ".";
+            try {
+                const workingDir =
+                    await window.go.main.App.GetRemoteWorkingDirectory(
+                        data.sessionId,
                     );
-                    await this.loadDirectory(this.currentRemotePath);
-                    showNotification("File manager reconnected", "success");
-                } catch (err) {
-                    console.error("Failed to refresh after reconnection:", err);
-                    // Fall back to working directory
-                    try {
-                        console.log("Falling back to working directory");
-                        let startPath = ".";
-                        try {
-                            const workingDir =
-                                await window.go.main.App.GetRemoteWorkingDirectory(
-                                    data.sessionId,
-                                );
-                            if (workingDir && workingDir.trim()) {
-                                startPath = workingDir.trim();
-                            }
-                        } catch (error) {
-                            console.warn(
-                                "Failed to get working directory:",
-                                error,
-                            );
-                        }
-
-                        this.currentRemotePath = startPath;
-                        await this.loadDirectoryContent(startPath);
-                        showNotification("File manager reconnected", "success");
-                    } catch (err2) {
-                        console.error(
-                            "Failed to initialize working directory:",
-                            err2,
-                        );
-                        showNotification(
-                            "Failed to reconnect file manager",
-                            "error",
-                        );
-                    }
+                if (workingDir && workingDir.trim()) {
+                    startPath = workingDir.trim();
                 }
-            } else {
-                // No path set yet, initialize from home/working directory
-                try {
-                    console.log("Initializing from working directory");
-                    // Try to get the current working directory
-                    let startPath = ".";
-                    try {
-                        const workingDir =
-                            await window.go.main.App.GetRemoteWorkingDirectory(
-                                data.sessionId,
-                            );
-                        if (workingDir && workingDir.trim()) {
-                            startPath = workingDir.trim();
-                            console.log(
-                                `Resolved working directory to: ${startPath}`,
-                            );
-                        }
-                    } catch (error) {
-                        console.warn(
-                            "Failed to get working directory, using '.':",
-                            error,
-                        );
-                    }
-
-                    this.currentRemotePath = startPath;
-                    await this.loadDirectoryContent(startPath);
-                    showNotification("File manager reconnected", "success");
-                } catch (err) {
-                    console.error(
-                        "Failed to initialize after reconnection:",
-                        err,
-                    );
-                    showNotification(
-                        "Failed to reconnect file manager",
-                        "error",
-                    );
-                }
+            } catch (error) {
+                console.warn("Failed to get working directory:", error);
             }
-        } else {
-            console.log(
-                "Reconnected session is different from current, ignoring",
-            );
+            this.currentRemotePath = startPath;
+            await this.loadDirectoryContent(startPath);
+            showNotification("File manager reconnected", "success");
+        } catch (err) {
+            console.error("Failed to refresh after reconnection:", err);
+            showNotification("Failed to reconnect file manager", "error");
         }
     }
 
@@ -2072,22 +1963,46 @@ export class RemoteExplorerManager {
 
     showSelectSSHMessage() {
         const sidebarContent = document.getElementById("sidebar-content");
-        if (sidebarContent) {
-            sidebarContent.innerHTML = `
-                <div class="remote-explorer-placeholder">
-                    <div class="placeholder-icon">
-                        <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" style="color: var(--text-secondary);">
-                            <path d="M10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z"/>
-                            <path d="M4,8V18H20V8H4M6,10H8V12H6V10M10,10H18V12H10V10M6,14H8V16H6V14M10,14H18V16H10V14Z"/>
-                        </svg>
-                    </div>
-                    <div class="placeholder-title">Remote File Explorer</div>
-                    <div class="placeholder-message">
-                        Select a connected SSH tab to browse remote files
-                    </div>
-                </div>
-            `;
+        if (!sidebarContent) return;
+
+        // Tailor the message to what's actually wrong so the user understands
+        // why the panel is empty: no tab selected, a local tab, or an SSH tab
+        // in some non-connected state.
+        const activeTab = this.tabsManager?.getActiveTab?.();
+        let message = "Open or select an SSH tab to browse remote files";
+        if (activeTab) {
+            if (activeTab.connectionType !== "ssh") {
+                message = "The current tab is a local shell — switch to an SSH tab to browse remote files";
+            } else {
+                switch (activeTab.status) {
+                    case "connecting":
+                        message = "Connecting to remote host…";
+                        break;
+                    case "disconnected":
+                        message = "This SSH tab is disconnected. Press Enter in the terminal to reconnect.";
+                        break;
+                    case "failed":
+                        message = "This SSH tab failed to connect. Press Enter in the terminal to retry.";
+                        break;
+                    case "hanging":
+                        message = "This SSH connection is unresponsive. Press Enter in the terminal to reconnect.";
+                        break;
+                }
+            }
         }
+
+        sidebarContent.innerHTML = `
+            <div class="remote-explorer-placeholder">
+                <div class="placeholder-icon">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" style="color: var(--text-secondary);">
+                        <path d="M10,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z"/>
+                        <path d="M4,8V18H20V8H4M6,10H8V12H6V10M10,10H18V12H10V10M6,14H8V16H6V14M10,14H18V16H10V14Z"/>
+                    </svg>
+                </div>
+                <div class="placeholder-title">Remote File Explorer</div>
+                <div class="placeholder-message">${message}</div>
+            </div>
+        `;
     }
 
     clearView() {
@@ -2570,24 +2485,25 @@ export class RemoteExplorerManager {
     async forceCleanup() {
         console.log("Remote Explorer: Force cleanup");
 
-        if (this.currentSessionID) {
-            await this.cleanupSFTPSession(this.currentSessionID);
-            this.currentSessionID = null;
+        // Tear down every backend SFTP client we've ever opened.
+        const sessionIDs = new Set(this.sessionStates.keys());
+        if (this.currentSessionID) sessionIDs.add(this.currentSessionID);
+        for (const id of sessionIDs) {
+            try {
+                await this.cleanupSFTPSession(id);
+            } catch (e) {
+                console.warn(`SFTP cleanup failed for ${id}:`, e);
+            }
         }
 
-        if (this.backgroundSessionID) {
-            await this.cleanupSFTPSession(this.backgroundSessionID);
-            this.backgroundSessionID = null;
-            this.backgroundRemotePath = null;
-        }
-
-        // Cleanup live search
         if (this.liveSearch) {
             this.liveSearch.destroy();
             this.liveSearch = null;
         }
 
+        this.currentSessionID = null;
         this.currentRemotePath = null;
+        this.sessionStates.clear();
         this.fileCache.clear();
         this.clearView();
     }

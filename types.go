@@ -340,6 +340,13 @@ type Tab struct {
 	Created        time.Time  `json:"created"`
 	Status         string     `json:"status"`                 // "connecting", "connected", "failed", "disconnected"
 	ErrorMessage   string     `json:"errorMessage,omitempty"` // Store error details for failed connections
+
+	// Runtime state pushed from the frontend, captured into LastOpenTabs at
+	// shutdown when RestoreTabsOnLaunch is enabled. None of this is part of
+	// the tab's identity — it's "where the user was inside this tab" so the
+	// UI can return to that state on next launch or tab switch.
+	LastFileManagerPath string `json:"lastFileManagerPath,omitempty"` // Last directory shown in the SFTP file manager
+	LastSidebarView     string `json:"lastSidebarView,omitempty"`     // "profiles" | "files" — last sidebar view shown for this tab
 }
 
 // Validate implements the Validator interface for Tab

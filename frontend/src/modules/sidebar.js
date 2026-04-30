@@ -27,6 +27,14 @@ export class SidebarManager {
         this.iconSelectorListeners = [];
         this.virtualFolderClickHandler = null; // For proper event listener cleanup
         this.profileLiveSearch = null; // Live search for profiles
+
+        // Monotonically-increasing request id used to invalidate any pending
+        // async work from a prior show*View() call. showProfilesView kicks off
+        // an async loadProfileTree+render that, if it resolves AFTER the user
+        // has already switched to the Files view, would overwrite the file
+        // panel's DOM. Each show*View bumps the id; async continuations bail
+        // when their captured id is no longer current.
+        this._viewRequestId = 0;
     }
 
     async initSidebar() {
@@ -1784,46 +1792,44 @@ export class SidebarManager {
 
     // New view methods for activity bar integration
     showProfilesView() {
-        console.log('📋 SidebarManager: Showing profiles view (isReadyForLiveSearch:', this.isReadyForLiveSearch, ')');
+        const requestId = ++this._viewRequestId;
+        console.log('📋 SidebarManager: Showing profiles view (req=' + requestId + ', isReadyForLiveSearch:', this.isReadyForLiveSearch, ')');
         const sidebarContent = document.getElementById('sidebar-content');
         if (!sidebarContent) {
             console.error('📋 SidebarManager: Sidebar content element not found');
             return;
         }
-        
+
         // Check if profiles view is already showing
         const hasProfileContent = sidebarContent.querySelector('.tree-item[data-type="profile"], .virtual-profile[data-type="profile"]');
         const hasFilesContent = sidebarContent.querySelector('.remote-explorer-container, .remote-explorer-placeholder');
-        
-        console.log('📋 SidebarManager: Current content check - hasProfileContent:', !!hasProfileContent, 'hasFilesContent:', !!hasFilesContent);
-        
+
         // If we already have profile content and no files content, just ensure live search is set up
         if (hasProfileContent && !hasFilesContent && this.isReadyForLiveSearch) {
-            console.log('📋 SidebarManager: Profiles view already showing, ensuring live search is active');
             this.setupLiveSearchForCurrentContent();
             return;
         }
-        
+
         // Clear any existing content first to prevent mixing
         sidebarContent.innerHTML = '';
         sidebarContent.className = ''; // Clear any classes from other views
-        console.log('📋 SidebarManager: Sidebar content cleared');
-        
+
         // Force reload profile tree data to ensure it's fresh (including virtual folders)
         this.loadProfileTree().then(() => {
-            // Render the profile tree
+            // Bail if the user (or per-tab restore) switched to a different
+            // view while we were loading. Without this guard, this render
+            // overwrites the file panel's DOM and the user sees the activity
+            // bar showing Files but the profile tree below it.
+            if (this._viewRequestId !== requestId) {
+                console.log('📋 SidebarManager: profiles render req=' + requestId + ' is stale (current=' + this._viewRequestId + '), skipping');
+                return;
+            }
             this.renderProfileTree();
-            console.log('📋 SidebarManager: Profile tree rendered');
-            
-            // Initialize/re-initialize and enable profile live search after rendering
             this.setupLiveSearchForCurrentContent();
-            
         }).catch(error => {
+            if (this._viewRequestId !== requestId) return;
             console.error('📋 SidebarManager: Failed to load profile tree:', error);
-            // Render with existing data as fallback
             this.renderProfileTree();
-            
-            // Still try to setup interactions and search
             this.setupLiveSearchForCurrentContent();
         });
     }
@@ -1848,8 +1854,11 @@ export class SidebarManager {
     }
 
     showFilesView() {
-        console.log('📁 SidebarManager: Showing files view');
-        
+        // Bumping the request id invalidates any pending profile-tree render
+        // from a prior showProfilesView call so it can't stomp our file panel.
+        ++this._viewRequestId;
+        console.log('📁 SidebarManager: Showing files view (req=' + this._viewRequestId + ')');
+
         // Disable profile live search when switching to files view
         if (this.profileLiveSearch) {
             this.profileLiveSearch.disable();

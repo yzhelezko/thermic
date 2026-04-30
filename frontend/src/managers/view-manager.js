@@ -64,7 +64,31 @@ export class ViewManager {
         
         // Update state
         this.currentView = viewName;
-        
+
+        // Persist this preference on the active tab so it survives both
+        // tab switches (read by tabs.js:switchToTab) and app restart
+        // (captured into LastOpenTabs at shutdown).
+        //
+        // Critical: update BOTH the backend Tab struct AND the frontend's
+        // local tab cache. The frontend never re-fetches tabs after startup,
+        // so without the local mutation tabs.js would keep reading whatever
+        // lastSidebarView was at launch (usually undefined) and the per-tab
+        // restore-on-switch would silently no-op.
+        const tabsManager = window.thermicApp?.tabsManager;
+        const activeTabId = tabsManager?.activeTabId;
+        if (activeTabId) {
+            const localTab = tabsManager.tabs?.get(activeTabId);
+            if (localTab) {
+                localTab.lastSidebarView = viewName;
+            }
+            const setView = window.go?.main?.App?.SetTabSidebarView;
+            if (typeof setView === 'function') {
+                setView(activeTabId, viewName).catch((err) => {
+                    console.warn('SetTabSidebarView failed:', err);
+                });
+            }
+        }
+
         console.log(`✅ View switched from ${previousView} to ${viewName}`);
     }
     

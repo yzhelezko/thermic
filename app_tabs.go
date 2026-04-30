@@ -534,11 +534,30 @@ func (a *App) captureOpenTabsForRestore() {
 		}
 	}
 
+	activeTabID := a.terminal.activeTabId
 	saved := make([]SavedTab, 0, len(tabs))
 	for _, tab := range tabs {
-		entry := SavedTab{ProfileID: tab.ProfileID}
+		entry := SavedTab{
+			ProfileID:           tab.ProfileID,
+			Title:               tab.Title,
+			LastFileManagerPath: tab.LastFileManagerPath,
+			LastSidebarView:     tab.LastSidebarView,
+			IsActive:            tab.ID == activeTabID,
+		}
+		// Identity preference: ProfileID (resolves to current profile data on
+		// restore, including any updates) > raw SSHConfig (ad-hoc SSH tab) >
+		// Shell (local).
 		if tab.ProfileID == "" {
-			entry.Shell = tab.Shell
+			if tab.ConnectionType == ConnectionTypeSSH && tab.SSHConfig != nil {
+				// Strip password — we don't want plaintext credentials in
+				// config.yaml. The user will be prompted on reconnect, or
+				// agent/key auth will pick up.
+				cfgCopy := *tab.SSHConfig
+				cfgCopy.Password = ""
+				entry.SSHConfig = &cfgCopy
+			} else {
+				entry.Shell = tab.Shell
+			}
 		}
 		saved = append(saved, entry)
 	}
@@ -572,33 +591,92 @@ func (a *App) RestoreTabs() ([]*Tab, error) {
 	}
 
 	restored := make([]*Tab, 0, len(saved))
+	activeIdx := -1
 	for _, entry := range saved {
 		var tab *Tab
 		var err error
-		if entry.ProfileID != "" {
+		switch {
+		case entry.ProfileID != "":
 			tab, err = a.CreateTabFromProfile(entry.ProfileID)
-		} else if entry.Shell != "" {
+		case entry.SSHConfig != nil:
+			// Ad-hoc SSH tab — no profile to resolve. Password was stripped
+			// on save, so auth will fall back to agent/keys. If neither is
+			// available the connection will fail and the user can supply a
+			// password through the normal flow.
+			tab, err = a.CreateTab("", entry.SSHConfig)
+		case entry.Shell != "":
 			tab, err = a.CreateTab(entry.Shell, nil)
-		} else {
+		default:
 			continue
 		}
 		if err != nil {
 			fmt.Printf("Skipping tab restore (%+v): %v\n", entry, err)
 			continue
 		}
+
+		// Restore runtime hints. Custom title overrides the default that
+		// CreateTab* generated; path/view are pushed back to the frontend so
+		// it can re-seed the file manager state map and sidebar view.
+		a.terminal.mutex.Lock()
+		if entry.Title != "" {
+			tab.Title = entry.Title
+		}
+		tab.LastFileManagerPath = entry.LastFileManagerPath
+		tab.LastSidebarView = entry.LastSidebarView
+		a.terminal.mutex.Unlock()
+
+		if entry.IsActive && activeIdx < 0 {
+			activeIdx = len(restored)
+		}
 		restored = append(restored, tab)
 	}
 
-	// Mark first as active if any
+	// Pick which tab to mark active. Prefer the one flagged in the snapshot;
+	// fall back to the first restored tab if no flag survived (older snapshot
+	// or all entries failed to restore).
 	if len(restored) > 0 {
+		if activeIdx < 0 {
+			activeIdx = 0
+		}
 		a.terminal.mutex.Lock()
-		a.terminal.activeTabId = restored[0].ID
-		restored[0].IsActive = true
+		a.terminal.activeTabId = restored[activeIdx].ID
+		restored[activeIdx].IsActive = true
 		a.terminal.mutex.Unlock()
 	}
 
 	fmt.Printf("Restored %d tab(s) from previous session.\n", len(restored))
 	return restored, nil
+}
+
+// SetTabFileManagerPath records the last directory the SFTP file manager was
+// showing for the given tab. Called from the frontend whenever the user
+// navigates so the value is fresh when shutdown captures the snapshot.
+// Pushed lazily — failure to update is non-fatal (worst case the tab restores
+// to the remote home next launch).
+func (a *App) SetTabFileManagerPath(tabID, path string) error {
+	a.terminal.mutex.Lock()
+	defer a.terminal.mutex.Unlock()
+	tab, exists := a.terminal.tabs[tabID]
+	if !exists {
+		return fmt.Errorf("tab %s not found", tabID)
+	}
+	tab.LastFileManagerPath = path
+	return nil
+}
+
+// SetTabSidebarView records which sidebar panel ("profiles" | "files") was
+// last shown while this tab was active. Used both for cross-restart
+// restoration and for per-tab "remember the panel I was on" behavior on tab
+// switches inside a single session.
+func (a *App) SetTabSidebarView(tabID, view string) error {
+	a.terminal.mutex.Lock()
+	defer a.terminal.mutex.Unlock()
+	tab, exists := a.terminal.tabs[tabID]
+	if !exists {
+		return fmt.Errorf("tab %s not found", tabID)
+	}
+	tab.LastSidebarView = view
+	return nil
 }
 
 // CreateTabFromProfile creates a new tab using a profile

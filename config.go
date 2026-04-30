@@ -117,9 +117,19 @@ const (
 )
 
 // SavedTab is a minimal snapshot used to restore tabs on next launch.
+// Identity comes from ProfileID, Shell, or SSHConfig (in that order of
+// preference); the rest are runtime hints the frontend uses to put the user
+// back where they were (custom title, SFTP path, last sidebar panel) and
+// which tab to focus.
 type SavedTab struct {
-	ProfileID string `yaml:"profile_id,omitempty"`
-	Shell     string `yaml:"shell,omitempty"`
+	ProfileID string     `yaml:"profile_id,omitempty"`
+	Shell     string     `yaml:"shell,omitempty"`
+	SSHConfig *SSHConfig `yaml:"ssh_config,omitempty"` // Ad-hoc SSH tabs (no profile). Password is stripped before save.
+
+	Title               string `yaml:"title,omitempty"`
+	LastFileManagerPath string `yaml:"last_file_manager_path,omitempty"`
+	LastSidebarView     string `yaml:"last_sidebar_view,omitempty"`
+	IsActive            bool   `yaml:"is_active,omitempty"`
 }
 
 // AppConfig holds the application configuration

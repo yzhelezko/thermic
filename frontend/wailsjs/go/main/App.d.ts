@@ -315,6 +315,10 @@ export function SetFolderExpandedAPI(arg1:string,arg2:boolean):Promise<void>;
 
 export function SetHotkey(arg1:string,arg2:string):Promise<void>;
 
+export function SetTabFileManagerPath(arg1:string,arg2:string):Promise<void>;
+
+export function SetTabSidebarView(arg1:string,arg2:string):Promise<void>;
+
 export function SetUpdateRate(arg1:string,arg2:number):Promise<void>;
 
 export function ShowMessageDialog(arg1:string,arg2:string):Promise<void>;
