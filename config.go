@@ -12,6 +12,7 @@ const (
 	DefaultSidebarWidth    = 250
 	DefaultTheme           = "dark" // "dark", "light", or "system"
 	DefaultScrollbackLines = 10000
+	DefaultUIScale         = 100 // 100% (no zoom)
 
 	MinWindowWidth     = 800
 	MinWindowHeight    = 600
@@ -21,6 +22,8 @@ const (
 	MaxWindowHeight    = 10000 // Arbitrary large value for upper bound
 	MinScrollbackLines = 100
 	MaxScrollbackLines = 100000
+	MinUIScale         = 50  // 50% — smallest allowed zoom
+	MaxUIScale         = 300 // 300% — largest allowed zoom
 )
 
 // ThemeSystem represents the system theme preference.
@@ -98,6 +101,8 @@ type AppConfig struct {
 	// Terminal settings
 	ScrollbackLines            int  `yaml:"scrollback_lines"`               // Number of lines to keep in scrollback buffer
 	OpenLinksInExternalBrowser bool `yaml:"open_links_in_external_browser"` // Open URLs in external browser instead of in-app
+	// Appearance settings
+	UIScale int `yaml:"ui_scale"` // UI zoom level as a percentage (100 = 100%)
 	// AI settings
 	AI AIConfig `yaml:"ai"` // AI configuration
 	// SFTP settings
@@ -138,6 +143,8 @@ func DefaultConfig() *AppConfig {
 		// Default terminal settings
 		ScrollbackLines:            DefaultScrollbackLines,
 		OpenLinksInExternalBrowser: true, // Default to opening links in external browser
+		// Default appearance settings
+		UIScale: DefaultUIScale,
 		// Default AI settings
 		AI: AIConfig{
 			Enabled:  false,
@@ -204,6 +211,9 @@ func (c *AppConfig) Validate() error {
 	}
 	if c.ScrollbackLines < MinScrollbackLines || c.ScrollbackLines > MaxScrollbackLines {
 		return fmt.Errorf("scrollback lines %d is out of range (%d-%d)", c.ScrollbackLines, MinScrollbackLines, MaxScrollbackLines)
+	}
+	if c.UIScale != 0 && (c.UIScale < MinUIScale || c.UIScale > MaxUIScale) {
+		return fmt.Errorf("UI scale %d is out of range (%d-%d)", c.UIScale, MinUIScale, MaxUIScale)
 	}
 
 	validTheme := false

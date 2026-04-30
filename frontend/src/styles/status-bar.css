@@ -44,6 +44,41 @@
     height: 100%;
 }
 
+/* UI scale indicator — visible only when zoom != 100%; click resets. */
+.ui-scale-indicator {
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 8px;
+    margin: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 12px;
+    line-height: 22px;
+    cursor: pointer;
+    transition: background-color 0.1s ease;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+.ui-scale-indicator[hidden] {
+    display: none;
+}
+
+.ui-scale-indicator:hover {
+    background-color: rgba(255, 255, 255, 0.18);
+}
+
+.ui-scale-indicator:active {
+    background-color: rgba(255, 255, 255, 0.28);
+}
+
+.ui-scale-indicator .ui-scale-value {
+    pointer-events: none;
+}
+
 /* Connection status indicators */
 #status-info {
     font-size: 12px;

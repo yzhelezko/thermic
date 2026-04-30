@@ -125,6 +125,9 @@ export function createStatusBarTemplate() {
             <span id="selected-shell">PowerShell</span>
         </div>
         <div class="status-right">
+            <button id="ui-scale-indicator" class="ui-scale-indicator" type="button" title="Reset zoom to 100%" hidden>
+                <span class="ui-scale-value">100%</span>
+            </button>
             <div class="status-monitoring" id="status-monitoring">
                 <span id="platform-info">Loading...</span>
                 <span data-stat="system" data-metrics="cpu,memory,load,disk,uptime" title="System Resources - Hover for detailed graphs">CPU: 0% RAM: 0Mb L: 0.0</span>
@@ -555,6 +558,17 @@ export function createAppearanceSettingsContent() {
                 Layout & Spacing
             </div>
             <div class="settings-list">
+                <div class="setting-item">
+                    <div class="setting-item-content">
+                        <div class="setting-item-info">
+                            <div class="setting-item-title">Interface Zoom</div>
+                            <div class="setting-item-description">Scale the entire UI. Shortcuts: Ctrl/Cmd +, Ctrl/Cmd -, Ctrl/Cmd 0 to reset.</div>
+                        </div>
+                        <div class="setting-item-control">
+                            <input type="number" id="ui-scale-input" class="modern-input" value="100" min="50" max="300" step="10">
+                        </div>
+                    </div>
+                </div>
                 <div class="setting-item">
                     <div class="setting-item-content">
                         <div class="setting-item-info">

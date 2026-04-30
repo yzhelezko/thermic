@@ -12,10 +12,38 @@ export class GraphModal {
         this.hideTimeout = null;
         this.closeCallback = null;
         this.isInitialLoad = false;
-        
+        this.lastTarget = null;
+        this.repositionPending = false;
+        this.scheduleReposition = () => {
+            if (!this.isVisible || !this.lastTarget) return;
+            if (this.repositionPending) return;
+            this.repositionPending = true;
+            requestAnimationFrame(() => {
+                this.repositionPending = false;
+                if (this.isVisible && this.lastTarget) {
+                    this.position(this.lastTarget);
+                }
+            });
+        };
+        // window.resize covers grow/shrink in most engines.
+        window.addEventListener('resize', this.scheduleReposition);
+        // ResizeObserver on documentElement catches platform cases where window.resize is
+        // delayed or skipped (e.g. some maximize transitions in WebKit2GTK and WKWebView).
+        if (typeof ResizeObserver !== 'undefined') {
+            this.docResizeObserver = new ResizeObserver(this.scheduleReposition);
+            this.docResizeObserver.observe(document.documentElement);
+        }
+
         this.createModal();
         this.setupThemeListener();
         this.setupClickOutside();
+
+        // ResizeObserver on the modal itself catches its own height changes (CSS media query
+        // breakpoints, content reflow) — when modal grows on a fullscreen swap, reposition.
+        if (typeof ResizeObserver !== 'undefined' && this.modal) {
+            this.modalResizeObserver = new ResizeObserver(this.scheduleReposition);
+            this.modalResizeObserver.observe(this.modal);
+        }
     }
 
     createModal() {
@@ -139,21 +167,99 @@ export class GraphModal {
             };
             document.addEventListener('click', this.clickHandler);
         }
-        
+
         // Prevent modal from closing when clicking inside it
         this.modal.addEventListener('click', (e) => {
             e.stopPropagation();
         });
-        
+
         // Cancel hide when mouse enters modal
         this.modal.addEventListener('mouseenter', () => {
             this.cancelHide();
         });
-        
+
         // Start hide delay when mouse leaves modal
         this.modal.addEventListener('mouseleave', () => {
             this.hideWithDelay(300);
         });
+
+        // Auto-close when the cursor leaves the window.
+        //
+        // Three engines, three failure modes:
+        //   • X11: `mouseout` with relatedTarget=null fires on viewport leave. Easy.
+        //   • Wayland (XWayland under WebKit2GTK): GTK doesn't always translate
+        //     Wayland `pointer.leave` into a DOM event, and `:hover` stays stuck on the
+        //     last element. We get NO signal that the pointer left.
+        //   • Anywhere: `:hover` on documentElement flipping false is reliable when it
+        //     happens, so we use it as a fast path.
+        //
+        // The Wayland workaround: track the cursor's last position inside the window.
+        // If we go idle (no mouse events) for a few hundred ms while the cursor was
+        // last seen near a viewport edge, treat that as a window-leave. If the cursor
+        // is parked in the middle (user reading the modal), we don't close — they can
+        // jiggle the mouse to keep it open if needed.
+
+        if (!this.mouseTracker) {
+            this.lastMouseX = -1;
+            this.lastMouseY = -1;
+            this.lastMouseAt = 0;
+            this.mouseTracker = (e) => {
+                this.lastMouseX = e.clientX;
+                this.lastMouseY = e.clientY;
+                this.lastMouseAt = Date.now();
+            };
+            // mousemove + mouseover give us the broadest coverage: any movement or
+            // entering a new element resets the timer.
+            document.addEventListener('mousemove', this.mouseTracker, true);
+            document.addEventListener('mouseover', this.mouseTracker, true);
+        }
+
+        if (!this.hoverPollInterval) {
+            this.hoverPollInterval = setInterval(() => {
+                if (!this.isVisible) return;
+
+                // Fast path (X11, Chromium, WKWebView): :hover flips false when pointer
+                // leaves the window.
+                try {
+                    if (!document.documentElement.matches(':hover')) {
+                        this.hideWithDelay(150);
+                        return;
+                    }
+                } catch (_) { /* ignore */ }
+
+                // Wayland fallback: cursor went idle near a viewport edge.
+                if (this.lastMouseX < 0 || this.lastMouseY < 0) return;
+                const idleFor = Date.now() - this.lastMouseAt;
+                if (idleFor < 350) return;
+
+                const W = window.innerWidth;
+                const H = window.innerHeight;
+                const edge = 12; // px tolerance for "the cursor was at the edge"
+                const nearEdge =
+                    this.lastMouseX <= edge ||
+                    this.lastMouseY <= edge ||
+                    this.lastMouseX >= W - edge ||
+                    this.lastMouseY >= H - edge;
+
+                if (nearEdge) {
+                    this.hideWithDelay(150);
+                }
+            }, 120);
+        }
+
+        if (!this.documentLeaveHandler) {
+            this.documentLeaveHandler = (e) => {
+                if (e.relatedTarget !== null) return;
+                if (!this.isVisible) return;
+                this.hideWithDelay(150);
+            };
+            document.documentElement.addEventListener('mouseout', this.documentLeaveHandler);
+
+            this.windowBlurHandler = () => {
+                if (this.isVisible) this.hideWithDelay(150);
+            };
+            window.addEventListener('blur', this.windowBlurHandler);
+        }
     }
 
     show(metric, targetElement, data, closeCallback) {
@@ -175,16 +281,17 @@ export class GraphModal {
         this.isMultiMetric = true; // Always multi-metric mode now
         
         this.isVisible = true;
-        
-        // Position modal above target element
-        this.position(targetElement);
-        
-        // Show modal
+        this.lastTarget = targetElement;
+
+        // Show modal first so we can measure its rendered size, then position it.
+        this.modal.style.visibility = 'hidden';
         this.modal.style.display = 'block';
-        
+        this.position(targetElement);
+        this.modal.style.visibility = '';
+
         // Update metadata displays
         this.updateMetadata();
-        
+
         // Draw all graphs
         this.draw();
     }
@@ -192,12 +299,13 @@ export class GraphModal {
     hide() {
         this.isVisible = false;
         this.modal.style.display = 'none';
-        
+        this.lastTarget = null;
+
         if (this.animationFrame) {
             cancelAnimationFrame(this.animationFrame);
             this.animationFrame = null;
         }
-        
+
         // Clear any pending hide timeout
         if (this.hideTimeout) {
             clearTimeout(this.hideTimeout);
@@ -231,38 +339,39 @@ export class GraphModal {
 
     position(targetElement) {
         if (!targetElement) return;
-        
+
         const rect = targetElement.getBoundingClientRect();
-        const modalHeight = 500; // Modal height with 3-column layout
-        const modalWidth = 900;
-        
-        // Position above the element, centered
-        let top = rect.top - modalHeight - 10;
-        let left = rect.left + (rect.width / 2) - (modalWidth / 2);
-        
-        // Ensure modal stays within viewport
-        if (top < 10) {
-            // If not enough space above, show below
-            top = rect.bottom + 10;
-        }
-        
-        // Keep modal within horizontal bounds
-        if (left < 10) {
-            left = 10;
-        } else if (left + modalWidth > window.innerWidth - 10) {
-            left = window.innerWidth - modalWidth - 10;
-        }
-        
-        // Keep modal within vertical bounds
-        if (top + modalHeight > window.innerHeight - 10) {
-            top = window.innerHeight - modalHeight - 10;
-        }
-        if (top < 10) {
-            top = 10;
-        }
-        
-        this.modal.style.top = `${top}px`;
-        this.modal.style.left = `${left}px`;
+        const margin = 10;
+        const viewportW = window.innerWidth;
+        const viewportH = window.innerHeight;
+
+        // Dock the modal above the target (status bar element) and center it horizontally
+        // in the viewport. The bottom is anchored to the target's top so the modal stays
+        // glued to the status bar regardless of viewport size or modal height.
+        //
+        // Sizing is bounded by inline max-* so the modal adapts as the window shrinks/grows
+        // and overflow scrolls inside instead of hanging off-screen.
+        //
+        // We avoid measuring `this.modal.getBoundingClientRect()` here on purpose: during
+        // window-resize transitions the modal's own rect lags a frame behind the new
+        // viewport, and feeding that stale value back into the math caused the modal to
+        // drift off-screen on maximize.
+
+        const availableHeight = Math.max(120, rect.top - margin * 2);
+        const availableWidth = Math.max(240, viewportW - margin * 2);
+        this.modal.style.maxHeight = `${availableHeight}px`;
+        this.modal.style.maxWidth = `${availableWidth}px`;
+
+        const bottom = Math.max(margin, viewportH - rect.top + margin);
+        this.modal.style.bottom = `${bottom}px`;
+
+        // Center horizontally using a viewport-relative anchor + transform. This needs no
+        // measurement of the modal itself: `left: 50%` plus `translateX(-50%)` always
+        // centers, no matter how wide the modal renders.
+        this.modal.style.left = '50%';
+        this.modal.style.right = 'auto';
+        this.modal.style.top = 'auto';
+        this.modal.style.transform = 'translateX(-50%)';
     }
 
     update(data) {
@@ -548,15 +657,51 @@ export class GraphModal {
             document.removeEventListener('click', this.clickHandler);
             this.clickHandler = null;
         }
-        
+
+        if (this.documentLeaveHandler) {
+            document.documentElement.removeEventListener('mouseout', this.documentLeaveHandler);
+            this.documentLeaveHandler = null;
+        }
+
+        if (this.hoverPollInterval) {
+            clearInterval(this.hoverPollInterval);
+            this.hoverPollInterval = null;
+        }
+
+        if (this.mouseTracker) {
+            document.removeEventListener('mousemove', this.mouseTracker, true);
+            document.removeEventListener('mouseover', this.mouseTracker, true);
+            this.mouseTracker = null;
+        }
+
+        if (this.windowBlurHandler) {
+            window.removeEventListener('blur', this.windowBlurHandler);
+            this.windowBlurHandler = null;
+        }
+
+        if (this.scheduleReposition) {
+            window.removeEventListener('resize', this.scheduleReposition);
+            this.scheduleReposition = null;
+        }
+
+        if (this.docResizeObserver) {
+            this.docResizeObserver.disconnect();
+            this.docResizeObserver = null;
+        }
+
+        if (this.modalResizeObserver) {
+            this.modalResizeObserver.disconnect();
+            this.modalResizeObserver = null;
+        }
+
         if (this.modal && this.modal.parentNode) {
             this.modal.parentNode.removeChild(this.modal);
         }
-        
+
         if (this.animationFrame) {
             cancelAnimationFrame(this.animationFrame);
         }
-        
+
         if (this.hideTimeout) {
             clearTimeout(this.hideTimeout);
             this.hideTimeout = null;

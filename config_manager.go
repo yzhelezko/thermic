@@ -473,6 +473,8 @@ func (c *SettingConfig) Update(a *App, value SettingValue) error {
 		a.config.config.ScrollbackLines = value.(int)
 	case "OpenLinksInExternalBrowser":
 		a.config.config.OpenLinksInExternalBrowser = value.(bool)
+	case "UIScale":
+		a.config.config.UIScale = value.(int)
 
 	// AI Configuration Fields
 	case "AI.Enabled":
@@ -689,6 +691,15 @@ var settingConfigs = map[string]*SettingConfig{
 		EventName:     "config:open-links-external-changed",
 		ConfigField:   "OpenLinksInExternalBrowser",
 	},
+	"UIScale": {
+		Name:          "UIScale",
+		Type:          SettingTypeInt,
+		Min:           intPtr(MinUIScale),
+		Max:           intPtr(MaxUIScale),
+		RequiresEvent: true,
+		EventName:     "config:ui-scale-changed",
+		ConfigField:   "UIScale",
+	},
 	// AI Configuration Settings
 	"AIEnabled": {
 		Name:         "AIEnabled",
@@ -802,6 +813,12 @@ func (a *App) ConfigGet(settingName string) (SettingValue, error) {
 		return a.config.config.ScrollbackLines, nil
 	case "OpenLinksInExternalBrowser":
 		return a.config.config.OpenLinksInExternalBrowser, nil
+	case "UIScale":
+		// Migrate zero-value (e.g. configs from before UIScale existed) to default.
+		if a.config.config.UIScale == 0 {
+			a.config.config.UIScale = DefaultUIScale
+		}
+		return a.config.config.UIScale, nil
 
 	// AI Configuration Settings
 	case "AIEnabled":
