@@ -166,28 +166,27 @@
     white-space: nowrap;
 }
 
-.tree-item-edit {
-    flex: 1;
-    background: var(--bg-primary);
-    border: 1px solid var(--accent-color);
-    border-radius: 3px;
-    padding: 2px 6px;
-    font-size: 12px;
-    color: var(--text-primary);
-    outline: none;
-}
-
-.tree-item-shell {
-    /* Shell-specific styles can be added here */
-}
-
-.tree-item-folder {
-    /* Folder-specific styles can be added here */
-}
-
 .tree-item.folder {
     font-weight: 500;
 }
+
+/* Per-profile accent stripe */
+.tree-item.has-accent {
+    position: relative;
+}
+
+.tree-item.has-accent::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 4px;
+    bottom: 4px;
+    width: 3px;
+    border-radius: 0 2px 2px 0;
+    background: var(--profile-accent, transparent);
+    pointer-events: none;
+}
+
 
 .tree-icon {
     width: 16px;
@@ -200,36 +199,6 @@
 
 .tree-indent {
     margin-left: 16px;
-}
-
-/* Enhanced Profile Management Styles */
-
-.profile-toolbar {
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--border-color);
-    background-color: var(--bg-tertiary);
-    display: flex;
-    gap: 8px;
-}
-
-.profile-action-btn {
-    background: var(--bg-quaternary);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    padding: 4px 8px;
-    font-size: 11px;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: all 0.15s ease;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-
-.profile-action-btn:hover {
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    border-color: var(--thermic-orange-muted);
 }
 
 .profile-tree {

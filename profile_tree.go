@@ -339,12 +339,12 @@ func (a *App) initializeVirtualFolders() {
 	}
 }
 
-// getVirtualFolderProfiles retrieves profiles for a virtual folder with filtering
+// getVirtualFolderProfiles retrieves profiles for a virtual folder with filtering.
+// Caller MUST hold a.profiles.mutex (read or write) — sync.RWMutex is not reentrant,
+// so locking again here would deadlock when a writer is queued.
+// Returns a non-nil slice so Wails serializes it as `[]`, not `null`.
 func (a *App) getVirtualFolderProfiles(vf *VirtualFolder) []*Profile {
-	var profiles []*Profile
-
-	a.profiles.mutex.RLock()
-	defer a.profiles.mutex.RUnlock()
+	profiles := make([]*Profile, 0)
 
 	for _, profile := range a.profiles.profiles {
 		switch vf.Filter.Type {

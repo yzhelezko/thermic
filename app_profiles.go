@@ -287,6 +287,13 @@ func (a *App) GetVirtualFolderProfilesAPI(folderID string) []*Profile {
 	return []*Profile{}
 }
 
+// RecordProfileUsageAPI bumps usageCount and lastUsed for the given profile.
+// Call this from the frontend after successfully launching a profile in a tab
+// so it shows up in the Recent and Most Used virtual folders.
+func (a *App) RecordProfileUsageAPI(profileID string) error {
+	return a.updateProfileUsage(profileID)
+}
+
 // Enhanced Profile APIs
 func (a *App) ToggleFavoriteAPI(profileID string) error {
 	a.profiles.mutex.Lock()

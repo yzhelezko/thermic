@@ -249,6 +249,8 @@ export function ReconnectTab(arg1:string):Promise<void>;
 
 export function RecordMetric(arg1:string,arg2:string,arg3:number):Promise<void>;
 
+export function RecordProfileUsageAPI(arg1:string):Promise<void>;
+
 export function RecordStats(arg1:string,arg2:Record<string, any>):Promise<void>;
 
 export function RenameRemotePath(arg1:string,arg2:string,arg3:string):Promise<void>;

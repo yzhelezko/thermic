@@ -1425,37 +1425,12 @@ export function createProfilePanelTemplate() {
         <div class="profile-panel-overlay" id="profile-panel-overlay">
             <div class="profile-panel">
                 <div class="profile-panel-header">
-                    <div class="profile-tabs-container">
-                        <button class="profile-tab active" data-tab="general">
-                            <span class="profile-tab-icon"><img src="./icons/edit.svg" class="svg-icon" alt="📝"></span>
-                            General
-                        </button>
-                        <button class="profile-tab" data-tab="connection">
-                            <span class="profile-tab-icon"><img src="./icons/link.svg" class="svg-icon" alt="🔗"></span>
-                            Connection
-                        </button>
-                        <button class="profile-tab" data-tab="settings">
-                            <span class="profile-tab-icon"><img src="./icons/settings.svg" class="svg-icon" alt="⚙️"></span>
-                            Settings
-                        </button>
-                    </div>
+                    <div class="profile-panel-title" id="profile-panel-title">Profile</div>
                     <button class="profile-panel-close" id="profile-panel-close">×</button>
                 </div>
                 <div class="profile-panel-content">
-                    <div class="profile-tab-pane active" id="profile-tab-general">
-                        <div class="profile-form" id="profile-form">
-                            <!-- Form content will be dynamically generated -->
-                        </div>
-                    </div>
-                    <div class="profile-tab-pane" id="profile-tab-connection">
-                        <div class="profile-connection-content">
-                            <!-- Connection settings will be here -->
-                        </div>
-                    </div>
-                    <div class="profile-tab-pane" id="profile-tab-settings">
-                        <div class="profile-settings-content">
-                            <!-- Profile-specific settings will be here -->
-                        </div>
+                    <div class="profile-form" id="profile-form">
+                        <!-- Form content will be dynamically generated -->
                     </div>
                 </div>
                 <div class="profile-panel-footer">
@@ -1625,214 +1600,39 @@ export function createProfileFormTemplate(mode, type, data = null) {
                     </div>
                 </div>
             </div>
+
+            <div class="profile-form-section">
+                <div class="profile-form-section-title">
+                    <span class="profile-form-section-icon"><img src="./icons/edit.svg" class="svg-icon" alt="📝"></span>
+                    Details
+                </div>
+                <div class="form-group">
+                    <label for="profile-description">Description (optional)</label>
+                    <textarea id="profile-description" class="form-input" rows="2" placeholder="Notes about this profile"
+                        autocomplete="off" spellcheck="false">${data?.description || ''}</textarea>
+                </div>
+                <div class="form-group">
+                    <label for="profile-tags">Tags (comma separated, max 20)</label>
+                    <input type="text" id="profile-tags" class="form-input" value="${(data?.tags || []).join(', ')}" placeholder="prod, db, eu-west"
+                        autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
+                </div>
+                <div class="form-group">
+                    <label>Accent color</label>
+                    <div class="color-swatches" id="profile-color-swatches" data-selected="${data?.color || ''}">
+                        <button type="button" class="color-swatch ${!data?.color ? 'selected' : ''}" data-color="" title="None"><span class="color-swatch-none">∅</span></button>
+                        <button type="button" class="color-swatch ${data?.color === '#ff6b35' ? 'selected' : ''}" data-color="#ff6b35" style="background:#ff6b35" title="Orange"></button>
+                        <button type="button" class="color-swatch ${data?.color === '#4ec9b0' ? 'selected' : ''}" data-color="#4ec9b0" style="background:#4ec9b0" title="Teal"></button>
+                        <button type="button" class="color-swatch ${data?.color === '#007acc' ? 'selected' : ''}" data-color="#007acc" style="background:#007acc" title="Blue"></button>
+                        <button type="button" class="color-swatch ${data?.color === '#c586c0' ? 'selected' : ''}" data-color="#c586c0" style="background:#c586c0" title="Purple"></button>
+                        <button type="button" class="color-swatch ${data?.color === '#ffcc02' ? 'selected' : ''}" data-color="#ffcc02" style="background:#ffcc02" title="Yellow"></button>
+                        <button type="button" class="color-swatch ${data?.color === '#f44747' ? 'selected' : ''}" data-color="#f44747" style="background:#f44747" title="Red"></button>
+                    </div>
+                    <input type="hidden" id="profile-color" value="${data?.color || ''}">
+                </div>
+            </div>
         `;
     }
 }
-
-export function createProfileConnectionContent(type, data = null) {
-    if (type === 'folder') {
-        return `
-            <div class="profile-form-section">
-                <div class="profile-form-section-title">
-                    <span class="profile-form-section-icon"><img src="./icons/link.svg" class="svg-icon" alt="🔗"></span>
-                    Connection Settings
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Auto-connect profiles</div>
-                            <div class="setting-item-description">Automatically connect to profiles in this folder when opened</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <label class="modern-toggle">
-                                <input type="checkbox" id="folder-auto-connect">
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-    
-    return `
-        <div class="profile-form-section">
-            <div class="profile-form-section-title">
-                <span class="profile-form-section-icon"><img src="./icons/link.svg" class="svg-icon" alt="🔗"></span>
-                Connection Settings
-            </div>
-            <div class="setting-item">
-                <div class="setting-item-content">
-                    <div class="setting-item-info">
-                        <div class="setting-item-title">Auto-connect on startup</div>
-                        <div class="setting-item-description">Automatically connect to this profile when application starts</div>
-                    </div>
-                    <div class="setting-item-control">
-                        <label class="modern-toggle">
-                            <input type="checkbox" id="profile-auto-connect">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-                </div>
-            </div>
-            <div class="setting-item">
-                <div class="setting-item-content">
-                    <div class="setting-item-info">
-                        <div class="setting-item-title">Connection timeout</div>
-                        <div class="setting-item-description">Timeout for establishing connection (seconds)</div>
-                    </div>
-                    <div class="setting-item-control">
-                        <select class="modern-select" id="connection-timeout">
-                            <option value="10">10 seconds</option>
-                            <option value="30" selected>30 seconds</option>
-                            <option value="60">60 seconds</option>
-                            <option value="120">2 minutes</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-            <div class="setting-item">
-                <div class="setting-item-content">
-                    <div class="setting-item-info">
-                        <div class="setting-item-title">Keep alive interval</div>
-                        <div class="setting-item-description">Send keep-alive packets every N seconds</div>
-                    </div>
-                    <div class="setting-item-control">
-                        <select class="modern-select" id="keep-alive">
-                            <option value="0">Disabled</option>
-                            <option value="30" selected>30 seconds</option>
-                            <option value="60">60 seconds</option>
-                            <option value="300">5 minutes</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-export function createProfileSettingsContent(type, data = null) {
-    if (type === 'folder') {
-        return `
-            <div class="profile-form-section">
-                <div class="profile-form-section-title">
-                    <span class="profile-form-section-icon"><img src="./icons/settings.svg" class="svg-icon" alt="⚙️"></span>
-                    Folder Settings
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Sort profiles</div>
-                            <div class="setting-item-description">How to sort profiles within this folder</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <select class="modern-select" id="folder-sort">
-                                <option value="name">By name</option>
-                                <option value="recent">Recently used</option>
-                                <option value="created">Date created</option>
-                                <option value="manual">Manual order</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Show in favorites</div>
-                            <div class="setting-item-description">Display this folder in the favorites section</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <label class="modern-toggle">
-                                <input type="checkbox" id="folder-favorite">
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-    
-    return `
-        <div class="profile-form-section">
-            <div class="profile-form-section-title">
-                <span class="profile-form-section-icon"><img src="./icons/settings.svg" class="svg-icon" alt="⚙️"></span>
-                Profile Settings
-            </div>
-            <div class="setting-item">
-                <div class="setting-item-content">
-                    <div class="setting-item-info">
-                        <div class="setting-item-title">Add to favorites</div>
-                        <div class="setting-item-description">Show this profile in the favorites section</div>
-                    </div>
-                    <div class="setting-item-control">
-                        <label class="modern-toggle">
-                            <input type="checkbox" id="profile-favorite">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>
-                </div>
-            </div>
-            <div class="setting-item">
-                <div class="setting-item-content">
-                    <div class="setting-item-info">
-                        <div class="setting-item-title">Terminal theme</div>
-                        <div class="setting-item-description">Override global theme for this profile</div>
-                    </div>
-                    <div class="setting-item-control">
-                        <select class="modern-select" id="profile-theme">
-                            <option value="">Use global theme</option>
-                            <option value="dark">Dark</option>
-                            <option value="light">Light</option>
-                            <option value="auto">Auto</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-            <div class="setting-item">
-                <div class="setting-item-content">
-                    <div class="setting-item-info">
-                        <div class="setting-item-title">Font size</div>
-                        <div class="setting-item-description">Override global font size for this profile</div>
-                    </div>
-                    <div class="setting-item-control">
-                        <select class="modern-select" id="profile-font-size">
-                            <option value="">Use global size</option>
-                            <option value="12">12px</option>
-                            <option value="14">14px</option>
-                            <option value="16">16px</option>
-                            <option value="18">18px</option>
-                            <option value="20">20px</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-            <div class="setting-item">
-                <div class="setting-item-content">
-                    <div class="setting-item-info">
-                        <div class="setting-item-title">Working directory</div>
-                        <div class="setting-item-description">Default directory when opening this profile</div>
-                    </div>
-                    <div class="setting-item-control">
-                        <input type="text" class="modern-input" id="profile-working-dir" placeholder="Leave empty for default"
-                            autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
-                    </div>
-                </div>
-            </div>
-            <div class="setting-item">
-                <div class="setting-item-content">
-                    <div class="setting-item-info">
-                        <div class="setting-item-title">Environment variables</div>
-                        <div class="setting-item-description">Custom environment variables for this profile</div>
-                    </div>
-                    <div class="setting-item-control">
-                        <button class="modern-button secondary" id="edit-env-vars">Edit Variables</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-} 
 
 export function createFileExplorerContextMenuTemplate() {
     return `

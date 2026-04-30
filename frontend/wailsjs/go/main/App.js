@@ -494,6 +494,10 @@ export function RecordMetric(arg1, arg2, arg3) {
   return window['go']['main']['App']['RecordMetric'](arg1, arg2, arg3);
 }
 
+export function RecordProfileUsageAPI(arg1) {
+  return window['go']['main']['App']['RecordProfileUsageAPI'](arg1);
+}
+
 export function RecordStats(arg1, arg2) {
   return window['go']['main']['App']['RecordStats'](arg1, arg2);
 }

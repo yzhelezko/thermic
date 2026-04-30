@@ -63,16 +63,6 @@ export class SidebarCommandRegistry extends CommandRegistry {
             (context) => context.itemType === 'profile'
         ));
 
-        this.registerSeparator();
-
-        this.register(new ContextMenuCommand(
-            'properties',
-            'Properties',
-            'properties',
-            (context) => this.handleProperties(context),
-            (context) => context.itemType === 'profile'
-        ));
-
         // Folder commands
         this.register(new ContextMenuCommand(
             'create-profile',
@@ -133,109 +123,36 @@ export class SidebarCommandRegistry extends CommandRegistry {
 
     async handleEdit(context) {
         const currentTarget = this.contextMenuManager.currentTarget;
-        if (!currentTarget) return;
+        if (!currentTarget || !window.sidebarManager) return;
 
-        // Handle profiles (new system)
-        if (currentTarget.dataset.type === 'profile') {
-            const profileId = currentTarget.dataset.id;
-            if (profileId && window.sidebarManager) {
-                try {
-                    await window.sidebarManager.editProfile(profileId);
-                } catch (error) {
-                    console.error('Failed to edit profile:', error);
-                    showNotification('Failed to edit profile', 2000);
-                }
+        const id = currentTarget.dataset.id;
+        if (!id) return;
+
+        try {
+            if (currentTarget.dataset.type === 'profile') {
+                await window.sidebarManager.editProfile(id);
+            } else if (currentTarget.dataset.type === 'folder') {
+                await window.sidebarManager.editFolder(id);
             }
-            return;
+        } catch (error) {
+            console.error('Failed to edit item:', error);
+            showNotification('Failed to edit item', 2000);
         }
-
-        // Handle folders
-        if (currentTarget.dataset.type === 'folder') {
-            const folderId = currentTarget.dataset.id;
-            if (folderId && window.sidebarManager) {
-                try {
-                    await window.sidebarManager.editFolder(folderId);
-                } catch (error) {
-                    console.error('Failed to edit folder:', error);
-                    showNotification('Failed to edit folder', 2000);
-                }
-            }
-            return;
-        }
-
-        // Handle legacy items (old system) - inline editing
-        const itemText = currentTarget.querySelector('.tree-item-text');
-        if (itemText) {
-            // Make item editable
-            const currentText = itemText.textContent;
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.value = currentText;
-            input.className = 'tree-item-edit';
-            input.setAttribute('autocomplete', 'off');
-            input.setAttribute('spellcheck', 'false');
-            input.setAttribute('autocorrect', 'off');
-            input.setAttribute('autocapitalize', 'off');
-            
-            input.addEventListener('blur', () => this.finishEdit(itemText, input));
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    this.finishEdit(itemText, input);
-                } else if (e.key === 'Escape') {
-                    itemText.textContent = currentText;
-                    itemText.style.display = '';
-                    input.remove();
-                }
-            });
-
-            itemText.style.display = 'none';
-            itemText.parentNode.insertBefore(input, itemText.nextSibling);
-            input.focus();
-            input.select();
-        }
-    }
-
-    finishEdit(originalElement, inputElement) {
-        const newText = inputElement.value.trim();
-        if (newText && newText !== originalElement.textContent) {
-            originalElement.textContent = newText;
-            showNotification('Item renamed', 1500);
-        }
-        originalElement.style.display = '';
-        inputElement.remove();
     }
 
     async handleDuplicate(context) {
         const currentTarget = this.contextMenuManager.currentTarget;
-        if (!currentTarget) return;
+        if (!currentTarget || currentTarget.dataset.type !== 'profile') return;
 
-        // Handle profiles (new system)
-        if (currentTarget.dataset.type === 'profile') {
-            const profileId = currentTarget.dataset.id;
-            if (profileId && window.sidebarManager) {
-                try {
-                    await window.sidebarManager.duplicateProfile(profileId);
-                } catch (error) {
-                    console.error('Failed to duplicate profile:', error);
-                    showNotification('Failed to duplicate profile', 2000);
-                }
-            }
-            return;
-        }
+        const profileId = currentTarget.dataset.id;
+        if (!profileId || !window.sidebarManager) return;
 
-        // Handle legacy items (old system)
-        const clone = currentTarget.cloneNode(true);
-        const itemText = clone.querySelector('.tree-item-text');
-        if (itemText) {
-            itemText.textContent += ' (Copy)';
+        try {
+            await window.sidebarManager.duplicateProfile(profileId);
+        } catch (error) {
+            console.error('Failed to duplicate profile:', error);
+            showNotification('Failed to duplicate profile', 2000);
         }
-        
-        // Remove selection from clone
-        clone.classList.remove('selected');
-        
-        // Insert after current item
-        currentTarget.parentNode.insertBefore(clone, currentTarget.nextSibling);
-        showNotification('Item duplicated', 1500);
     }
 
     handleRename(context) {
@@ -245,30 +162,25 @@ export class SidebarCommandRegistry extends CommandRegistry {
 
     async handleDelete(context) {
         const currentTarget = this.contextMenuManager.currentTarget;
-        if (!currentTarget) return;
+        if (!currentTarget || !window.sidebarManager) return;
 
-        // Handle profiles (new system)
         if (currentTarget.dataset.type === 'profile') {
             const profileId = currentTarget.dataset.id;
-            if (profileId && window.sidebarManager) {
-                try {
-                    await window.sidebarManager.deleteProfile(profileId);
-                } catch (error) {
-                    console.error('Failed to delete profile:', error);
-                    showNotification('Failed to delete profile', 2000);
-                }
+            if (!profileId) return;
+            try {
+                await window.sidebarManager.deleteProfile(profileId);
+            } catch (error) {
+                console.error('Failed to delete profile:', error);
+                showNotification('Failed to delete profile', 2000);
             }
             return;
         }
 
-        // Handle folders
         if (currentTarget.dataset.type === 'folder') {
             const folderId = currentTarget.dataset.id;
             const itemText = currentTarget.querySelector('.tree-item-text');
             const itemName = itemText ? itemText.textContent : 'folder';
-            
             try {
-                // Show folder deletion options using the universal modal
                 const result = await modal.show({
                     title: 'Delete Folder',
                     message: `What would you like to do with the profiles in "${itemName}"?`,
@@ -279,53 +191,26 @@ export class SidebarCommandRegistry extends CommandRegistry {
                         { text: 'Delete All', style: 'danger', action: 'delete-all' }
                     ]
                 });
-                
-                if (result !== 'cancel' && window.sidebarManager) {
-                    const deleteContents = result === 'delete-all';
-                    await window.sidebarManager.deleteFolder(folderId, deleteContents);
+                if (result !== 'cancel') {
+                    await window.sidebarManager.deleteFolder(folderId, result === 'delete-all');
                 }
             } catch (error) {
                 console.error('Failed to delete folder:', error);
                 showNotification('Failed to delete folder', 2000);
             }
-            return;
-        }
-
-        // Handle legacy items (old system)
-        const itemText = currentTarget.querySelector('.tree-item-text');
-        const itemName = itemText ? itemText.textContent : 'item';
-        
-        try {
-            const result = await modal.confirmDelete(itemName, 'item');
-            if (result === 'confirm') {
-                currentTarget.remove();
-                showNotification('Item deleted', 1500);
-            }
-        } catch (error) {
-            console.error('Failed to show delete confirmation:', error);
-            showNotification('Failed to delete item', 2000);
         }
     }
 
     async handleToggleFavorite(context) {
         if (context.itemType !== 'profile') return;
+        if (!context.itemId || !window.sidebarManager) return;
 
-        const isFavorite = context.treeItem?.classList.contains('favorite') || false;
-        
-        contextMenuEventBus.emit('profile:toggle-favorite', {
-            profileId: context.itemId,
-            isFavorite: isFavorite,
-            treeItem: context.treeItem
-        });
-    }
-
-    handleProperties(context) {
-        if (context.itemType !== 'profile') return;
-
-        contextMenuEventBus.emit('profile:show-properties', {
-            profileId: context.itemId,
-            treeItem: context.treeItem
-        });
+        try {
+            await window.sidebarManager.toggleFavorite(context.itemId);
+        } catch (error) {
+            console.error('Failed to toggle favorite:', error);
+            showNotification('Failed to update favorite', 2000);
+        }
     }
 
     async handleCreateProfile(context) {

@@ -509,16 +509,6 @@
     display: none !important;
 }
 
-.profile-tabs-container {
-    display: flex;
-    align-items: center;
-    height: 48px;
-    padding: 0 20px;
-    flex-grow: 1;
-    overflow-x: auto;
-    gap: 4px;
-}
-
 /* Profile Panel Styles - Left Side Slide-out */
 .profile-panel-overlay {
     position: fixed;
@@ -695,6 +685,48 @@
 .form-input:hover,
 .form-select:hover {
     border-color: var(--text-secondary);
+}
+
+textarea.form-input {
+    resize: vertical;
+    min-height: 48px;
+    font-family: inherit;
+}
+
+/* Color swatches for profile accent */
+.color-swatches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.color-swatch {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    background: var(--bg-quaternary);
+    cursor: pointer;
+    padding: 0;
+    transition: border-color 0.15s ease, transform 0.1s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.color-swatch:hover {
+    transform: scale(1.1);
+}
+
+.color-swatch.selected {
+    border-color: var(--text-primary);
+    box-shadow: 0 0 0 2px var(--bg-primary), 0 0 0 3px var(--thermic-orange);
+}
+
+.color-swatch-none {
+    color: var(--text-tertiary);
+    font-size: 14px;
+    line-height: 1;
 }
 
 .form-input::placeholder {
@@ -956,46 +988,3 @@
     }
 }
 
-.profile-tab {
-    background: transparent;
-    border: none;
-    border-bottom: 2px solid transparent;
-    padding: 0 20px;
-    height: 100%;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-tertiary);
-    border-radius: 0;
-    white-space: nowrap;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    position: relative;
-}
-
-.profile-tab.active {
-    color: var(--thermic-orange);
-    border-bottom: 2px solid var(--thermic-orange);
-    background: transparent;
-}
-
-.profile-tab:hover:not(.active) {
-    color: var(--text-primary);
-    background: rgba(var(--text-primary-rgb), 0.05);
-}
-
-.profile-tab-icon {
-    font-size: 14px;
-}
-
-.profile-tab-pane {
-    display: none;
-    padding: 24px;
-    max-width: 100%;
-}
-
-.profile-tab-pane.active {
-    display: block;
-} 

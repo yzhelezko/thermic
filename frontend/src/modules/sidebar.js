@@ -131,37 +131,25 @@ export class SidebarManager {
         // Main document click listener for handling various interactions
         document.addEventListener('click', (e) => {
             const treeItem = e.target.closest('.tree-item');
-            const profileActionButton = e.target.closest('.profile-action-btn');
             const contextMenu = e.target.closest('.context-menu');
             const profilePanel = e.target.closest('.profile-panel');
             const isProfilePanelButton = ['profile-panel-close', 'profile-save', 'profile-cancel'].includes(e.target.id);
 
-            // Priority 1: Profile Panel Buttons
             if (isProfilePanelButton) {
                 if (e.target.id === 'profile-panel-close' || e.target.id === 'profile-cancel') {
                     this.closeProfilePanel();
                 } else if (e.target.id === 'profile-save') {
                     this.saveProfile();
                 }
-                return; // Explicitly stop further processing for these buttons
+                return;
             }
-            
-            // Priority 2: Profile Action Buttons (could be inside a treeItem)
-            if (profileActionButton) {
-                this.handleProfileAction(e); // Assuming this method exists and handles its own logic
-                // If the action button is part of a tree item, we might not want to deselect the item.
-                // Let handleProfileAction manage selection if necessary.
-                return; // Stop further processing if an action button was clicked
-            } 
-            
-            // Priority 3: Tree Items (folders or profiles)
+
             if (treeItem) {
                 this.handleTreeItemClick(e, treeItem);
-                return; // Stop further processing if a tree item was clicked
-            } 
-            
-            // Priority 4: Click outside of any interactive sidebar elements
-            // (and not inside a context menu or profile panel, which are handled by their own logic or ignored here)
+                return;
+            }
+
+            // Click outside any interactive sidebar element clears selection
             if (!contextMenu && !profilePanel) {
                 document.querySelectorAll('.tree-item.selected').forEach(el => el.classList.remove('selected'));
                 this.selectedItem = null;
@@ -354,26 +342,16 @@ export class SidebarManager {
             }
             
             showNotification(`Connected to ${profileName}`, 'success');
-            
-            // Update profile usage tracking
+
+            // Bump usage stats in the backend so the profile shows up in
+            // Recent / Most Used virtual folders.
             try {
-                // The backend already handles usage tracking in CreateTabFromProfile
-                // But since we're using TabsManager instead, we need to manually update it
-                const profile = this.getProfileById(profileId);
-                if (profile) {
-                    profile.usageCount = (profile.usageCount || 0) + 1;
-                    profile.lastUsed = new Date();
-                    await window.go.main.App.UpdateProfile(profile);
-                    
-                    // Refresh the sidebar to show updated usage
-                    setTimeout(() => {
-                        this.loadProfileTree().then(() => this.renderProfileTree());
-                    }, 500);
-                }
+                await window.go.main.App.RecordProfileUsageAPI(profileId);
+                this.loadProfileTree().then(() => this.renderProfileTree());
             } catch (usageError) {
                 console.warn('Failed to update usage tracking:', usageError);
             }
-            
+
         } catch (error) {
             console.error('Failed to connect to profile:', error);
             console.error('Profile ID was:', profileId);
@@ -775,14 +753,10 @@ export class SidebarManager {
         // Load profile counts for virtual folders
         this.virtualFolders?.forEach(async vf => {
             try {
-                console.log(`🔧 Loading count for virtual folder: ${vf.name} (${vf.id})`);
-                const profiles = await window.go.main.App.GetVirtualFolderProfilesAPI(vf.id);
+                const profiles = (await window.go.main.App.GetVirtualFolderProfilesAPI(vf.id)) || [];
                 const countElement = document.querySelector(`[data-folder-id="${vf.id}"]`);
                 if (countElement) {
                     countElement.textContent = `(${profiles.length})`;
-                    console.log(`🔧 Updated count for ${vf.name}: ${profiles.length}`);
-                } else {
-                    console.warn(`🔧 Count element not found for virtual folder: ${vf.id}`);
                 }
             } catch (error) {
                 console.error(`Failed to load count for virtual folder ${vf.id}:`, error);
@@ -793,10 +767,10 @@ export class SidebarManager {
     async handleVirtualFolderClick(e) {
         const vfElement = e.target.closest('.virtual-folder');
         const vfId = vfElement.dataset.id;
-        
+
         try {
             const profiles = await window.go.main.App.GetVirtualFolderProfilesAPI(vfId);
-            this.showVirtualFolderContent(vfId, profiles);
+            this.showVirtualFolderContent(vfId, profiles || []);
         } catch (error) {
             console.error('Failed to load virtual folder content:', error);
             showNotification('Failed to load virtual folder', 'error');
@@ -994,16 +968,21 @@ export class SidebarManager {
     renderProfileNode(profile, level, parentFolderID = '') {
         const favoriteIcon = profile.profile?.isFavorite ? '<span class="favorite-indicator">⭐</span>' : '';
         const profileType = profile.profile?.type || 'local';
-        const tooltipText = `Click or double-click to connect to ${profile.name} (${profileType})`;
+        const description = profile.profile?.description || '';
+        const tooltipText = description
+            ? `${description} — ${profileType}`
+            : `Click or double-click to connect to ${profile.name} (${profileType})`;
 
-        // Extract searchable data for live search
         const sshConfig = profile.profile?.sshConfig || {};
         const host = sshConfig.host || '';
         const username = sshConfig.username || '';
         const tags = profile.profile?.tags?.join(' ') || '';
+        const color = profile.profile?.color || '';
+        const colorAttr = color ? ` style="--profile-accent:${color}"` : '';
+        const colorClass = color ? ' has-accent' : '';
 
         return `
-            <div class="tree-item"
+            <div class="tree-item${colorClass}"
                  data-id="${profile.id}"
                  data-type="profile"
                  data-folder-id="${parentFolderID}"
@@ -1012,7 +991,7 @@ export class SidebarManager {
                  data-username="${username}"
                  data-tags="${tags}"
                  draggable="true"
-                 title="${tooltipText}">
+                 title="${tooltipText}"${colorAttr}>
                 <div class="tree-item-content" style="padding-left: ${(level + 1) * 16}px">
                     <span class="tree-item-icon">${profile.icon}</span>
                     <span class="tree-item-text">${profile.name}</span>
@@ -1030,8 +1009,6 @@ export class SidebarManager {
             const module = await import('./templates.js');
             this.createProfilePanelTemplate = module.createProfilePanelTemplate;
             this.createProfileFormTemplate = module.createProfileFormTemplate;
-            this.createProfileConnectionContent = module.createProfileConnectionContent;
-            this.createProfileSettingsContent = module.createProfileSettingsContent;
         } catch (error) {
             console.error('Failed to load templates module:', error);
         }
@@ -1085,26 +1062,18 @@ export class SidebarManager {
     async openProfilePanel(mode, type, parentId = null, data = null) {
         const overlay = document.getElementById('profile-panel-overlay');
         const form = document.getElementById('profile-form');
-        const connectionContent = document.querySelector('.profile-connection-content');
-        const settingsContent = document.querySelector('.profile-settings-content');
+        const titleEl = document.getElementById('profile-panel-title');
 
-        // Populate General tab (existing form)
+        if (titleEl) {
+            const action = mode === 'edit' ? 'Edit' : 'New';
+            const noun = type === 'folder' ? 'Folder' : 'Profile';
+            titleEl.textContent = `${action} ${noun}`;
+        }
+
+        // Populate the form
         if (form) {
             form.innerHTML = this.createProfileFormTemplate(mode, type, data);
         }
-
-        // Populate Connection tab
-        if (connectionContent) {
-            connectionContent.innerHTML = this.createProfileConnectionContent(type, data);
-        }
-
-        // Populate Settings tab
-        if (settingsContent) {
-            settingsContent.innerHTML = this.createProfileSettingsContent(type, data);
-        }
-
-        // Setup tab switching
-        this.setupProfileTabs();
 
         // Setup form functionality
         this.setupProfileTypeHandling();
@@ -1367,28 +1336,6 @@ export class SidebarManager {
         }
     }
 
-    setupProfileTabs() {
-        const tabs = document.querySelectorAll('.profile-tab');
-        const panes = document.querySelectorAll('.profile-tab-pane');
-
-        tabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                const targetTab = tab.dataset.tab;
-
-                // Remove active class from all tabs and panes
-                tabs.forEach(t => t.classList.remove('active'));
-                panes.forEach(p => p.classList.remove('active'));
-
-                // Add active class to clicked tab and corresponding pane
-                tab.classList.add('active');
-                const targetPane = document.getElementById(`profile-tab-${targetTab}`);
-                if (targetPane) {
-                    targetPane.classList.add('active');
-                }
-            });
-        });
-    }
-
     setupProfileFormHandlers(mode, type, parentId, data) {
         // Load shells for profile forms
         if (type === 'profile') {
@@ -1422,6 +1369,20 @@ export class SidebarManager {
                     console.error('Error selecting SSH private key:', error);
                     showNotification(`Failed to open file selector: ${error.message}`, 'error');
                 }
+            });
+        }
+
+        // Color swatches: click sets the hidden input + visual selection
+        const swatchContainer = document.getElementById('profile-color-swatches');
+        const colorInput = document.getElementById('profile-color');
+        if (swatchContainer && colorInput) {
+            swatchContainer.addEventListener('click', (e) => {
+                const swatch = e.target.closest('.color-swatch');
+                if (!swatch) return;
+                e.preventDefault();
+                colorInput.value = swatch.dataset.color || '';
+                swatchContainer.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+                swatch.classList.add('selected');
             });
         }
 
@@ -1509,29 +1470,38 @@ export class SidebarManager {
             }
         }
 
+        const description = document.getElementById('profile-description')?.value.trim() || '';
+        const color = document.getElementById('profile-color')?.value.trim() || '';
+        const tagsRaw = document.getElementById('profile-tags')?.value || '';
+        const tags = tagsRaw
+            .split(',')
+            .map(t => t.trim())
+            .filter(t => t.length > 0);
+        if (tags.length > 20) {
+            throw new Error('A profile can have at most 20 tags');
+        }
+
         if (mode === 'edit' && existingData) {
-            // Update existing profile
             existingData.name = name;
             existingData.icon = icon;
             existingData.type = profileType;
             existingData.shell = shell;
             existingData.workingDir = workingDir;
             existingData.sshConfig = sshConfig;
+            existingData.description = description;
+            existingData.color = color;
+            existingData.tags = tags;
             await window.go.main.App.UpdateProfile(existingData);
         } else {
-            // Create new profile using ID-based reference instead of path-based
             const parentFolderId = this.editingProfile.parentId || '';
             const profile = await window.go.main.App.CreateProfileWithFolderIDAPI(name, profileType, shell, icon, parentFolderId);
-            
-            if (sshConfig) {
-                profile.sshConfig = sshConfig;
-                await window.go.main.App.UpdateProfile(profile);
-            }
-            
-            if (workingDir) {
-                profile.workingDir = workingDir;
-                await window.go.main.App.UpdateProfile(profile);
-            }
+
+            profile.sshConfig = sshConfig;
+            profile.workingDir = workingDir;
+            profile.description = description;
+            profile.color = color;
+            profile.tags = tags;
+            await window.go.main.App.UpdateProfile(profile);
         }
     }
 
@@ -1938,120 +1908,4 @@ export class SidebarManager {
         }
     }
 
-    getFileManagerContent() {
-        return `
-            <div style="padding: 20px; text-align: center; color: var(--text-tertiary);">
-                <div>📂</div>
-                <div style="margin-top: 8px;">File Explorer</div>
-                <div style="margin-top: 4px; font-size: 11px;">Coming soon...</div>
-            </div>
-        `;
-    }
-
-    async showProfileProperties(profileId, treeItem) {
-        try {
-            // Get profile data
-            const profile = this.getProfileById(profileId);
-            if (!profile) {
-                showNotification('Profile not found', 'error');
-                return;
-            }
-
-            // Build properties info
-            let propertiesContent = `
-                <div class="properties-section">
-                    <h4>General Information</h4>
-                    <div class="property-item">
-                        <strong>Name:</strong> ${profile.name || 'Unknown'}
-                    </div>
-                    <div class="property-item">
-                        <strong>Type:</strong> ${(profile.type || 'local').toUpperCase()}
-                    </div>
-                    <div class="property-item">
-                        <strong>Icon:</strong> ${profile.icon || '🖥️'}
-                    </div>
-                    <div class="property-item">
-                        <strong>Favorite:</strong> ${profile.isFavorite ? 'Yes' : 'No'}
-                    </div>
-                </div>
-            `;
-
-            if (profile.type === 'ssh' && profile.sshConfig) {
-                propertiesContent += `
-                    <div class="properties-section">
-                        <h4>SSH Configuration</h4>
-                        <div class="property-item">
-                            <strong>Host:</strong> ${profile.sshConfig.host || 'N/A'}
-                        </div>
-                        <div class="property-item">
-                            <strong>Port:</strong> ${profile.sshConfig.port || 22}
-                        </div>
-                        <div class="property-item">
-                            <strong>Username:</strong> ${profile.sshConfig.username || 'N/A'}
-                        </div>
-                        <div class="property-item">
-                            <strong>Key Path:</strong> ${profile.sshConfig.keyPath || 'Not specified'}
-                        </div>
-                        <div class="property-item">
-                            <strong>Auto-discover Keys:</strong> ${profile.sshConfig.allowKeyAutoDiscovery ? 'Yes' : 'No'}
-                        </div>
-                    </div>
-                `;
-            } else if (profile.type === 'local' || profile.type === 'custom') {
-                propertiesContent += `
-                    <div class="properties-section">
-                        <h4>Shell Configuration</h4>
-                        <div class="property-item">
-                            <strong>Shell/Command:</strong> ${profile.shell || 'Default shell'}
-                        </div>
-                    </div>
-                `;
-            }
-
-            if (profile.workingDir) {
-                propertiesContent += `
-                    <div class="properties-section">
-                        <h4>Working Directory</h4>
-                        <div class="property-item">
-                            <strong>Path:</strong> ${profile.workingDir}
-                        </div>
-                    </div>
-                `;
-            }
-
-            propertiesContent += `
-                <div class="properties-section">
-                    <h4>Usage Statistics</h4>
-                    <div class="property-item">
-                        <strong>Usage Count:</strong> ${profile.usageCount || 0}
-                    </div>
-                    <div class="property-item">
-                        <strong>Last Used:</strong> ${profile.lastUsed ? new Date(profile.lastUsed).toLocaleString() : 'Never'}
-                    </div>
-                    <div class="property-item">
-                        <strong>Created:</strong> ${profile.createdAt ? new Date(profile.createdAt).toLocaleString() : 'Unknown'}
-                    </div>
-                </div>
-            `;
-
-            // Show properties using Modal.js
-            await modal.show({
-                title: `${profile.name} Properties`,
-                content: propertiesContent,
-                icon: '⚙️',
-                buttons: [
-                    { text: 'Edit', style: 'primary', action: 'edit' },
-                    { text: 'Close', style: 'secondary', action: 'close' }
-                ]
-            }).then(result => {
-                if (result === 'edit') {
-                    this.editProfile(profileId);
-                }
-            });
-
-        } catch (error) {
-            console.error('Error showing profile properties:', error);
-            showNotification('Failed to show profile properties', 'error');
-        }
-    }
 }

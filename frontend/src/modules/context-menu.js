@@ -55,13 +55,6 @@ export class ContextMenuManager {
             }
         });
 
-        // Handle profile properties event
-        contextMenuEventBus.on('profile:show-properties', (data) => {
-            if (window.sidebarManager) {
-                window.sidebarManager.showProfileProperties(data.profileId, data.treeItem);
-            }
-        });
-
         // Add more event handlers as needed for compatibility
     }
 
