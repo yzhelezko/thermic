@@ -1,6 +1,11 @@
 // Settings management module
 import { showNotification } from './utils.js';
 import { updateAllIconsToInline, updateThemeToggleIcon } from '../utils/icons.js';
+import { BrowserOpenURL } from '../../wailsjs/runtime/runtime.js';
+
+const REPO_URL = 'https://github.com/yzhelezko/thermic';
+const RELEASES_URL = 'https://github.com/yzhelezko/thermic/releases';
+const ISSUES_URL = 'https://github.com/yzhelezko/thermic/issues';
 
 export class SettingsManager {
     constructor() {
@@ -339,6 +344,21 @@ export class SettingsManager {
         // --- AI Settings Logic ---
         this.setupAISettings().catch(error => {
             console.error('Error setting up AI settings:', error);
+        });
+
+        // --- Terminal Typography Logic ---
+        this.setupTypographySettings().catch(error => {
+            console.error('Error setting up typography settings:', error);
+        });
+
+        // --- Updates Logic ---
+        this.setupUpdatesSettings().catch(error => {
+            console.error('Error setting up updates settings:', error);
+        });
+
+        // --- About Logic ---
+        this.setupAboutSection().catch(error => {
+            console.error('Error setting up about section:', error);
         });
 
         // --- UI Zoom Setting Logic ---
@@ -816,7 +836,10 @@ export class SettingsManager {
             if (aiApiKeyInput) aiApiKeyInput.value = aiAPIKey || '';
             if (aiApiUrlInput) aiApiUrlInput.value = aiAPIURL || '';
 
-            if (aiHotkeyInput) aiHotkeyInput.value = aiHotkey || 'ctrl+k';
+            if (aiHotkeyInput) {
+                aiHotkeyInput.value = aiHotkey || 'ctrl+k';
+                this.setupAIHotkeyCapture(aiHotkeyInput);
+            }
 
             // AI enabled toggle
             aiEnabledToggle.addEventListener('change', async (event) => {
@@ -1002,4 +1025,218 @@ export class SettingsManager {
         }
     }
 
-} 
+    setupAIHotkeyCapture(input) {
+        const clearBtn = document.getElementById('ai-hotkey-clear-btn');
+
+        const formatCombo = (event) => {
+            const parts = [];
+            if (event.ctrlKey) parts.push('ctrl');
+            if (event.metaKey) parts.push('cmd');
+            if (event.altKey) parts.push('alt');
+            if (event.shiftKey) parts.push('shift');
+            const key = event.key;
+            // Skip pure modifier presses
+            if (['Control', 'Meta', 'Alt', 'Shift'].includes(key)) return null;
+            // Normalize the key
+            const normalized = key.length === 1 ? key.toLowerCase() : key.toLowerCase();
+            parts.push(normalized);
+            return parts.join('+');
+        };
+
+        input.addEventListener('focus', () => {
+            input.classList.add('capturing');
+            input.placeholder = 'Press a key combination…';
+        });
+        input.addEventListener('blur', () => {
+            input.classList.remove('capturing');
+            input.placeholder = 'Click and press a key combo';
+        });
+
+        input.addEventListener('keydown', async (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const combo = formatCombo(event);
+            if (!combo) return;
+            input.value = combo;
+            try {
+                await window.go.main.App.ConfigSet('AIHotkey', combo);
+                showNotification(`AI hotkey set to ${combo}`, 'info');
+            } catch (error) {
+                console.error('Error updating AI hotkey:', error);
+                showNotification(`Failed to update hotkey: ${error.message}`, 'error');
+            }
+            input.blur();
+        });
+
+        if (clearBtn) {
+            clearBtn.addEventListener('click', async () => {
+                input.value = 'ctrl+k';
+                try {
+                    await window.go.main.App.ConfigSet('AIHotkey', 'ctrl+k');
+                    showNotification('AI hotkey reset to ctrl+k', 'info');
+                } catch (error) {
+                    console.error('Error resetting AI hotkey:', error);
+                }
+            });
+        }
+    }
+
+    async setupTypographySettings() {
+        const fontFamilyInput = document.getElementById('terminal-font-family-input');
+        const fontSizeInput = document.getElementById('terminal-font-size-input');
+        const lineHeightInput = document.getElementById('terminal-line-height-input');
+        const cursorBlinkToggle = document.getElementById('terminal-cursor-blink-toggle');
+
+        if (!fontFamilyInput || !fontSizeInput || !lineHeightInput || !cursorBlinkToggle) {
+            console.warn('Typography settings elements not found in DOM');
+            return;
+        }
+
+        try {
+            const fontFamily = await window.go.main.App.ConfigGet('TerminalFontFamily');
+            const fontSize = await window.go.main.App.ConfigGet('TerminalFontSize');
+            const lineHeightPct = await window.go.main.App.ConfigGet('TerminalLineHeight');
+            const cursorBlink = await window.go.main.App.ConfigGet('TerminalCursorBlink');
+
+            fontFamilyInput.value = fontFamily || '';
+            fontSizeInput.value = fontSize || 14;
+            lineHeightInput.value = (lineHeightPct ? lineHeightPct / 100 : 1.0).toFixed(1);
+            cursorBlinkToggle.checked = !!cursorBlink;
+        } catch (error) {
+            console.warn('Failed to load typography settings:', error);
+        }
+
+        let fontFamilyTimeout;
+        fontFamilyInput.addEventListener('input', (event) => {
+            clearTimeout(fontFamilyTimeout);
+            fontFamilyTimeout = setTimeout(async () => {
+                const value = event.target.value.trim();
+                if (!value) return;
+                try {
+                    await window.go.main.App.ConfigSet('TerminalFontFamily', value);
+                } catch (error) {
+                    console.error('Error updating terminal font family:', error);
+                    showNotification(`Failed to update font family: ${error.message}`, 'error');
+                }
+            }, 800);
+        });
+
+        let fontSizeTimeout;
+        fontSizeInput.addEventListener('input', (event) => {
+            clearTimeout(fontSizeTimeout);
+            fontSizeTimeout = setTimeout(async () => {
+                const px = parseInt(event.target.value, 10);
+                if (isNaN(px) || px < 8 || px > 32) {
+                    showNotification('Font size must be between 8 and 32', 'error');
+                    return;
+                }
+                try {
+                    await window.go.main.App.ConfigSet('TerminalFontSize', px);
+                } catch (error) {
+                    console.error('Error updating font size:', error);
+                    showNotification(`Failed to update font size: ${error.message}`, 'error');
+                }
+            }, 600);
+        });
+
+        let lineHeightTimeout;
+        lineHeightInput.addEventListener('input', (event) => {
+            clearTimeout(lineHeightTimeout);
+            lineHeightTimeout = setTimeout(async () => {
+                const lh = parseFloat(event.target.value);
+                if (isNaN(lh) || lh < 0.8 || lh > 2.0) {
+                    showNotification('Line height must be between 0.8 and 2.0', 'error');
+                    return;
+                }
+                try {
+                    await window.go.main.App.ConfigSet('TerminalLineHeight', Math.round(lh * 100));
+                } catch (error) {
+                    console.error('Error updating line height:', error);
+                    showNotification(`Failed to update line height: ${error.message}`, 'error');
+                }
+            }, 600);
+        });
+
+        cursorBlinkToggle.addEventListener('change', async (event) => {
+            try {
+                await window.go.main.App.ConfigSet('TerminalCursorBlink', event.target.checked);
+            } catch (error) {
+                console.error('Error updating cursor blink:', error);
+                showNotification(`Failed to update cursor: ${error.message}`, 'error');
+                event.target.checked = !event.target.checked;
+            }
+        });
+    }
+
+    async setupUpdatesSettings() {
+        const autoToggle = document.getElementById('auto-check-updates-toggle');
+        const checkBtn = document.getElementById('check-updates-now-btn');
+        const statusEl = document.getElementById('update-status');
+
+        if (!autoToggle || !checkBtn || !statusEl) {
+            console.warn('Updates settings elements not found in DOM');
+            return;
+        }
+
+        try {
+            autoToggle.checked = !!(await window.go.main.App.ConfigGet('AutoCheckUpdates'));
+        } catch (error) {
+            console.warn('Failed to load AutoCheckUpdates:', error);
+        }
+
+        autoToggle.addEventListener('change', async (event) => {
+            try {
+                await window.go.main.App.ConfigSet('AutoCheckUpdates', event.target.checked);
+                showNotification(`Automatic update checks ${event.target.checked ? 'enabled' : 'disabled'}`, 'info');
+            } catch (error) {
+                console.error('Error updating auto-check setting:', error);
+                showNotification(`Failed to update setting: ${error.message}`, 'error');
+                event.target.checked = !event.target.checked;
+            }
+        });
+
+        checkBtn.addEventListener('click', async () => {
+            checkBtn.disabled = true;
+            statusEl.textContent = 'Checking…';
+            try {
+                const updateInfo = await window.go.main.App.CheckForUpdates();
+                if (updateInfo && updateInfo.available) {
+                    statusEl.textContent = `Update available: ${updateInfo.latestVersion}`;
+                    showNotification(`Update available: ${updateInfo.latestVersion}`, 'success');
+                } else {
+                    const current = updateInfo?.currentVersion || '';
+                    statusEl.textContent = current ? `Up to date (${current})` : 'Up to date';
+                }
+            } catch (error) {
+                console.error('Manual update check failed:', error);
+                statusEl.textContent = 'Check failed';
+                showNotification(`Update check failed: ${error.message}`, 'error');
+            } finally {
+                checkBtn.disabled = false;
+            }
+        });
+    }
+
+    async setupAboutSection() {
+        const versionEl = document.getElementById('app-version');
+        const osEl = document.getElementById('os-info');
+        const archEl = document.getElementById('arch-info');
+        const sourceBtn = document.getElementById('about-source-btn');
+        const issuesBtn = document.getElementById('about-issues-btn');
+        const releasesBtn = document.getElementById('about-releases-btn');
+
+        try {
+            const versionInfo = await window.go.main.App.GetVersionInfo();
+            if (versionEl && versionInfo?.version) versionEl.textContent = versionInfo.version;
+            if (osEl && versionInfo?.platform) osEl.textContent = this.getOSDisplayName(versionInfo.platform);
+            if (archEl && versionInfo?.arch) archEl.textContent = versionInfo.arch;
+        } catch (error) {
+            console.warn('Failed to load version info for About:', error);
+        }
+
+        if (sourceBtn) sourceBtn.addEventListener('click', () => BrowserOpenURL(REPO_URL));
+        if (issuesBtn) issuesBtn.addEventListener('click', () => BrowserOpenURL(ISSUES_URL));
+        if (releasesBtn) releasesBtn.addEventListener('click', () => BrowserOpenURL(RELEASES_URL));
+    }
+
+}

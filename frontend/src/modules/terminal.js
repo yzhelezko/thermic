@@ -70,6 +70,10 @@ export class TerminalManager {
         this.scrollbackLines = 10000; // Will be loaded from backend
         this.maxBufferLines = this.scrollbackLines; // Updated when scrollbackLines changes
         this.openLinksInExternalBrowser = true; // Will be loaded from backend
+        this.terminalFontFamily = 'Consolas, Monaco, "Lucida Console", monospace';
+        this.terminalFontSize = 14;
+        this.terminalLineHeight = 1.0;
+        this.terminalCursorBlink = true;
 
         // Load terminal config from backend
         this.loadTerminalConfig();
@@ -495,6 +499,10 @@ export class TerminalManager {
             ...DEFAULT_TERMINAL_OPTIONS,
             theme: initialTheme,
             scrollback: this.scrollbackLines, // Use backend config
+            fontFamily: this.terminalFontFamily,
+            fontSize: this.terminalFontSize,
+            lineHeight: this.terminalLineHeight,
+            cursorBlink: this.terminalCursorBlink,
         });
 
         // Add addons
@@ -2013,13 +2021,21 @@ export class TerminalManager {
         try {
             const scrollbackLines = await ConfigGet("ScrollbackLines");
             const openLinksExternal = await ConfigGet("OpenLinksInExternalBrowser");
+            const fontFamily = await ConfigGet("TerminalFontFamily");
+            const fontSize = await ConfigGet("TerminalFontSize");
+            const lineHeightPct = await ConfigGet("TerminalLineHeight");
+            const cursorBlink = await ConfigGet("TerminalCursorBlink");
 
             this.scrollbackLines = scrollbackLines;
             this.maxBufferLines = scrollbackLines;
             this.openLinksInExternalBrowser = openLinksExternal;
+            if (fontFamily) this.terminalFontFamily = fontFamily;
+            if (fontSize) this.terminalFontSize = fontSize;
+            if (lineHeightPct) this.terminalLineHeight = lineHeightPct / 100;
+            this.terminalCursorBlink = !!cursorBlink;
 
             console.log(
-                `Loaded terminal config: scrollback=${scrollbackLines}, openLinksExternal=${openLinksExternal}`,
+                `Loaded terminal config: scrollback=${scrollbackLines}, font=${this.terminalFontFamily} ${this.terminalFontSize}px, lineHeight=${this.terminalLineHeight}, cursorBlink=${this.terminalCursorBlink}`,
             );
 
             // Update existing terminals with new config
@@ -2050,6 +2066,28 @@ export class TerminalManager {
             this.openLinksInExternalBrowser = openLinksExternal;
             // No need to apply to terminals - the handler checks the property at runtime
         });
+
+        // Listen for font/typography changes
+        EventsOn("config:terminal-font-changed", async () => {
+            try {
+                const fontFamily = await ConfigGet("TerminalFontFamily");
+                const fontSize = await ConfigGet("TerminalFontSize");
+                const lineHeightPct = await ConfigGet("TerminalLineHeight");
+                if (fontFamily) this.terminalFontFamily = fontFamily;
+                if (fontSize) this.terminalFontSize = fontSize;
+                if (lineHeightPct) this.terminalLineHeight = lineHeightPct / 100;
+                this.applyConfigToAllTerminals();
+            } catch (error) {
+                console.warn("Failed to refresh terminal font config:", error);
+            }
+        });
+
+        // Listen for cursor blink changes
+        EventsOn("config:terminal-cursor-blink-changed", (data) => {
+            const cursorBlink = data?.TerminalCursorBlink;
+            this.terminalCursorBlink = !!cursorBlink;
+            this.applyConfigToAllTerminals();
+        });
     }
 
     applyConfigToAllTerminals() {
@@ -2057,12 +2095,16 @@ export class TerminalManager {
         for (const [sessionId, terminalSession] of this.terminals) {
             if (terminalSession.terminal) {
                 try {
-                    // Update terminal options
-                    terminalSession.terminal.options.scrollback =
-                        this.scrollbackLines;
-                    console.log(
-                        `Updated scrollback for session ${sessionId} to ${this.scrollbackLines} lines`,
-                    );
+                    const opts = terminalSession.terminal.options;
+                    opts.scrollback = this.scrollbackLines;
+                    opts.fontFamily = this.terminalFontFamily;
+                    opts.fontSize = this.terminalFontSize;
+                    opts.lineHeight = this.terminalLineHeight;
+                    opts.cursorBlink = this.terminalCursorBlink;
+                    // Re-fit so the new font metrics take effect
+                    if (terminalSession.fitAddon) {
+                        try { terminalSession.fitAddon.fit(); } catch (_) { /* container may be hidden */ }
+                    }
                 } catch (error) {
                     console.warn(
                         `Error updating config for session ${sessionId}:`,

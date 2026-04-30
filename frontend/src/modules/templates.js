@@ -199,28 +199,6 @@ export function createTerminalSettingsContent() {
                         </div>
                     </div>
                 </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Shell Arguments</div>
-                            <div class="setting-item-description">Additional arguments to pass to the shell</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <input type="text" class="modern-input" placeholder="--login -i" disabled>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Environment Variables</div>
-                            <div class="setting-item-description">Custom environment variables for terminal sessions</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <button class="modern-button secondary" disabled>Configure</button>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
 
@@ -234,53 +212,11 @@ export function createTerminalSettingsContent() {
                     <div class="setting-item-content">
                         <div class="setting-item-info">
                             <div class="setting-item-title">Select to Copy</div>
-                            <div class="setting-item-description">Automatically copy selected text to clipboard</div>
+                            <div class="setting-item-description">Automatically copy selected text to clipboard, and paste on right-click</div>
                         </div>
                         <div class="setting-item-control">
                             <label class="modern-toggle">
                                 <input type="checkbox" id="select-to-copy-toggle">
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Right Click Paste</div>
-                            <div class="setting-item-description">Paste clipboard content on right-click</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <label class="modern-toggle">
-                                <input type="checkbox" disabled>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Bell Sound</div>
-                            <div class="setting-item-description">Play sound on terminal bell character</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <label class="modern-toggle">
-                                <input type="checkbox" disabled>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Confirm on Exit</div>
-                            <div class="setting-item-description">Show confirmation when closing terminal with running processes</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <label class="modern-toggle">
-                                <input type="checkbox" checked disabled>
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
@@ -292,32 +228,17 @@ export function createTerminalSettingsContent() {
         <div class="settings-section">
             <div class="settings-section-title">
                 <span class="settings-section-icon"><img src="./icons/document.svg" class="svg-icon" alt="📜"></span>
-                Scrollback & History
+                Scrollback
             </div>
             <div class="settings-list">
                 <div class="setting-item">
                     <div class="setting-item-content">
                         <div class="setting-item-info">
                             <div class="setting-item-title">Scrollback Lines</div>
-                            <div class="setting-item-description">Number of lines to keep in scrollback buffer</div>
+                            <div class="setting-item-description">Number of lines to keep in scrollback buffer (100-100,000)</div>
                         </div>
                         <div class="setting-item-control">
                             <input type="number" id="scrollback-lines-input" class="modern-input" value="10000" min="100" max="100000">
-                        </div>
-                    </div>
-                </div>
-
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Save Session History</div>
-                            <div class="setting-item-description">Persist command history between sessions</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <label class="modern-toggle">
-                                <input type="checkbox" checked disabled>
-                                <span class="toggle-slider"></span>
-                            </label>
                         </div>
                     </div>
                 </div>
@@ -341,22 +262,6 @@ export function createTerminalSettingsContent() {
                                 <input type="checkbox" id="open-links-external-toggle" checked>
                                 <span class="toggle-slider"></span>
                             </label>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">URL Modifier Key</div>
-                            <div class="setting-item-description">Key to hold while clicking URLs</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <select class="modern-select" disabled>
-                                <option>Ctrl</option>
-                                <option>Alt</option>
-                                <option>Shift</option>
-                                <option>None</option>
-                            </select>
                         </div>
                     </div>
                 </div>
@@ -426,7 +331,7 @@ export function createAppearanceSettingsContent() {
         <div class="settings-section">
             <div class="settings-section-title">
                 <span class="settings-section-icon"><img src="./icons/palette.svg" class="svg-icon" alt="🎨"></span>
-                Theme & Colors
+                Theme
             </div>
             <div class="settings-list">
                 <div class="setting-item">
@@ -443,72 +348,24 @@ export function createAppearanceSettingsContent() {
                         </div>
                     </div>
                 </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Accent Color</div>
-                            <div class="setting-item-description">Primary accent color for UI elements</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <div class="color-picker-container">
-                                <input type="color" class="modern-input" value="#007ACC" disabled>
-                                <div class="color-indicator" style="background: #007ACC;"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Terminal Background</div>
-                            <div class="setting-item-description">Background color for terminal area</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <div class="color-picker-container">
-                                <input type="color" class="modern-input" value="#1E1E1E" disabled>
-                                <div class="color-indicator" style="background: #1E1E1E;"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Terminal Text Color</div>
-                            <div class="setting-item-description">Default text color in terminal</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <div class="color-picker-container">
-                                <input type="color" class="modern-input" value="#FAFAFA" disabled>
-                                <div class="color-indicator" style="background: #FAFAFA;"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
 
         <div class="settings-section">
             <div class="settings-section-title">
                 <span class="settings-section-icon"><img src="./icons/text.svg" class="svg-icon" alt="🔤"></span>
-                Typography
+                Terminal Typography
             </div>
             <div class="settings-list">
                 <div class="setting-item">
                     <div class="setting-item-content">
                         <div class="setting-item-info">
                             <div class="setting-item-title">Font Family</div>
-                            <div class="setting-item-description">Monospace font for terminal text</div>
+                            <div class="setting-item-description">Monospace font stack for terminal text. Falls back through the list if a font is not installed.</div>
                         </div>
                         <div class="setting-item-control">
-                            <select class="modern-select" disabled>
-                                <option>Consolas</option>
-                                <option>Monaco</option>
-                                <option>Fira Code</option>
-                                <option>JetBrains Mono</option>
-                                <option>Source Code Pro</option>
-                                <option>Cascadia Code</option>
-                            </select>
+                            <input type="text" id="terminal-font-family-input" class="modern-input" placeholder='Consolas, Monaco, "Lucida Console", monospace'
+                                autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off">
                         </div>
                     </div>
                 </div>
@@ -516,10 +373,10 @@ export function createAppearanceSettingsContent() {
                     <div class="setting-item-content">
                         <div class="setting-item-info">
                             <div class="setting-item-title">Font Size</div>
-                            <div class="setting-item-description">Size of terminal text in pixels</div>
+                            <div class="setting-item-description">Terminal text size in pixels (8-32)</div>
                         </div>
                         <div class="setting-item-control">
-                            <input type="number" class="modern-input" value="14" min="8" max="32" disabled>
+                            <input type="number" id="terminal-font-size-input" class="modern-input" value="14" min="8" max="32">
                         </div>
                     </div>
                 </div>
@@ -527,25 +384,24 @@ export function createAppearanceSettingsContent() {
                     <div class="setting-item-content">
                         <div class="setting-item-info">
                             <div class="setting-item-title">Line Height</div>
-                            <div class="setting-item-description">Spacing between lines of text</div>
+                            <div class="setting-item-description">Line spacing multiplier (0.8-2.0)</div>
                         </div>
                         <div class="setting-item-control">
-                            <input type="number" class="modern-input" value="1.2" min="1.0" max="2.0" step="0.1" disabled>
+                            <input type="number" id="terminal-line-height-input" class="modern-input" value="1.0" min="0.8" max="2.0" step="0.1">
                         </div>
                     </div>
                 </div>
                 <div class="setting-item">
                     <div class="setting-item-content">
                         <div class="setting-item-info">
-                            <div class="setting-item-title">Font Weight</div>
-                            <div class="setting-item-description">Thickness of terminal text</div>
+                            <div class="setting-item-title">Cursor Blink</div>
+                            <div class="setting-item-description">Make the terminal cursor blink</div>
                         </div>
                         <div class="setting-item-control">
-                            <select class="modern-select" disabled>
-                                <option>Normal</option>
-                                <option>Bold</option>
-                                <option>Light</option>
-                            </select>
+                            <label class="modern-toggle">
+                                <input type="checkbox" id="terminal-cursor-blink-toggle" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
                         </div>
                     </div>
                 </div>
@@ -555,7 +411,7 @@ export function createAppearanceSettingsContent() {
         <div class="settings-section">
             <div class="settings-section-title">
                 <span class="settings-section-icon"><img src="./icons/ruler.svg" class="svg-icon" alt="📐"></span>
-                Layout & Spacing
+                Interface
             </div>
             <div class="settings-list">
                 <div class="setting-item">
@@ -566,118 +422,6 @@ export function createAppearanceSettingsContent() {
                         </div>
                         <div class="setting-item-control">
                             <input type="number" id="ui-scale-input" class="modern-input" value="100" min="50" max="300" step="10">
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Sidebar Width</div>
-                            <div class="setting-item-description">Width of the sidebar panel in pixels</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <input type="number" class="modern-input" value="280" min="200" max="500" disabled>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Terminal Padding</div>
-                            <div class="setting-item-description">Internal padding around terminal content</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <input type="number" class="modern-input" value="8" min="0" max="32" disabled>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Tab Bar Height</div>
-                            <div class="setting-item-description">Height of the tab bar in pixels</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <input type="number" class="modern-input" value="40" min="30" max="60" disabled>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Status Bar</div>
-                            <div class="setting-item-description">Show status bar at the bottom</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <label class="modern-toggle">
-                                <input type="checkbox" checked disabled>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="settings-section">
-            <div class="settings-section-title">
-                <span class="settings-section-icon"><img src="./icons/sparkles.svg" class="svg-icon" alt="✨"></span>
-                Visual Effects
-            </div>
-            <div class="settings-list">
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Smooth Animations</div>
-                            <div class="setting-item-description">Enable smooth transitions and animations</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <label class="modern-toggle">
-                                <input type="checkbox" checked disabled>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Cursor Blink</div>
-                            <div class="setting-item-description">Make terminal cursor blink</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <label class="modern-toggle">
-                                <input type="checkbox" checked disabled>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Window Transparency</div>
-                            <div class="setting-item-description">Make window background semi-transparent</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <label class="modern-toggle">
-                                <input type="checkbox" disabled>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Blur Background</div>
-                            <div class="setting-item-description">Apply blur effect to transparent background</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <label class="modern-toggle">
-                                <input type="checkbox" disabled>
-                                <span class="toggle-slider"></span>
-                            </label>
                         </div>
                     </div>
                 </div>
@@ -712,256 +456,11 @@ export function createProfilesSettingsContent() {
                 </div>
             </div>
         </div>
-
-        <div class="settings-section">
-            <div class="settings-section-title">
-                <span class="settings-section-icon"><img src="./icons/refresh.svg" class="svg-icon" alt="🔄"></span>
-                Auto-Save & Backup
-            </div>
-            <div class="settings-list">
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Auto-Save Profiles</div>
-                            <div class="setting-item-description">Automatically save profile changes</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <label class="modern-toggle">
-                                <input type="checkbox" checked disabled>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Backup Profiles</div>
-                            <div class="setting-item-description">Create backup copies of profile files</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <label class="modern-toggle">
-                                <input type="checkbox" disabled>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Backup Interval</div>
-                            <div class="setting-item-description">How often to create backups</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <select class="modern-select" disabled>
-                                <option>Daily</option>
-                                <option>Weekly</option>
-                                <option>Monthly</option>
-                                <option>Never</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="settings-section">
-            <div class="settings-section-title">
-                <span class="settings-section-icon"><img src="./icons/export.svg" class="svg-icon" alt="📤"></span>
-                Import & Export
-            </div>
-            <div class="settings-list">
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Export All Profiles</div>
-                            <div class="setting-item-description">Export all profiles to a backup file</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <button class="modern-button secondary" disabled>Export</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Import Profiles</div>
-                            <div class="setting-item-description">Import profiles from a backup file</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <button class="modern-button secondary" disabled>Import</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Reset All Profiles</div>
-                            <div class="setting-item-description">Delete all profiles and start fresh</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <button class="modern-button" style="background: #dc3545;" disabled>Reset</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
     `;
 }
 
 export function createAdvancedSettingsContent() {
     return `
-        <div class="settings-section">
-            <div class="settings-section-title">
-                <span class="settings-section-icon"><img src="./icons/wrench.svg" class="svg-icon" alt="🔧"></span>
-                Performance
-            </div>
-            <div class="settings-list">
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Hardware Acceleration</div>
-                            <div class="setting-item-description">Use GPU acceleration for rendering</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <label class="modern-toggle">
-                                <input type="checkbox" checked disabled>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Memory Limit</div>
-                            <div class="setting-item-description">Maximum memory usage in MB</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <input type="number" class="modern-input" value="512" min="128" max="2048" disabled>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Process Monitoring</div>
-                            <div class="setting-item-description">Monitor system processes and resources</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <label class="modern-toggle">
-                                <input type="checkbox" checked disabled>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="settings-section">
-            <div class="settings-section-title">
-                <span class="settings-section-icon"><img src="./icons/lock.svg" class="svg-icon" alt="🔒"></span>
-                Security
-            </div>
-            <div class="settings-list">
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Store SSH Keys</div>
-                            <div class="setting-item-description">Allow storing SSH private keys in profiles</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <label class="modern-toggle">
-                                <input type="checkbox" disabled>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Store Passwords</div>
-                            <div class="setting-item-description">Allow storing passwords in profiles</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <label class="modern-toggle">
-                                <input type="checkbox" disabled>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Encrypt Profile Data</div>
-                            <div class="setting-item-description">Encrypt sensitive data in profile files</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <label class="modern-toggle">
-                                <input type="checkbox" disabled>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="settings-section">
-            <div class="settings-section-title">
-                <span class="settings-section-icon"><img src="./icons/bug.svg" class="svg-icon" alt="🐛"></span>
-                Debugging
-            </div>
-            <div class="settings-list">
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Debug Mode</div>
-                            <div class="setting-item-description">Enable debug logging and developer tools</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <label class="modern-toggle">
-                                <input type="checkbox" disabled>
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Log Level</div>
-                            <div class="setting-item-description">Verbosity of application logs</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <select class="modern-select" disabled>
-                                <option>Error</option>
-                                <option>Warning</option>
-                                <option>Info</option>
-                                <option>Debug</option>
-                                <option>Trace</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
-                            <div class="setting-item-title">Open Log Directory</div>
-                            <div class="setting-item-description">View application log files</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <button class="modern-button secondary" disabled>Open Logs</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <div class="settings-section">
             <div class="settings-section-title">
                 <span class="settings-section-icon"><img src="./icons/refresh.svg" class="svg-icon" alt="🔄"></span>
@@ -971,12 +470,12 @@ export function createAdvancedSettingsContent() {
                 <div class="setting-item">
                     <div class="setting-item-content">
                         <div class="setting-item-info">
-                            <div class="setting-item-title">Auto-Update</div>
-                            <div class="setting-item-description">Automatically check for and install updates</div>
+                            <div class="setting-item-title">Automatic Update Checks</div>
+                            <div class="setting-item-description">Periodically check GitHub for new releases in the background</div>
                         </div>
                         <div class="setting-item-control">
                             <label class="modern-toggle">
-                                <input type="checkbox" checked disabled>
+                                <input type="checkbox" id="auto-check-updates-toggle" checked>
                                 <span class="toggle-slider"></span>
                             </label>
                         </div>
@@ -985,26 +484,22 @@ export function createAdvancedSettingsContent() {
                 <div class="setting-item">
                     <div class="setting-item-content">
                         <div class="setting-item-info">
-                            <div class="setting-item-title">Update Channel</div>
-                            <div class="setting-item-description">Choose update release channel</div>
+                            <div class="setting-item-title">Check for Updates</div>
+                            <div class="setting-item-description">Manually check for an available update now</div>
                         </div>
                         <div class="setting-item-control">
-                            <select class="modern-select" disabled>
-                                <option>Stable</option>
-                                <option>Beta</option>
-                                <option>Alpha</option>
-                            </select>
+                            <button class="modern-button secondary" id="check-updates-now-btn">Check Now</button>
                         </div>
                     </div>
                 </div>
                 <div class="setting-item">
                     <div class="setting-item-content">
                         <div class="setting-item-info">
-                            <div class="setting-item-title">Check for Updates</div>
-                            <div class="setting-item-description">Manually check for available updates</div>
+                            <div class="setting-item-title">Update Status</div>
+                            <div class="setting-item-description">Result of the most recent check</div>
                         </div>
                         <div class="setting-item-control">
-                            <button class="modern-button secondary" disabled>Check Now</button>
+                            <span class="setting-info" id="update-status">Not checked yet</span>
                         </div>
                     </div>
                 </div>
@@ -1117,10 +612,8 @@ export function createAISettingsContent() {
                         </div>
                         <div class="setting-item-control">
                             <div class="hotkey-display">
-                                <input type="text" id="ai-hotkey-input" class="modern-input hotkey-input" placeholder="ctrl+k" readonly>
-                                <div class="hotkey-indicator">
-                                    <img src="./assets/icons/keyboard.svg" class="svg-icon small" alt="⌨️">
-                                </div>
+                                <input type="text" id="ai-hotkey-input" class="modern-input hotkey-input" placeholder="Click and press a key combo" readonly>
+                                <button type="button" class="modern-button secondary" id="ai-hotkey-clear-btn" title="Clear">Clear</button>
                             </div>
                         </div>
                     </div>
@@ -1183,28 +676,17 @@ export function createAboutSettingsContent() {
         <div class="settings-section">
             <div class="settings-section-title">
                 <span class="settings-section-icon"><img src="./icons/info.svg" class="svg-icon" alt="ℹ️"></span>
-                Application
+                Project
             </div>
             <div class="settings-list">
                 <div class="setting-item">
                     <div class="setting-item-content">
                         <div class="setting-item-info">
-                            <div class="setting-item-title">License</div>
-                            <div class="setting-item-description">MIT License - Open source software</div>
-                        </div>
-                        <div class="setting-item-control">
-                            <button class="modern-button secondary" disabled>View License</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-item-content">
-                        <div class="setting-item-info">
                             <div class="setting-item-title">Source Code</div>
-                            <div class="setting-item-description">View the project on GitHub</div>
+                            <div class="setting-item-description">github.com/yzhelezko/thermic</div>
                         </div>
                         <div class="setting-item-control">
-                            <button class="modern-button secondary" disabled>GitHub</button>
+                            <button class="modern-button secondary" id="about-source-btn">Open</button>
                         </div>
                     </div>
                 </div>
@@ -1212,21 +694,21 @@ export function createAboutSettingsContent() {
                     <div class="setting-item-content">
                         <div class="setting-item-info">
                             <div class="setting-item-title">Report Issues</div>
-                            <div class="setting-item-description">Report bugs or request features</div>
+                            <div class="setting-item-description">Report bugs or request features on GitHub</div>
                         </div>
                         <div class="setting-item-control">
-                            <button class="modern-button secondary" disabled>Report Issue</button>
+                            <button class="modern-button secondary" id="about-issues-btn">Open</button>
                         </div>
                     </div>
                 </div>
                 <div class="setting-item">
                     <div class="setting-item-content">
                         <div class="setting-item-info">
-                            <div class="setting-item-title">Documentation</div>
-                            <div class="setting-item-description">User guide and API documentation</div>
+                            <div class="setting-item-title">Releases</div>
+                            <div class="setting-item-description">Browse all release notes and downloads</div>
                         </div>
                         <div class="setting-item-control">
-                            <button class="modern-button secondary" disabled>View Docs</button>
+                            <button class="modern-button secondary" id="about-releases-btn">Open</button>
                         </div>
                     </div>
                 </div>

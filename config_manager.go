@@ -473,6 +473,16 @@ func (c *SettingConfig) Update(a *App, value SettingValue) error {
 		a.config.config.ScrollbackLines = value.(int)
 	case "OpenLinksInExternalBrowser":
 		a.config.config.OpenLinksInExternalBrowser = value.(bool)
+	case "TerminalFontFamily":
+		a.config.config.TerminalFontFamily = value.(string)
+	case "TerminalFontSize":
+		a.config.config.TerminalFontSize = value.(int)
+	case "TerminalLineHeight":
+		a.config.config.TerminalLineHeight = value.(int)
+	case "TerminalCursorBlink":
+		a.config.config.TerminalCursorBlink = value.(bool)
+	case "AutoCheckUpdates":
+		a.config.config.AutoCheckUpdates = value.(bool)
 	case "UIScale":
 		a.config.config.UIScale = value.(int)
 
@@ -691,6 +701,46 @@ var settingConfigs = map[string]*SettingConfig{
 		EventName:     "config:open-links-external-changed",
 		ConfigField:   "OpenLinksInExternalBrowser",
 	},
+	"TerminalFontFamily": {
+		Name:          "TerminalFontFamily",
+		Type:          SettingTypeString,
+		MaxLength:     intPtr(256),
+		RequiresEvent: true,
+		EventName:     "config:terminal-font-changed",
+		ConfigField:   "TerminalFontFamily",
+	},
+	"TerminalFontSize": {
+		Name:          "TerminalFontSize",
+		Type:          SettingTypeInt,
+		Min:           intPtr(MinTerminalFontSize),
+		Max:           intPtr(MaxTerminalFontSize),
+		RequiresEvent: true,
+		EventName:     "config:terminal-font-changed",
+		ConfigField:   "TerminalFontSize",
+	},
+	"TerminalLineHeight": {
+		Name:          "TerminalLineHeight",
+		Type:          SettingTypeInt,
+		Min:           intPtr(MinTerminalLineHeight),
+		Max:           intPtr(MaxTerminalLineHeight),
+		RequiresEvent: true,
+		EventName:     "config:terminal-font-changed",
+		ConfigField:   "TerminalLineHeight",
+	},
+	"TerminalCursorBlink": {
+		Name:          "TerminalCursorBlink",
+		Type:          SettingTypeBool,
+		RequiresEvent: true,
+		EventName:     "config:terminal-cursor-blink-changed",
+		ConfigField:   "TerminalCursorBlink",
+	},
+	"AutoCheckUpdates": {
+		Name:          "AutoCheckUpdates",
+		Type:          SettingTypeBool,
+		RequiresEvent: true,
+		EventName:     "config:auto-check-updates-changed",
+		ConfigField:   "AutoCheckUpdates",
+	},
 	"UIScale": {
 		Name:          "UIScale",
 		Type:          SettingTypeInt,
@@ -813,6 +863,25 @@ func (a *App) ConfigGet(settingName string) (SettingValue, error) {
 		return a.config.config.ScrollbackLines, nil
 	case "OpenLinksInExternalBrowser":
 		return a.config.config.OpenLinksInExternalBrowser, nil
+	case "TerminalFontFamily":
+		if a.config.config.TerminalFontFamily == "" {
+			return DefaultTerminalFontFamily, nil
+		}
+		return a.config.config.TerminalFontFamily, nil
+	case "TerminalFontSize":
+		if a.config.config.TerminalFontSize == 0 {
+			return DefaultTerminalFontSize, nil
+		}
+		return a.config.config.TerminalFontSize, nil
+	case "TerminalLineHeight":
+		if a.config.config.TerminalLineHeight == 0 {
+			return DefaultTerminalLineHeight, nil
+		}
+		return a.config.config.TerminalLineHeight, nil
+	case "TerminalCursorBlink":
+		return a.config.config.TerminalCursorBlink, nil
+	case "AutoCheckUpdates":
+		return a.config.config.AutoCheckUpdates, nil
 	case "UIScale":
 		// Migrate zero-value (e.g. configs from before UIScale existed) to default.
 		if a.config.config.UIScale == 0 {
@@ -837,11 +906,11 @@ func (a *App) ConfigGet(settingName string) (SettingValue, error) {
 	// SFTP Configuration
 	case "SFTP":
 		return map[string]interface{}{
-			"max_packet_size":      a.config.config.SFTP.MaxPacketSize,
-			"buffer_size":          a.config.config.SFTP.BufferSize,
-			"concurrent_requests":  a.config.config.SFTP.ConcurrentRequests,
-			"parallel_transfers":   a.config.config.SFTP.ParallelTransfers,
-			"use_concurrent_io":    a.config.config.SFTP.UseConcurrentIO,
+			"max_packet_size":     a.config.config.SFTP.MaxPacketSize,
+			"buffer_size":         a.config.config.SFTP.BufferSize,
+			"concurrent_requests": a.config.config.SFTP.ConcurrentRequests,
+			"parallel_transfers":  a.config.config.SFTP.ParallelTransfers,
+			"use_concurrent_io":   a.config.config.SFTP.UseConcurrentIO,
 		}, nil
 
 	default:

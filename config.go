@@ -7,23 +7,32 @@ import (
 )
 
 const (
-	DefaultWindowWidth     = 1024
-	DefaultWindowHeight    = 768
-	DefaultSidebarWidth    = 250
-	DefaultTheme           = "dark" // "dark", "light", or "system"
-	DefaultScrollbackLines = 10000
-	DefaultUIScale         = 100 // 100% (no zoom)
+	DefaultWindowWidth         = 1024
+	DefaultWindowHeight        = 768
+	DefaultSidebarWidth        = 250
+	DefaultTheme               = "dark" // "dark", "light", or "system"
+	DefaultScrollbackLines     = 10000
+	DefaultUIScale             = 100                                             // 100% (no zoom)
+	DefaultTerminalFontFamily  = `Consolas, Monaco, "Lucida Console", monospace` // xterm.js fontFamily
+	DefaultTerminalFontSize    = 14                                              // px
+	DefaultTerminalLineHeight  = 100                                             // percent (100 = 1.0)
+	DefaultTerminalCursorBlink = true
+	DefaultAutoCheckUpdates    = true
 
-	MinWindowWidth     = 800
-	MinWindowHeight    = 600
-	MinSidebarWidth    = 100
-	MaxSidebarWidth    = 1000
-	MaxWindowWidth     = 10000 // Arbitrary large value for upper bound
-	MaxWindowHeight    = 10000 // Arbitrary large value for upper bound
-	MinScrollbackLines = 100
-	MaxScrollbackLines = 100000
-	MinUIScale         = 50  // 50% — smallest allowed zoom
-	MaxUIScale         = 300 // 300% — largest allowed zoom
+	MinWindowWidth        = 800
+	MinWindowHeight       = 600
+	MinSidebarWidth       = 100
+	MaxSidebarWidth       = 1000
+	MaxWindowWidth        = 10000 // Arbitrary large value for upper bound
+	MaxWindowHeight       = 10000 // Arbitrary large value for upper bound
+	MinScrollbackLines    = 100
+	MaxScrollbackLines    = 100000
+	MinUIScale            = 50  // 50% — smallest allowed zoom
+	MaxUIScale            = 300 // 300% — largest allowed zoom
+	MinTerminalFontSize   = 8
+	MaxTerminalFontSize   = 32
+	MinTerminalLineHeight = 80  // 0.8
+	MaxTerminalLineHeight = 200 // 2.0
 )
 
 // ThemeSystem represents the system theme preference.
@@ -99,10 +108,16 @@ type AppConfig struct {
 	// Theme settings
 	Theme string `yaml:"theme"` // Theme preference: "dark", "light", or "system"
 	// Terminal settings
-	ScrollbackLines            int  `yaml:"scrollback_lines"`               // Number of lines to keep in scrollback buffer
-	OpenLinksInExternalBrowser bool `yaml:"open_links_in_external_browser"` // Open URLs in external browser instead of in-app
+	ScrollbackLines            int    `yaml:"scrollback_lines"`               // Number of lines to keep in scrollback buffer
+	OpenLinksInExternalBrowser bool   `yaml:"open_links_in_external_browser"` // Open URLs in external browser instead of in-app
+	TerminalFontFamily         string `yaml:"terminal_font_family"`           // Monospace font family for the terminal
+	TerminalFontSize           int    `yaml:"terminal_font_size"`             // Terminal font size in px
+	TerminalLineHeight         int    `yaml:"terminal_line_height"`           // Terminal line height as percent (100 = 1.0)
+	TerminalCursorBlink        bool   `yaml:"terminal_cursor_blink"`          // Whether the terminal cursor blinks
 	// Appearance settings
 	UIScale int `yaml:"ui_scale"` // UI zoom level as a percentage (100 = 100%)
+	// Updates
+	AutoCheckUpdates bool `yaml:"auto_check_updates"` // Automatically poll GitHub for new releases
 	// AI settings
 	AI AIConfig `yaml:"ai"` // AI configuration
 	// SFTP settings
@@ -143,8 +158,14 @@ func DefaultConfig() *AppConfig {
 		// Default terminal settings
 		ScrollbackLines:            DefaultScrollbackLines,
 		OpenLinksInExternalBrowser: true, // Default to opening links in external browser
+		TerminalFontFamily:         DefaultTerminalFontFamily,
+		TerminalFontSize:           DefaultTerminalFontSize,
+		TerminalLineHeight:         DefaultTerminalLineHeight,
+		TerminalCursorBlink:        DefaultTerminalCursorBlink,
 		// Default appearance settings
 		UIScale: DefaultUIScale,
+		// Default update settings
+		AutoCheckUpdates: DefaultAutoCheckUpdates,
 		// Default AI settings
 		AI: AIConfig{
 			Enabled:  false,
@@ -214,6 +235,12 @@ func (c *AppConfig) Validate() error {
 	}
 	if c.UIScale != 0 && (c.UIScale < MinUIScale || c.UIScale > MaxUIScale) {
 		return fmt.Errorf("UI scale %d is out of range (%d-%d)", c.UIScale, MinUIScale, MaxUIScale)
+	}
+	if c.TerminalFontSize != 0 && (c.TerminalFontSize < MinTerminalFontSize || c.TerminalFontSize > MaxTerminalFontSize) {
+		return fmt.Errorf("terminal font size %d is out of range (%d-%d)", c.TerminalFontSize, MinTerminalFontSize, MaxTerminalFontSize)
+	}
+	if c.TerminalLineHeight != 0 && (c.TerminalLineHeight < MinTerminalLineHeight || c.TerminalLineHeight > MaxTerminalLineHeight) {
+		return fmt.Errorf("terminal line height %d is out of range (%d-%d)", c.TerminalLineHeight, MinTerminalLineHeight, MaxTerminalLineHeight)
 	}
 
 	validTheme := false

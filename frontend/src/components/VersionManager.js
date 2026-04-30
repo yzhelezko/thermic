@@ -4,7 +4,8 @@
  */
 
 // Import Wails bindings properly
-import { GetVersionInfo, CheckForUpdates, DownloadAndInstallUpdate } from '../../wailsjs/go/main/App';
+import { GetVersionInfo, CheckForUpdates, DownloadAndInstallUpdate, ConfigGet } from '../../wailsjs/go/main/App';
+import { EventsOn } from '../../wailsjs/runtime/runtime.js';
 
 class VersionManager {
     constructor() {
@@ -15,7 +16,8 @@ class VersionManager {
         this.isDownloading = false;
         this.updateCheckInterval = null;
         this.versionContainer = null;
-        
+        this.autoCheckEnabled = true; // populated from config in init()
+
         this.init();
     }
 
@@ -23,10 +25,27 @@ class VersionManager {
     // INITIALIZATION
     // =========================================================================
 
-    init() {
+    async init() {
+        try {
+            this.autoCheckEnabled = !!(await ConfigGet('AutoCheckUpdates'));
+        } catch (error) {
+            console.warn('Could not load AutoCheckUpdates, defaulting to true:', error);
+        }
+
+        EventsOn('config:auto-check-updates-changed', (data) => {
+            this.autoCheckEnabled = !!(data?.AutoCheckUpdates);
+            if (this.autoCheckEnabled) {
+                this.startAutomaticUpdateChecking();
+            } else {
+                this.stopAutomaticUpdateChecking();
+            }
+        });
+
         this.loadVersionInfo();
         this.initStatusBarIntegration();
-        this.startAutomaticUpdateChecking();
+        if (this.autoCheckEnabled) {
+            this.startAutomaticUpdateChecking();
+        }
     }
 
     async loadVersionInfo() {
@@ -223,15 +242,27 @@ Platform: ${this.versionInfo.platform}/${this.versionInfo.arch}
     // =========================================================================
 
     triggerStartupUpdateCheck() {
+        if (!this.autoCheckEnabled) return;
         // Check for updates 5 seconds after startup
         setTimeout(() => this.checkForUpdatesInBackground(), 5000);
     }
 
     startAutomaticUpdateChecking() {
+        // Avoid stacking intervals if called more than once
+        this.stopAutomaticUpdateChecking();
         // Check for updates every 6 hours
         this.updateCheckInterval = setInterval(() => {
-            this.checkForUpdatesInBackground();
+            if (this.autoCheckEnabled) {
+                this.checkForUpdatesInBackground();
+            }
         }, 6 * 60 * 60 * 1000);
+    }
+
+    stopAutomaticUpdateChecking() {
+        if (this.updateCheckInterval) {
+            clearInterval(this.updateCheckInterval);
+            this.updateCheckInterval = null;
+        }
     }
 
     async checkForUpdatesInBackground() {
