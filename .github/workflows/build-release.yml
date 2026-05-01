@@ -466,10 +466,7 @@ jobs:
           cat PKGBUILD
 
       - name: Publish to AUR
-        # Pinned to v2.7.2 — v3.0.1 has a regression in its entrypoint
-        # ("bash: --command: invalid option") that aborts the action right
-        # after "Initializing SSH directory", before any git push happens.
-        uses: KSXGitHub/github-actions-deploy-aur@v2.7.2
+        uses: KSXGitHub/github-actions-deploy-aur@v4.1.1
         with:
           pkgname: thermic-bin
           pkgbuild: ./PKGBUILD
@@ -478,4 +475,3 @@ jobs:
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
           commit_message: "Update to ${{ github.ref_name }}"
           force_push: true
-          ssh_keyscan_types: rsa,ecdsa,ed25519
