@@ -41,6 +41,14 @@ type UpdateInfo struct {
 	DownloadURL    string `json:"downloadUrl"`
 	ReleaseNotes   string `json:"releaseNotes"`
 	Size           int64  `json:"size"`
+	// InstallSource identifies how the app was installed: "binary" (default,
+	// in-app upgrade works), "aur" (Arch User Repository — must be upgraded
+	// via the user's AUR helper), or "managed" (other read-only system
+	// install where in-app upgrade can't write the binary).
+	InstallSource string `json:"installSource"`
+	// AURPackage is the detected AUR package name (e.g. "thermic-bin")
+	// when InstallSource == "aur". Empty otherwise.
+	AURPackage string `json:"aurPackage"`
 }
 
 // GitHubRelease represents GitHub release API response
@@ -102,14 +110,23 @@ func (a *App) CheckForUpdates() (*UpdateInfo, error) {
 		}, nil
 	}
 
+	source, aurPkg := detectInstallSource()
 	updateInfo := &UpdateInfo{
 		CurrentVersion: Version,
 		LatestVersion:  release.TagName,
 		ReleaseNotes:   release.Body,
+		InstallSource:  source,
+		AURPackage:     aurPkg,
 	}
 
 	// Compare versions using semantic versioning
 	updateInfo.Available = isNewerVersion(Version, release.TagName)
+
+	// For AUR/managed installs we don't fetch a binary asset — the user's
+	// package manager performs the upgrade. Skip asset lookup and return.
+	if updateInfo.Available && (source == "aur" || source == "managed") {
+		return updateInfo, nil
+	}
 
 	if updateInfo.Available {
 		// Find the appropriate asset for current platform
@@ -134,6 +151,15 @@ func (a *App) CheckForUpdates() (*UpdateInfo, error) {
 func (a *App) DownloadAndInstallUpdate(downloadURL string) error {
 	if downloadURL == "" {
 		return fmt.Errorf("download URL is empty")
+	}
+
+	// If installed via AUR, the binary lives in /usr/bin and isn't writable
+	// by the running user. Refuse the in-app upgrade and signal the caller
+	// to use the AUR-helper path instead.
+	if source, _ := detectInstallSource(); source == "aur" {
+		return fmt.Errorf("installed via AUR — use UpgradeViaAUR to invoke the system AUR helper")
+	} else if source == "managed" {
+		return fmt.Errorf("installed via a system package manager — please upgrade through your distribution's package manager")
 	}
 
 	// Handle macOS app bundle updates differently
@@ -328,6 +354,158 @@ rm -f "$0"
 	// Exit current process
 	os.Exit(0)
 	return nil
+}
+
+// detectInstallSource reports how the running binary was installed.
+// Returns ("aur", "<pkg-name>") for AUR-installed packages on Arch-family
+// systems, ("managed", "") for any other read-only system install path, and
+// ("binary", "") for a user-writable binary that the in-app upgrader can
+// replace directly.
+func detectInstallSource() (string, string) {
+	if runtime.GOOS != "linux" {
+		return "binary", ""
+	}
+
+	exe, err := os.Executable()
+	if err != nil {
+		return "binary", ""
+	}
+	resolved, err := filepath.EvalSymlinks(exe)
+	if err != nil {
+		resolved = exe
+	}
+
+	// Try pacman first — it's authoritative on Arch and tells us the
+	// actual package name (which we'll feed back to the AUR helper).
+	if _, err := exec.LookPath("pacman"); err == nil {
+		out, err := exec.Command("pacman", "-Qoq", resolved).Output()
+		if err == nil {
+			pkg := strings.TrimSpace(string(out))
+			if pkg != "" {
+				return "aur", pkg
+			}
+		}
+	}
+
+	// Fallback: any binary living under a system-managed path is treated
+	// as "managed" so the upgrader doesn't try to mv into a read-only
+	// location and silently fail.
+	systemPrefixes := []string{"/usr/bin/", "/usr/local/bin/", "/usr/lib/", "/opt/", "/snap/", "/var/lib/flatpak/"}
+	for _, p := range systemPrefixes {
+		if strings.HasPrefix(resolved, p) {
+			return "managed", ""
+		}
+	}
+
+	return "binary", ""
+}
+
+// findAURHelper picks the first available AUR helper from a known list.
+// Returns the helper name (e.g. "yay") and ok=true, or "" and false if
+// no helper is installed.
+func findAURHelper() (string, bool) {
+	for _, h := range []string{"yay", "paru", "pamac", "trizen", "pikaur"} {
+		if _, err := exec.LookPath(h); err == nil {
+			return h, true
+		}
+	}
+	return "", false
+}
+
+// findTerminalEmulator picks an installed terminal emulator to host the
+// interactive AUR upgrade. Order is roughly desktop-environment-aware.
+func findTerminalEmulator() (string, []string, bool) {
+	candidates := []struct {
+		bin  string
+		args []string // args that precede the command-string
+	}{
+		{"konsole", []string{"-e"}},
+		{"gnome-terminal", []string{"--"}},
+		{"xfce4-terminal", []string{"-e"}},
+		{"alacritty", []string{"-e"}},
+		{"kitty", []string{"--"}},
+		{"wezterm", []string{"start", "--"}},
+		{"foot", []string{"-e"}},
+		{"tilix", []string{"-e"}},
+		{"xterm", []string{"-e"}},
+	}
+	for _, c := range candidates {
+		if _, err := exec.LookPath(c.bin); err == nil {
+			return c.bin, c.args, true
+		}
+	}
+	return "", nil, false
+}
+
+// AURUpgradeResult is returned to the frontend after an AUR upgrade has
+// been spawned (or failed to spawn).
+type AURUpgradeResult struct {
+	Spawned bool   `json:"spawned"`
+	Helper  string `json:"helper"`
+	Command string `json:"command"`
+	Message string `json:"message"`
+}
+
+// UpgradeViaAUR launches the user's AUR helper in an external terminal to
+// upgrade the package. The current Thermic process keeps running — pacman
+// can replace /usr/bin/thermic while it's mapped because Linux unlinks the
+// inode rather than the file. The user restarts Thermic when the helper
+// finishes.
+func (a *App) UpgradeViaAUR() (*AURUpgradeResult, error) {
+	source, pkg := detectInstallSource()
+	if source != "aur" {
+		return nil, fmt.Errorf("not an AUR install (detected source: %s)", source)
+	}
+	if pkg == "" {
+		pkg = "thermic"
+	}
+
+	helper, ok := findAURHelper()
+	if !ok {
+		return &AURUpgradeResult{
+			Spawned: false,
+			Message: "No AUR helper found. Install yay or paru, then run: yay -Syu " + pkg,
+		}, nil
+	}
+
+	term, termArgs, ok := findTerminalEmulator()
+	if !ok {
+		return &AURUpgradeResult{
+			Spawned: false,
+			Helper:  helper,
+			Command: helper + " -Syu " + pkg,
+			Message: "No terminal emulator found. Run manually: " + helper + " -Syu " + pkg,
+		}, nil
+	}
+
+	// Keep the terminal open after the upgrade so the user can read the
+	// helper's output (and any password prompt failure).
+	shellCmd := fmt.Sprintf(
+		`%s -Syu %s; echo; echo "Press Enter to close..."; read _`,
+		shellEscape(helper), shellEscape(pkg),
+	)
+	args := append(append([]string{}, termArgs...), "bash", "-c", shellCmd)
+
+	cmd := exec.Command(term, args...)
+	// Detach: don't tie the terminal's lifetime to Thermic.
+	cmd.SysProcAttr = detachSysProcAttr()
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("failed to spawn %s: %w", term, err)
+	}
+	// Release so we don't leave a zombie if the user closes Thermic first.
+	_ = cmd.Process.Release()
+
+	return &AURUpgradeResult{
+		Spawned: true,
+		Helper:  helper,
+		Command: helper + " -Syu " + pkg,
+		Message: fmt.Sprintf("Launched %s in %s. Restart Thermic once the upgrade finishes.", helper, term),
+	}, nil
+}
+
+// shellEscape produces a single-quoted shell-safe string.
+func shellEscape(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // getAssetNameForPlatform returns the expected asset name for current platform

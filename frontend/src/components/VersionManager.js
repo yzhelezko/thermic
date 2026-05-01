@@ -4,8 +4,9 @@
  */
 
 // Import Wails bindings properly
-import { GetVersionInfo, CheckForUpdates, DownloadAndInstallUpdate, ConfigGet } from '../../wailsjs/go/main/App';
+import { GetVersionInfo, CheckForUpdates, DownloadAndInstallUpdate, UpgradeViaAUR, ConfigGet } from '../../wailsjs/go/main/App';
 import { EventsOn } from '../../wailsjs/runtime/runtime.js';
+import { notification } from './Notification.js';
 
 class VersionManager {
     constructor() {
@@ -142,15 +143,37 @@ class VersionManager {
     }
 
     showUpgradeAvailableState() {
+        const isAUR = this.updateInfo.installSource === 'aur';
+        const isManaged = this.updateInfo.installSource === 'managed';
+        const label = isAUR
+            ? `Upgrade via AUR to ${this.updateInfo.latestVersion}`
+            : `Upgrade to ${this.updateInfo.latestVersion}`;
+        const title = isAUR
+            ? `Installed via AUR (${this.updateInfo.aurPackage || 'thermic'}) — click to launch your AUR helper`
+            : isManaged
+                ? `Installed via system package manager — click for upgrade instructions`
+                : `Click to upgrade to ${this.updateInfo.latestVersion}`;
+
         this.versionContainer.innerHTML = `
-            <span class="version-upgrade-btn" title="Click to upgrade to ${this.updateInfo.latestVersion}">
-                Upgrade to ${this.updateInfo.latestVersion}
+            <span class="version-upgrade-btn" title="${title}">
+                ${label}
             </span>
         `;
         this.versionContainer.setAttribute('data-state', 'upgrade-available');
-        
+
         const upgradeBtn = this.versionContainer.querySelector('.version-upgrade-btn');
-        upgradeBtn.onclick = () => this.showConfirmationState();
+        if (isAUR) {
+            upgradeBtn.onclick = () => this.startAURUpgrade();
+        } else if (isManaged) {
+            upgradeBtn.onclick = () => {
+                notification.info(
+                    `Thermic was installed by your system package manager. Update it the same way you installed it (apt, dnf, snap, flatpak, …).`,
+                    8000
+                );
+            };
+        } else {
+            upgradeBtn.onclick = () => this.showConfirmationState();
+        }
     }
 
     showConfirmationState() {
@@ -207,6 +230,20 @@ Platform: ${this.versionInfo.platform}/${this.versionInfo.arch}
     // =========================================================================
     // UPDATE LOGIC
     // =========================================================================
+
+    async startAURUpgrade() {
+        try {
+            const result = await UpgradeViaAUR();
+            if (result?.spawned) {
+                notification.success(result.message || 'AUR upgrade launched. Restart Thermic when it finishes.', 8000);
+            } else {
+                notification.warning(result?.message || `Run manually: yay -Syu ${this.updateInfo.aurPackage || 'thermic'}`, 12000);
+            }
+        } catch (error) {
+            console.error('Failed to launch AUR upgrade:', error);
+            notification.error(`Failed to launch AUR helper: ${error?.message || error}`, 10000);
+        }
+    }
 
     async startInlineUpgrade() {
         if (!this.updateInfo || !this.updateInfo.available) return;
