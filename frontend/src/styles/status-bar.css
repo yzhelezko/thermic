@@ -1,8 +1,8 @@
 /* Status Bar Component Styles - VSCode Style */
 
 .status-bar {
-    background-color: var(--bg-tertiary);
-    color: var(--text-secondary);
+    background-color: var(--status-bar-bg);
+    color: var(--status-bar-fg);
     padding: 0 8px;
     font-size: 12px;
     display: flex;
@@ -10,8 +10,9 @@
     justify-content: space-between;
     height: 22px;
     user-select: none;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    /* Subtle separator from the editor above — VS Code Dark Modern. */
     border-top: 1px solid var(--border-color);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     white-space: nowrap;
@@ -68,12 +69,12 @@
 }
 
 .ui-scale-indicator:hover {
-    background-color: var(--bg-quaternary);
+    background-color: var(--status-bar-hover);
     color: var(--text-primary);
 }
 
 .ui-scale-indicator:active {
-    background-color: var(--bg-quaternary);
+    background-color: var(--status-bar-hover);
     color: var(--text-primary);
 }
 
@@ -97,6 +98,8 @@
     -moz-osx-font-smoothing: grayscale;
 }
 
+/* On the neutral chrome bar, state reads via semantic glyph color (●✓⚠✗⏳),
+   VS Code style — all clear contrast on the dark/light frame. */
 #status-info.status-connected {
     color: var(--success-color);
 }
@@ -107,11 +110,12 @@
 }
 
 #status-info.status-disconnected {
-    color: var(--text-tertiary);
+    color: var(--status-bar-fg-dim);
 }
 
 #status-info.status-failed {
     color: var(--error-color);
+    animation: blink 1.5s ease-in-out infinite;
 }
 
 #status-info.status-hanging {
@@ -146,7 +150,7 @@
 }
 
 .status-monitoring span[data-stat]:hover {
-    background-color: var(--bg-quaternary);
+    background-color: var(--status-bar-hover);
     color: var(--text-primary);
 }
 

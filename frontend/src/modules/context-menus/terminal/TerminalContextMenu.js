@@ -128,15 +128,11 @@ export class TerminalContextMenu extends ContextMenuBase {
             
             // Only paste if we have an active connected session
             if (activeSession && activeSession.isConnected) {
-                try {
-                    const text = await navigator.clipboard.readText();
-                    if (text && text.trim()) {
-                        // Use terminal manager's native paste method for proper multiline handling
-                        this.terminalManager.pasteText(text);
-                        console.log('Pasted:', text.substring(0, 50) + '...');
-                    }
-                } catch (error) {
-                    console.error('Failed to paste text:', error);
+                // Reads the system clipboard via the reliable Wails binding
+                // (navigator.clipboard.readText() is flaky on Linux WebKit2GTK).
+                const success = await this.terminalManager.pasteFromClipboard();
+                if (!success) {
+                    console.error('Failed to paste text');
                 }
             }
         };

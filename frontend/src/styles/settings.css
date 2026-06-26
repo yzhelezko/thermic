@@ -211,7 +211,7 @@
 }
 
 .setting-item-badge.beta {
-    background: #ff9500;
+    background: var(--warning-color);
 }
 
 /* Modern Toggle Switch — compact, VS Code-feel */
@@ -594,7 +594,7 @@
 
 .profile-panel-close:hover {
     background: rgba(255, 0, 0, 0.1);
-    color: #ff4444;
+    color: var(--error-color);
 }
 
 .profile-panel-content {
@@ -1043,11 +1043,11 @@ textarea.form-input {
     padding: 4px 10px;
 }
 .hotkey-row.has-conflict .hotkey-input {
-    border-color: #f44747;
+    border-color: var(--error-color);
 }
 .hotkey-conflict-tag {
     display: inline-block;
-    background: #f44747;
+    background: var(--error-color);
     color: #fff;
     font-size: 10px;
     padding: 1px 6px;

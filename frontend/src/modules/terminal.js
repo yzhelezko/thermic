@@ -14,7 +14,7 @@ import {
     ConfigSet,
     ApproveHostKeyUpdate,
 } from "../../wailsjs/go/main/App";
-import { EventsOn, EventsEmit, BrowserOpenURL } from "../../wailsjs/runtime/runtime";
+import { EventsOn, EventsEmit, BrowserOpenURL, ClipboardGetText } from "../../wailsjs/runtime/runtime";
 import { hotkeyManager } from "./hotkey-manager.js";
 import {
     THEMES,
@@ -609,6 +609,14 @@ export class TerminalManager {
                 if (session && session.isConnected) {
                     this.clearTerminal(sessionId);
                 }
+                return false;
+            }
+            if (hotkeyManager.match(event, 'terminal.paste') ||
+                hotkeyManager.match(event, 'terminal.paste-alt')) {
+                // preventDefault stops the browser's native paste from also
+                // firing (double-paste) where WebKit does support it.
+                event.preventDefault();
+                this.pasteFromClipboard();
                 return false;
             }
             if (hotkeyManager.match(event, 'tab.new')) {
@@ -1854,6 +1862,39 @@ export class TerminalManager {
             console.warn("No active terminal session to paste text into");
         }
         return false;
+    }
+
+    // Read the system clipboard and paste it into the active terminal.
+    // Wails' native ClipboardGetText() is tried first because
+    // navigator.clipboard.readText() is unreliable on Linux WebKit2GTK
+    // (it often throws NotAllowedError or is unimplemented). navigator is the
+    // fallback for environments where the Wails binding returns nothing.
+    // Returns true when the paste intent was handled (including an empty
+    // clipboard, which is a no-op, not a failure) and false only when the
+    // clipboard could not be read or pasteText() failed.
+    async pasteFromClipboard() {
+        let text = "";
+        try {
+            text = await ClipboardGetText();
+        } catch (error) {
+            console.warn(
+                "ClipboardGetText failed, falling back to navigator.clipboard:",
+                error,
+            );
+        }
+        if (!text) {
+            try {
+                text = await navigator.clipboard.readText();
+            } catch (error) {
+                console.error("Failed to read clipboard:", error);
+                return false;
+            }
+        }
+        if (!text) {
+            // Empty clipboard — nothing to paste, but not an error.
+            return true;
+        }
+        return this.pasteText(text);
     }
 
     getSelectedText() {

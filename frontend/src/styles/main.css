@@ -82,21 +82,21 @@
 }
 
 .setting-status.testing {
-    background: rgba(129, 140, 248, 0.1);
-    color: #818cf8;
-    border: 1px solid rgba(129, 140, 248, 0.2);
+    background: rgba(var(--accent-color-rgb), 0.1);
+    color: var(--accent-color);
+    border: 1px solid rgba(var(--accent-color-rgb), 0.2);
 }
 
 .setting-status.success {
     background: rgba(34, 197, 94, 0.1);
-    color: #22c55e;
+    color: var(--success-color);
     border: 1px solid rgba(34, 197, 94, 0.2);
 }
 
 .setting-status.error {
-    background: rgba(239, 68, 68, 0.1);
-    color: #ef4444;
-    border: 1px solid rgba(239, 68, 68, 0.2);
+    background: rgba(var(--error-color-rgb), 0.1);
+    color: var(--error-color);
+    border: 1px solid rgba(var(--error-color-rgb), 0.2);
 }
 
 .setting-status .status-indicator {
@@ -105,15 +105,15 @@
 }
 
 .setting-status.testing .status-indicator {
-    color: #818cf8;
+    color: var(--accent-color);
 }
 
 .setting-status.success .status-indicator {
-    color: #22c55e;
+    color: var(--success-color);
 }
 
 .setting-status.error .status-indicator {
-    color: #ef4444;
+    color: var(--error-color);
 }
 
 /* Enhanced AI Settings Components */
@@ -163,7 +163,7 @@
 
 .api-key-status.configured {
     background: rgba(34, 197, 94, 0.1);
-    color: #22c55e;
+    color: var(--success-color);
     border-color: rgba(34, 197, 94, 0.2);
 }
 
@@ -208,27 +208,4 @@
 .connection-status-display {
     display: flex;
     align-items: center;
-}
-
-/* Model Suggestions matches existing dropdown styling */
-.suggestion-item {
-    padding: 8px 12px;
-    cursor: pointer;
-    font-size: 13px;
-    color: var(--text-primary);
-    border-bottom: 1px solid var(--border-color);
-    transition: background-color 0.15s ease;
-}
-
-.suggestion-item:last-child {
-    border-bottom: none;
-}
-
-.suggestion-item:hover {
-    background: var(--bg-tertiary);
-}
-
-.suggestion-item.selected {
-    background: var(--thermic-orange);
-    color: white;
 } 

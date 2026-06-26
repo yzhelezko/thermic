@@ -4,7 +4,8 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+    /* Snappy, VS Code-like. Keeps the theme cross-fade but responsive on hover. */
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 body {

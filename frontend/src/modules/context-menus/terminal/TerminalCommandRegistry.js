@@ -1,6 +1,5 @@
 // Terminal-specific command registry
 import { ContextMenuCommand, CommandRegistry } from '../base/ContextMenuCommand.js';
-import { WriteToShell } from '../../../../wailsjs/go/main/App.js';
 import { showNotification, getUnwrappedSelection } from '../../utils.js';
 
 export class TerminalCommandRegistry extends CommandRegistry {
@@ -26,7 +25,7 @@ export class TerminalCommandRegistry extends CommandRegistry {
             'Paste',
             'paste',
             () => this.handlePaste(),
-            () => this.terminalManager.isConnected && this.terminalManager.sessionId
+            () => this.isActiveSessionConnected()
         ));
 
         // Select All command
@@ -47,7 +46,7 @@ export class TerminalCommandRegistry extends CommandRegistry {
             'Clear',
             'clear',
             () => this.handleClear(),
-            () => this.terminalManager.isConnected && this.terminalManager.sessionId
+            () => this.isActiveSessionConnected()
         ));
 
         // Separator
@@ -99,24 +98,27 @@ export class TerminalCommandRegistry extends CommandRegistry {
         }
     }
 
+    // Whether the active session (not the possibly-stale legacy terminal
+    // reference) is connected. activeSessionId is authoritative after tab
+    // switches; terminalManager.isConnected/sessionId can lag behind.
+    isActiveSessionConnected() {
+        const activeSession = this.terminalManager.activeSessionId
+            ? this.terminalManager.terminals.get(this.terminalManager.activeSessionId)
+            : null;
+        return !!(activeSession && activeSession.isConnected);
+    }
+
     async handlePaste() {
-        if (!this.terminalManager.isConnected || !this.terminalManager.sessionId) {
+        if (!this.isActiveSessionConnected()) {
             return;
         }
 
-        try {
-            const text = await navigator.clipboard.readText();
-            if (text && text.trim()) {
-                // Use terminal manager's native paste method for proper multiline handling
-                const success = this.terminalManager.pasteText(text);
-                if (success) {
-                    console.log('Pasted text:', text.substring(0, 50) + '...');
-                } else {
-                    throw new Error('Paste operation failed');
-                }
-            }
-        } catch (error) {
-            console.error('Failed to paste text:', error);
+        // pasteFromClipboard reads the system clipboard via the reliable Wails
+        // binding (navigator.clipboard.readText() is flaky on Linux WebKit2GTK)
+        // and routes through the active session's terminal.
+        const success = await this.terminalManager.pasteFromClipboard();
+        if (!success) {
+            console.error('Failed to paste text');
             showNotification('Failed to paste text', 'error');
         }
     }
@@ -127,17 +129,16 @@ export class TerminalCommandRegistry extends CommandRegistry {
         }
     }
 
-    async handleClear() {
-        if (!this.terminalManager.isConnected || !this.terminalManager.sessionId) {
+    handleClear() {
+        const activeSessionId = this.terminalManager.activeSessionId;
+        if (!this.isActiveSessionConnected()) {
             return;
         }
 
-        try {
-            await WriteToShell(this.terminalManager.sessionId, 'clear\n');
-        } catch (error) {
-            console.error('Failed to clear terminal:', error);
-            showNotification('Failed to clear terminal', 'error');
-        }
+        // clearTerminal() uses terminal.reset() which clears scrollback too.
+        // WriteToShell('clear\n') only scrolls and leaves scrollback intact
+        // (see CLAUDE.md terminal conventions).
+        this.terminalManager.clearTerminal(activeSessionId);
     }
 
     handleScrollToTop() {

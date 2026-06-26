@@ -355,6 +355,8 @@ export function UpdateRemoteFileContentWithSudo(arg1:string,arg2:string,arg3:str
 
 export function UpdateVirtualFolder(arg1:string,arg2:string,arg3:string,arg4:main.VirtualFilter):Promise<void>;
 
+export function UpgradeViaAUR():Promise<main.AURUpgradeResult>;
+
 export function UploadFileContent(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function UploadFileContentWithSudo(arg1:string,arg2:string,arg3:string):Promise<void>;

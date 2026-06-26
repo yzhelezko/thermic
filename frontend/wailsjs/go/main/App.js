@@ -706,6 +706,10 @@ export function UpdateVirtualFolder(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['UpdateVirtualFolder'](arg1, arg2, arg3, arg4);
 }
 
+export function UpgradeViaAUR() {
+  return window['go']['main']['App']['UpgradeViaAUR']();
+}
+
 export function UploadFileContent(arg1, arg2, arg3) {
   return window['go']['main']['App']['UploadFileContent'](arg1, arg2, arg3);
 }

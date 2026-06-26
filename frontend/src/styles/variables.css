@@ -7,7 +7,7 @@
 
     /* Layout dimensions */
     --tabs-height: 64px; /* Titlebar (32) + tabs (32) — Windows default */
-    --status-bar-height: 24px;
+    --status-bar-height: 22px; /* must match .status-bar height in status-bar.css */
     --sidebar-width: 250px;
     --activity-bar-width: 48px;
 
@@ -50,6 +50,15 @@
     --tree-hover: #2a2d2e;
     --tree-selected: #37373d;
     --shadow: rgba(0, 0, 0, 0.3);
+
+    /* Status bar — VS Code "Dark Modern" style: matches the window chrome
+       (same color as the tab strip / titlebar frame), muted text, subtle top
+       border. State is carried by semantic glyph colors, not a bright fill.
+       Uses theme vars so it tracks light/dark automatically. */
+    --status-bar-bg: var(--bg-secondary);
+    --status-bar-fg: var(--text-secondary);
+    --status-bar-fg-dim: var(--text-tertiary);
+    --status-bar-hover: rgba(255, 255, 255, 0.08);
 }
 
 [data-theme="light"] {
@@ -74,6 +83,10 @@
     --tree-hover: #f0f0f0;
     --tree-selected: #e3f2fd;
     --shadow: rgba(0, 0, 0, 0.1);
+
+    /* Status bar uses a dark hover tint on the light chrome (the dark-theme
+       white tint would be invisible here); bg/fg track the theme vars. */
+    --status-bar-hover: rgba(0, 0, 0, 0.06);
 }
 
 /* Platform-specific overrides — ONLY layout dimensions, never colors,

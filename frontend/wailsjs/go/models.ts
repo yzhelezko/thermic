@@ -82,6 +82,24 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class AURUpgradeResult {
+	    spawned: boolean;
+	    helper: string;
+	    command: string;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AURUpgradeResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.spawned = source["spawned"];
+	        this.helper = source["helper"];
+	        this.command = source["command"];
+	        this.message = source["message"];
+	    }
+	}
 	export class FileHistoryEntry {
 	    path: string;
 	    fileName: string;
@@ -496,6 +514,8 @@ export namespace main {
 	    downloadUrl: string;
 	    releaseNotes: string;
 	    size: number;
+	    installSource: string;
+	    aurPackage: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new UpdateInfo(source);
@@ -509,6 +529,8 @@ export namespace main {
 	        this.downloadUrl = source["downloadUrl"];
 	        this.releaseNotes = source["releaseNotes"];
 	        this.size = source["size"];
+	        this.installSource = source["installSource"];
+	        this.aurPackage = source["aurPackage"];
 	    }
 	}
 	export class VersionInfo {

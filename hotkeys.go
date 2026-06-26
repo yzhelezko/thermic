@@ -27,6 +27,8 @@ var HotkeyActions = []HotkeyAction{
 	{ID: "tab.new-ssh", Label: "New SSH Tab", Default: "mod+shift+n", Category: "Tabs"},
 	{ID: "tab.close", Label: "Close Tab", Default: "mod+w", Category: "Tabs"},
 	{ID: "terminal.clear", Label: "Clear Terminal", Default: "mod+l", Category: "Terminal"},
+	{ID: "terminal.paste", Label: "Paste", Default: "mod+v", Category: "Terminal"},
+	{ID: "terminal.paste-alt", Label: "Paste (alternate)", Default: "mod+shift+v", Category: "Terminal"},
 	{ID: "terminal.scroll-top", Label: "Scroll to Top", Default: "mod+home", Category: "Terminal"},
 	{ID: "terminal.scroll-bottom", Label: "Scroll to Bottom", Default: "mod+end", Category: "Terminal"},
 	{ID: "sidebar.search", Label: "Search Profiles", Default: "mod+f", Category: "Sidebar"},

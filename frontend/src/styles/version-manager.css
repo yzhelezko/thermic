@@ -19,7 +19,7 @@
 
 /* Normal version display */
 .version-display {
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--status-bar-fg);
     font-size: 12px;
     font-weight: 400;
     cursor: pointer;
@@ -35,15 +35,16 @@
 }
 
 .version-display:hover {
-    background-color: rgba(255, 255, 255, 0.12);
+    background-color: var(--status-bar-hover);
 }
 
-/* Upgrade available button - filled with green */
+/* Upgrade available CTA — brand-orange accent text on the neutral chrome bar,
+   VS Code style: subtle until hovered, no loud fill. */
 .version-upgrade-btn {
-    color: #FFFFFF;
+    color: var(--thermic-orange);
     font-size: 12px;
-    font-weight: 500;
-    background: #4CAF50;
+    font-weight: 600;
+    background: transparent;
     padding: 0 8px;
     cursor: pointer;
     transition: background-color 0.15s ease;
@@ -58,7 +59,7 @@
 }
 
 .version-upgrade-btn:hover {
-    background-color: #45a049;
+    background-color: var(--status-bar-hover);
 }
 
 /* Confirmation buttons container */
@@ -73,7 +74,7 @@
 .version-btn {
     background: transparent;
     border: none;
-    color: white;
+    color: var(--status-bar-fg);
     font-size: 12px;
     padding: 0 6px;
     cursor: pointer;
@@ -88,20 +89,22 @@
     line-height: 22px;
 }
 
+/* Approve/deny glyph buttons (✓/✗) — semantic green/red on the neutral
+   chrome bar, subtle hover tint. */
 .version-approve {
-    color: #4CAF50;
+    color: var(--success-color);
 }
 
 .version-approve:hover {
-    background-color: rgba(76, 175, 80, 0.15);
+    background-color: var(--status-bar-hover);
 }
 
 .version-deny {
-    color: #FF5252;
+    color: var(--error-color);
 }
 
 .version-deny:hover {
-    background-color: rgba(255, 82, 82, 0.15);
+    background-color: var(--status-bar-hover);
 }
 
 /* Progress state container */
@@ -113,7 +116,7 @@
 }
 
 .version-progress-text {
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--status-bar-fg);
     font-size: 12px;
     font-weight: 400;
     white-space: nowrap;
@@ -124,7 +127,7 @@
 .version-progress-bar {
     width: 40px;
     height: 3px;
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--bg-quaternary);
     border-radius: 2px;
     overflow: hidden;
     position: relative;
@@ -132,15 +135,16 @@
 
 .version-progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, #FFF, #E0E0E0);
+    background: linear-gradient(90deg, var(--thermic-orange), var(--thermic-orange-dark));
     border-radius: 2px;
     width: 30%;
     animation: progressMove 1.5s ease-in-out infinite;
 }
 
-/* Status text states */
+/* Status text states on the neutral chrome bar — muted/semantic text,
+   animation conveys activity. */
 .version-restarting {
-    color: #FFB74D;
+    color: var(--status-bar-fg);
     font-size: 12px;
     font-weight: 400;
     padding: 0 6px;
@@ -155,7 +159,7 @@
 }
 
 .version-error {
-    color: #FF5252;
+    color: var(--error-color);
     font-size: 12px;
     font-weight: 400;
     padding: 0 6px;
@@ -170,7 +174,7 @@
 }
 
 .version-checking {
-    color: #FFE066;
+    color: var(--status-bar-fg-dim);
     font-size: 12px;
     font-weight: 400;
     padding: 0 6px;
@@ -185,7 +189,7 @@
 }
 
 .version-up-to-date {
-    color: #81C784;
+    color: var(--status-bar-fg);
     font-size: 12px;
     font-weight: 400;
     padding: 0 6px;
